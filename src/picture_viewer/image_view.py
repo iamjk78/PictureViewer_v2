@@ -14,7 +14,7 @@ class ImageView(QGraphicsView):
 
     ZOOM_STEP = 1.15
     ZOOM_MIN = 0.05
-    ZOOM_MAX = 20.0
+    PAN_STEP = 80  # pixelů při posunu šipkou
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -22,13 +22,14 @@ class ImageView(QGraphicsView):
         self.setScene(self._scene)
         self._pixmap_item = self._scene.addPixmap(QPixmap())
         self._zoom_level: float = 1.0
+        # Pokud uživatel manuálně změnil zoom, auto-fit při resize se přeskočí,
+        # aby se zoom neresetoval při zobrazení scrollbarů.
+        self._manually_zoomed: bool = False
 
         # Povolí drag pro posun
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.setRenderHint(self.renderHints())
-        self.setBackgroundRole(self.backgroundRole())
         self.setStyleSheet("background-color: #1e1e1e;")
 
     # ------------------------------------------------------------------
@@ -43,6 +44,7 @@ class ImageView(QGraphicsView):
         self._pixmap_item.setPixmap(pixmap)
         self._scene.setSceneRect(QRectF(pixmap.rect()))
         self._zoom_level = 1.0
+        self._manually_zoomed = False
         self.setTransform(QTransform())
         self.fit_to_window()
 
@@ -51,8 +53,8 @@ class ImageView(QGraphicsView):
         if self._pixmap_item.pixmap().isNull():
             return
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
-        # Zjistí aktuální měřítko po fitInView
         self._zoom_level = self.transform().m11()
+        self._manually_zoomed = False
 
     def zoom_in(self) -> None:
         self._apply_zoom(self.ZOOM_STEP)
@@ -64,6 +66,7 @@ class ImageView(QGraphicsView):
         """Zobrazí obrázek v originální velikosti (1:1)."""
         self.setTransform(QTransform())
         self._zoom_level = 1.0
+        self._manually_zoomed = True
 
     # ------------------------------------------------------------------
     # Události
@@ -84,24 +87,51 @@ class ImageView(QGraphicsView):
             self.zoom_out()
         elif key == Qt.Key.Key_0:
             self.reset_zoom()
-        elif key == Qt.Key.Key_F:
-            self.fit_to_window()
+        elif key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down):
+            if self._is_scrollable():
+                # Obrázek je větší než viewport – šipky posouvají obrázek
+                self._pan_by_key(key)
+            else:
+                # Obrázek se vejde – probublá do MainWindow pro přepínání snímků
+                event.ignore()
         else:
-            super().keyPressEvent(event)
+            # F, Esc, Space atd. probublají do MainWindow
+            event.ignore()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        # Po změně velikosti okna automaticky přizpůsob, pokud je obrázek menší
-        if not self._pixmap_item.pixmap().isNull():
+        # Auto-fit při resize jen pokud uživatel manuálně nezměnil zoom.
+        # Jinak by zobrazení scrollbarů (při velkém zoomu) spustilo reset zoomu.
+        if not self._pixmap_item.pixmap().isNull() and not self._manually_zoomed:
             self.fit_to_window()
 
     # ------------------------------------------------------------------
     # Interní pomocné metody
     # ------------------------------------------------------------------
 
+    def _is_scrollable(self) -> bool:
+        """Vrací True pokud je obrázek větší než viewport (lze posouvat)."""
+        h = self.horizontalScrollBar()
+        v = self.verticalScrollBar()
+        return (h.maximum() > h.minimum()) or (v.maximum() > v.minimum())
+
+    def _pan_by_key(self, key: Qt.Key) -> None:
+        """Posune obrázek o PAN_STEP pixelů ve směru šipky."""
+        h = self.horizontalScrollBar()
+        v = self.verticalScrollBar()
+        if key == Qt.Key.Key_Left:
+            h.setValue(h.value() - self.PAN_STEP)
+        elif key == Qt.Key.Key_Right:
+            h.setValue(h.value() + self.PAN_STEP)
+        elif key == Qt.Key.Key_Up:
+            v.setValue(v.value() - self.PAN_STEP)
+        elif key == Qt.Key.Key_Down:
+            v.setValue(v.value() + self.PAN_STEP)
+
     def _apply_zoom(self, factor: float) -> None:
         new_zoom = self._zoom_level * factor
-        if new_zoom < self.ZOOM_MIN or new_zoom > self.ZOOM_MAX:
+        if new_zoom < self.ZOOM_MIN:
             return
         self.scale(factor, factor)
         self._zoom_level = new_zoom
+        self._manually_zoomed = True

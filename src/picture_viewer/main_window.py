@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
         self._setup_menu()
         self._setup_toolbar()
         self._setup_statusbar()
+        self._is_fullscreen: bool = False
 
     # ------------------------------------------------------------------
     # Sestavení UI
@@ -85,9 +86,13 @@ class MainWindow(QMainWindow):
 
         zobraz = menubar.addMenu("&Zobrazení")
 
-        act_fit = QAction("Přizpůsobit oknu  (F)", self)
+        act_fit = QAction("Přizpůsobit oknu", self)
         act_fit.triggered.connect(self._image_view.fit_to_window)
         zobraz.addAction(act_fit)
+
+        act_fullscreen = QAction("Celá obrazovka  (F)", self)
+        act_fullscreen.triggered.connect(self._toggle_fullscreen)
+        zobraz.addAction(act_fullscreen)
 
         act_1_1 = QAction("Originální velikost  (0)", self)
         act_1_1.triggered.connect(self._image_view.reset_zoom)
@@ -195,6 +200,34 @@ class MainWindow(QMainWindow):
             self._show_image(idx)
 
     # ------------------------------------------------------------------
+    # Fullscreen
+    # ------------------------------------------------------------------
+
+    def _toggle_fullscreen(self) -> None:
+        if self._is_fullscreen:
+            self._exit_fullscreen()
+        else:
+            self._enter_fullscreen()
+
+    def _enter_fullscreen(self) -> None:
+        self._is_fullscreen = True
+        self.menuBar().hide()
+        for tb in self.findChildren(QToolBar):
+            tb.hide()
+        self._thumbnail_dock.hide()
+        self.statusBar().hide()
+        self.showFullScreen()
+
+    def _exit_fullscreen(self) -> None:
+        self._is_fullscreen = False
+        self.showNormal()
+        self.menuBar().show()
+        for tb in self.findChildren(QToolBar):
+            tb.show()
+        self._thumbnail_dock.show()
+        self.statusBar().show()
+
+    # ------------------------------------------------------------------
     # Slideshow
     # ------------------------------------------------------------------
 
@@ -232,5 +265,16 @@ class MainWindow(QMainWindow):
             self._next_image()
         elif key == Qt.Key.Key_Space:
             self._toggle_slideshow()
+        elif key == Qt.Key.Key_F:
+            self._toggle_fullscreen()
+        elif key == Qt.Key.Key_Escape:
+            if self._is_fullscreen:
+                self._exit_fullscreen()
+            else:
+                self.close()
+        elif key == Qt.Key.Key_Up:
+            self._show_image(0)
+        elif key == Qt.Key.Key_Down:
+            self._show_image(len(self._image_paths) - 1)
         else:
             super().keyPressEvent(event)
