@@ -66,6 +66,7 @@ private:
     int m_currentIndex = -1;
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
+    bool m_shuttingDown = false;
     FolderScanWorker *m_folderScanWorker;
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;

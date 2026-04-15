@@ -39,6 +39,7 @@ private:
 
     ThumbnailWorker *m_currentWorker;
     int m_generation;
+    bool m_shuttingDown = false;
 };
 
 } // namespace pictureviewer

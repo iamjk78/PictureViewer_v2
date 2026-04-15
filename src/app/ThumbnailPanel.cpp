@@ -48,6 +48,8 @@ ThumbnailPanel::~ThumbnailPanel()
 
 void ThumbnailPanel::shutdown()
 {
+    m_shuttingDown = true;
+
     if (m_currentWorker == nullptr) {
         return;
     }
@@ -61,6 +63,10 @@ void ThumbnailPanel::shutdown()
 
 void ThumbnailPanel::loadImages(const QStringList &paths)
 {
+    if (m_shuttingDown) {
+        return;
+    }
+
     if (m_currentWorker != nullptr) {
         m_currentWorker->cancel();
         disconnect(m_currentWorker, nullptr, this, nullptr);
@@ -115,6 +121,10 @@ void ThumbnailPanel::onThumbnailsFinished(int generation)
 
 void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)
 {
+    if (m_shuttingDown) {
+        return;
+    }
+
     // Parent must be nullptr — this object is managed by the thread pool
     // (deleted via deleteLater on workerFinished). A Qt parent would create a
     // second deletion path and cause a double-free crash.
