@@ -25,7 +25,11 @@ class ThumbnailPanel(QListWidget):
         self.setFixedWidth(THUMBNAIL_SIZE + 24)
         self.setSpacing(4)
         self.setViewMode(QListWidget.ViewMode.IconMode)
-        self.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.setFlow(QListWidget.Flow.TopToBottom)
+        self.setWrapping(False)
+        self.setResizeMode(QListWidget.ResizeMode.Fixed)
+        self.setUniformItemSizes(True)
+        self.setSortingEnabled(False)
         self.setMovement(QListWidget.Movement.Static)
         self.setStyleSheet(
             "QListWidget { background-color: #2b2b2b; border: none; }"
