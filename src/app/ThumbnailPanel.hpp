@@ -21,6 +21,11 @@ public:
     void loadImages(const QStringList &paths);
     void setCurrentIndex(int index);
 
+    // Cancel the running worker and disconnect all its signals.
+    // Must be called before QThreadPool::waitForDone() so the worker cannot
+    // emit into a widget that is about to be destroyed.
+    void shutdown();
+
 signals:
     void imageSelected(int index);
 

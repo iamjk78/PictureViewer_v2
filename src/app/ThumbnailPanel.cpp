@@ -39,15 +39,31 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
 
 ThumbnailPanel::~ThumbnailPanel()
 {
-    if (m_currentWorker != nullptr) {
-        m_currentWorker->cancel();
+    // MainWindow::~MainWindow() calls shutdown() + waitForDone() before Qt
+    // destroys child widgets, so by the time we reach here the worker is
+    // guaranteed to have stopped. The call below is a defensive fallback for
+    // cases where ThumbnailPanel is used outside of MainWindow.
+    shutdown();
+}
+
+void ThumbnailPanel::shutdown()
+{
+    if (m_currentWorker == nullptr) {
+        return;
     }
+    m_currentWorker->cancel();
+    // Sever every signal from the worker to this widget so it cannot call
+    // back into us after we return (the worker may still be running in the
+    // thread pool until waitForDone() is called by the owner).
+    disconnect(m_currentWorker, nullptr, this, nullptr);
+    m_currentWorker = nullptr;
 }
 
 void ThumbnailPanel::loadImages(const QStringList &paths)
 {
     if (m_currentWorker != nullptr) {
         m_currentWorker->cancel();
+        disconnect(m_currentWorker, nullptr, this, nullptr);
         m_currentWorker = nullptr;
     }
 
@@ -99,7 +115,10 @@ void ThumbnailPanel::onThumbnailsFinished(int generation)
 
 void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)
 {
-    auto *worker = new ThumbnailWorker(paths, m_generation, this);
+    // Parent must be nullptr — this object is managed by the thread pool
+    // (deleted via deleteLater on workerFinished). A Qt parent would create a
+    // second deletion path and cause a double-free crash.
+    auto *worker = new ThumbnailWorker(paths, m_generation, nullptr);
     connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
     connect(worker, &ThumbnailWorker::workerFinished, this, &ThumbnailPanel::onThumbnailsFinished);
     connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);

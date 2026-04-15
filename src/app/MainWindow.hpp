@@ -26,6 +26,7 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
     // Called when a file is opened from macOS Finder or command line
     void openFile(const QString &filePath);

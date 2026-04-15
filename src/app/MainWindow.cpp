@@ -84,6 +84,30 @@ MainWindow::MainWindow(QWidget *parent)
     }
 }
 
+MainWindow::~MainWindow()
+{
+    // ── Step 1: cancel the folder scan worker and cut its signal connections ──
+    // The worker's own deleteLater (connected to finished) will free its memory
+    // once it exits run(). We must NOT delete it here — it may still be
+    // executing on a pool thread.
+    if (m_folderScanWorker != nullptr) {
+        m_folderScanWorker->cancel();
+        disconnect(m_folderScanWorker, nullptr, this, nullptr);
+        m_folderScanWorker = nullptr;
+    }
+
+    // ── Step 2: cancel the thumbnail worker and cut its signal connections ────
+    m_thumbnailPanel->shutdown();
+
+    // ── Step 3: wait for every pool task to reach its natural end ────────────
+    // At this point all signals into UI have been disconnected, so workers that
+    // are still executing run() can finish safely without touching any object
+    // that is about to be destroyed.
+    // Child QObjects (ThumbnailPanel, ImageView, …) are still alive here —
+    // Qt destroys them AFTER this destructor body returns.
+    QThreadPool::globalInstance()->waitForDone();
+}
+
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
@@ -297,7 +321,9 @@ void MainWindow::loadFolder(const QString &folderPath)
         m_folderScanWorker = nullptr;
     }
 
-    auto *worker = new FolderScanWorker(folderPath, m_scanGeneration, this);
+    // Parent must be nullptr — memory is managed by the deleteLater connection
+    // below. A Qt parent would create a second deletion path → double-free.
+    auto *worker = new FolderScanWorker(folderPath, m_scanGeneration, nullptr);
     connect(worker, &FolderScanWorker::scanComplete, this, &MainWindow::onScanComplete);
     connect(worker, &FolderScanWorker::scanError, this, &MainWindow::onScanError);
     connect(worker, &FolderScanWorker::finished, this, &MainWindow::onScanFinished);
