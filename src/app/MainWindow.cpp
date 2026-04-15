@@ -6,7 +6,9 @@
 #include "workers/FolderScanWorker.hpp"
 
 #include <QAction>
+#include <QDebug>
 #include <QDockWidget>
+#include <QFileInfo>
 #include <QFileDialog>
 #include <QIcon>
 #include <QKeySequence>
@@ -123,8 +125,10 @@ void MainWindow::openFile(const QString &filePath)
 {
     // Called from macOS file open events (Finder, Open With, etc.)
     // Extract folder and set requested file for opening after folder scan
+    qDebug() << "openFile() called with:" << filePath;
     m_requestedFile = filePath;
     const QString folderPath = filePath.section('/', 0, -2);
+    qDebug() << "Extracted folder path:" << folderPath;
     loadFolder(folderPath);
 }
 
@@ -156,9 +160,34 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
 
     int index = 0;
     if (!m_requestedFile.isEmpty()) {
-        const int requestedIndex = paths.indexOf(m_requestedFile);
+        qDebug() << "Looking for requested file:" << m_requestedFile;
+        qDebug() << "Total images found:" << paths.count();
+
+        // First, try exact match
+        int requestedIndex = paths.indexOf(m_requestedFile);
+        qDebug() << "Exact match index:" << requestedIndex;
+
+        // If not found, try matching by filename (in case path format differs)
+        if (requestedIndex < 0) {
+            const QString requestedFileName = QFileInfo(m_requestedFile).fileName();
+            qDebug() << "Trying to match filename:" << requestedFileName;
+
+            for (int i = 0; i < paths.count(); ++i) {
+                if (QFileInfo(paths.at(i)).fileName() == requestedFileName) {
+                    requestedIndex = i;
+                    qDebug() << "Found match at index:" << i;
+                    break;
+                }
+            }
+        }
+
         if (requestedIndex >= 0) {
             index = requestedIndex;
+        } else {
+            qDebug() << "File not found in list. First few paths:";
+            for (int i = 0; i < qMin(3, paths.count()); ++i) {
+                qDebug() << "  " << i << ":" << paths.at(i);
+            }
         }
         m_requestedFile.clear();
     }
