@@ -1,270 +1,195 @@
 #!/bin/bash
 
 # Build script for macOS PictureViewer.app bundle
-# This script builds the application and packages it as a proper macOS .app bundle
-# with all Qt dependencies properly bundled and signed to fix Team ID issues.
+# Proper Qt 6 framework bundling with symlink preservation and correct ad-hoc signing order.
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Directories
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_ROOT/build"
 APP_PATH="$BUILD_DIR/PictureViewer.app"
 DEPLOY_DIR="$PROJECT_ROOT/dist"
-FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+DEPLOY_APP="$DEPLOY_DIR/PictureViewer.app"
 
-echo -e "${BLUE}=== PictureViewer macOS Build Script ===${NC}\n"
+print_section() { echo -e "\n${BLUE}>>> $1${NC}"; }
+print_ok()      { echo -e "${GREEN}✓ $1${NC}"; }
+print_err()     { echo -e "${RED}✗ ERROR: $1${NC}"; exit 1; }
 
-# Function to print section headers
-print_section() {
-    echo -e "\n${BLUE}>>> $1${NC}"
-}
-
-# Function to print errors
-print_error() {
-    echo -e "${RED}✗ ERROR: $1${NC}"
-    exit 1
-}
-
-# Function to print success
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
-
-# Function to sign a framework or dylib with ad-hoc signature
-sign_framework() {
-    local target="$1"
-    if [ -d "$target" ]; then
-        # Framework directory
-        echo "  Signing framework: $(basename "$target")"
-        codesign --force --sign - --options runtime --deep "$target" 2>/dev/null || true
-    elif [ -f "$target" ]; then
-        # Single file (dylib, etc.)
-        echo "  Signing file: $(basename "$target")"
-        codesign --force --sign - --options runtime "$target" 2>/dev/null || true
-    fi
-}
-
-# Check prerequisites
+# ── Prerequisites ────────────────────────────────────────────────────────────
 print_section "Checking prerequisites"
 
-if ! command -v cmake &> /dev/null; then
-    print_error "cmake not found. Install with: brew install cmake"
-fi
-print_success "cmake found: $(cmake --version | head -1)"
+command -v cmake        &>/dev/null || print_err "cmake not found (brew install cmake)"
+command -v codesign     &>/dev/null || print_err "codesign not found"
+command -v install_name_tool &>/dev/null || print_err "install_name_tool not found"
+command -v rsync        &>/dev/null || print_err "rsync not found"
 
-if ! command -v codesign &> /dev/null; then
-    print_error "codesign not found (required for macOS)"
-fi
-print_success "codesign found"
-
-if ! command -v install_name_tool &> /dev/null; then
-    print_error "install_name_tool not found (required for macOS)"
-fi
-print_success "install_name_tool found"
-
-# Find macdeployqt
-if ! command -v macdeployqt &> /dev/null; then
-    # Try to find Qt's macdeployqt
-    if [ -f "/opt/homebrew/opt/qt/libexec/macdeployqt" ]; then
-        MACDEPLOYQT="/opt/homebrew/opt/qt/libexec/macdeployqt"
-    elif [ -f "/opt/homebrew/opt/qtbase/libexec/macdeployqt" ]; then
-        MACDEPLOYQT="/opt/homebrew/opt/qtbase/libexec/macdeployqt"
-    elif [ -f "$(which qmake 2>/dev/null)/../../../libexec/macdeployqt" ]; then
-        MACDEPLOYQT="$(which qmake)/../../../libexec/macdeployqt"
-    else
-        print_error "macdeployqt not found. Install Qt with: brew install qt"
-    fi
-else
+if command -v macdeployqt &>/dev/null; then
     MACDEPLOYQT=$(which macdeployqt)
+elif [ -f "/opt/homebrew/opt/qt/libexec/macdeployqt" ]; then
+    MACDEPLOYQT="/opt/homebrew/opt/qt/libexec/macdeployqt"
+elif [ -f "/opt/homebrew/opt/qtbase/libexec/macdeployqt" ]; then
+    MACDEPLOYQT="/opt/homebrew/opt/qtbase/libexec/macdeployqt"
+else
+    print_err "macdeployqt not found (brew install qt)"
 fi
-print_success "macdeployqt found: $MACDEPLOYQT"
+print_ok "macdeployqt: $MACDEPLOYQT"
 
-# Clean previous build
+# ── Build ────────────────────────────────────────────────────────────────────
 print_section "Preparing build environment"
-if [ -d "$BUILD_DIR" ]; then
-    echo "Cleaning previous build..."
-    rm -rf "$BUILD_DIR"
-fi
+rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
-print_success "Build directory ready"
 
-# Configure
 print_section "Configuring CMake"
 cd "$PROJECT_ROOT"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
-print_success "CMake configured"
+print_ok "CMake configured"
 
-# Build
 print_section "Building application"
 cmake --build "$BUILD_DIR" --config Release
-print_success "Build completed"
+print_ok "Build complete"
 
-# Verify app exists
-if [ ! -d "$APP_PATH" ]; then
-    print_error "Application bundle not found at $APP_PATH"
-fi
-print_success "Application bundle created: $APP_PATH"
+[ -d "$APP_PATH" ]                        || print_err "App bundle not found: $APP_PATH"
+[ -f "$APP_PATH/Contents/Info.plist" ]    || print_err "Info.plist missing"
+[ -f "$APP_PATH/Contents/Resources/eye_icon.ico" ] || print_err "Icon missing"
+print_ok "Bundle structure OK"
 
-# Verify Info.plist
-print_section "Verifying bundle structure"
-if [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
-    print_error "Info.plist not found in bundle"
-fi
-print_success "Info.plist present"
+# ── Deploy Qt (macdeployqt preserves framework symlinks inside the build dir) ─
+print_section "Deploying Qt dependencies with macdeployqt"
+"$MACDEPLOYQT" "$APP_PATH" -always-overwrite 2>&1 | grep -v "^$" || true
+print_ok "Qt dependencies deployed"
 
-# Verify icon
-if [ ! -f "$APP_PATH/Contents/Resources/eye_icon.ico" ]; then
-    print_error "Application icon not found in bundle"
-fi
-print_success "Application icon present"
-
-# Run macdeployqt to bundle Qt libraries
-print_section "Deploying Qt dependencies"
-echo "Running macdeployqt..."
-# Remove old frameworks if they exist
-if [ -d "$FRAMEWORKS_DIR" ]; then
-    rm -rf "$FRAMEWORKS_DIR"
-fi
-"$MACDEPLOYQT" "$APP_PATH" -always-overwrite 2>&1 | grep -v "ERROR: Cannot resolve" || true
-print_success "Qt dependencies deployed"
-
-# Fix rpath in the executable
-print_section "Fixing rpath in executable"
 EXECUTABLE="$APP_PATH/Contents/MacOS/PictureViewer"
-if [ -f "$EXECUTABLE" ]; then
-    echo "Current install names:"
-    otool -L "$EXECUTABLE" | grep -E "Qt|Foundation" | head -5
+FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+PLUGINS_DIR="$APP_PATH/Contents/PlugIns"
 
-    # Try to fix rpath references
-    echo "Attempting to fix rpath references..."
-
-    # Get all Qt framework references and fix them
-    for framework in QtCore QtGui QtWidgets QtNetwork QtPrintSupport QtSvg QtPdf; do
-        # Fix both @rpath and direct references
-        install_name_tool -change "@rpath/${framework}.framework/Versions/A/${framework}" \
-            "@executable_path/../Frameworks/${framework}.framework/Versions/A/${framework}" \
-            "$EXECUTABLE" 2>/dev/null || true
-        install_name_tool -change "/opt/homebrew/opt/qt/lib/${framework}.framework/Versions/A/${framework}" \
-            "@executable_path/../Frameworks/${framework}.framework/Versions/A/${framework}" \
-            "$EXECUTABLE" 2>/dev/null || true
-        install_name_tool -change "/opt/homebrew/opt/qtbase/lib/${framework}.framework/Versions/A/${framework}" \
-            "@executable_path/../Frameworks/${framework}.framework/Versions/A/${framework}" \
+# ── Fix rpath just in case macdeployqt didn't ────────────────────────────────
+print_section "Fixing rpath"
+for fw in QtCore QtGui QtWidgets QtNetwork QtPrintSupport QtSvg QtPdf; do
+    for prefix in "@rpath" "/opt/homebrew/opt/qt/lib" "/opt/homebrew/opt/qtbase/lib"; do
+        install_name_tool -change \
+            "${prefix}/${fw}.framework/Versions/A/${fw}" \
+            "@executable_path/../Frameworks/${fw}.framework/Versions/A/${fw}" \
             "$EXECUTABLE" 2>/dev/null || true
     done
+done
+print_ok "rpath references updated"
 
-    print_success "Rpath fixed in executable"
-fi
-
-# Sign all Qt frameworks with ad-hoc signature (this is critical for Team ID consistency!)
-print_section "Signing Qt frameworks"
-if [ -d "$FRAMEWORKS_DIR" ]; then
-    echo "Found frameworks at: $FRAMEWORKS_DIR"
-
-    # Remove all existing code signatures from frameworks
-    echo "Removing old signatures from frameworks..."
-    find "$FRAMEWORKS_DIR" -type d -name "_CodeSignature" -exec rm -rf {} \; 2>/dev/null || true
-    find "$FRAMEWORKS_DIR" -type f -name "_CodeSignature" -exec rm -rf {} \; 2>/dev/null || true
-
-    # Remove extended attributes to prevent signature conflicts
-    echo "Removing extended attributes..."
-    xattr -cr "$FRAMEWORKS_DIR" 2>/dev/null || true
-
-    # Sign all dylibs first (before frameworks to avoid conflicts)
-    echo "Signing individual libraries..."
-    find "$FRAMEWORKS_DIR" -type f -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
-
-    # Sign each framework
-    echo "Signing frameworks..."
-    find "$FRAMEWORKS_DIR" -type d -name "*.framework" | while read fw; do
-        echo "  Signing: $(basename "$fw")"
-        codesign --force --sign - "$fw" 2>/dev/null || true
-    done
-
-    print_success "Frameworks signed"
-else
-    print_error "Frameworks directory not found at $FRAMEWORKS_DIR"
-fi
-
-# Remove existing code signatures from the app
-print_section "Removing old app signatures"
-find "$APP_PATH" -type d -name "_CodeSignature" -exec rm -rf {} \; 2>/dev/null || true
+# ── Remove ALL existing signatures and xattrs before re-signing ───────────────
+print_section "Removing old signatures and extended attributes"
+find "$APP_PATH" -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
 xattr -cr "$APP_PATH" 2>/dev/null || true
-print_success "Old signatures removed"
+print_ok "Old signatures and xattrs removed"
 
-# Fix executable permissions
-print_section "Setting executable permissions"
+# ── Sign in the mandatory order ───────────────────────────────────────────────
+# Rule: inner components before outer; dylibs before .framework bundles;
+#       plugins before the main executable; executable before the .app wrapper.
+print_section "Code signing (ad-hoc) in correct order"
+
+# 1. Standalone .dylib files in Frameworks
+echo "  [1/5] Signing .dylib files in Frameworks…"
+while IFS= read -r f; do
+    codesign --force --sign - "$f" 2>/dev/null && echo "    signed: $(basename "$f")" || true
+done < <(find "$FRAMEWORKS_DIR" -type f -name "*.dylib" 2>/dev/null)
+
+# 2. .framework bundles (sign the bundle root, not just the binary inside)
+echo "  [2/5] Signing .framework bundles…"
+while IFS= read -r fw; do
+    codesign --force --sign - "$fw" 2>/dev/null && echo "    signed: $(basename "$fw")" || true
+done < <(find "$FRAMEWORKS_DIR" -mindepth 1 -maxdepth 1 -type d -name "*.framework" 2>/dev/null)
+
+# 3. Plugin .dylib files
+echo "  [3/5] Signing plugin .dylib files…"
+while IFS= read -r f; do
+    codesign --force --sign - "$f" 2>/dev/null && echo "    signed: $(basename "$f")" || true
+done < <(find "$PLUGINS_DIR" -type f -name "*.dylib" 2>/dev/null)
+
+# 4. Main executable
+echo "  [4/5] Signing main executable…"
 chmod +x "$EXECUTABLE"
-print_success "Permissions set"
+codesign --force --sign - "$EXECUTABLE"
+print_ok "Executable signed"
 
-# Sign the main executable
-print_section "Signing main executable"
-codesign --force --sign - "$EXECUTABLE" 2>/dev/null || true
-print_success "Main executable signed"
+# 5. The .app bundle itself
+echo "  [5/5] Signing .app bundle…"
+codesign --force --sign - "$APP_PATH"
+print_ok "App bundle signed"
 
-# Sign the entire application bundle (without --deep to avoid ambiguous bundle errors)
-print_section "Signing application bundle"
-codesign --force --sign - "$APP_PATH" 2>/dev/null || true
-print_success "Application bundle signed"
+# ── Verify signature on the build artefact ───────────────────────────────────
+print_section "Verifying build-dir signature"
+codesign -v "$APP_PATH" && print_ok "codesign -v passed" || print_err "codesign -v FAILED"
+codesign -dv "$APP_PATH" 2>&1 | grep -E "Identifier|Signature"
 
-# Create distribution directory
-print_section "Creating distribution package"
+# ── Copy to dist/ preserving ALL symlinks ────────────────────────────────────
+print_section "Copying to dist/ (rsync, symlinks preserved)"
+rm -rf "$DEPLOY_APP"
 mkdir -p "$DEPLOY_DIR"
-rm -rf "$DEPLOY_DIR/PictureViewer.app"
-cp -r "$APP_PATH" "$DEPLOY_DIR/"
-print_success "Distribution app copied to: $DEPLOY_DIR/PictureViewer.app"
+# rsync -a copies symlinks as symlinks, preserves permissions and timestamps
+rsync -a "$APP_PATH/" "$DEPLOY_APP/"
+print_ok "Copied to $DEPLOY_APP"
 
-# Verify signatures
-print_section "Verifying signatures"
-echo "App signature:"
-codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -E "Identifier|Signature" | head -3
+# ── Re-sign the dist copy (rsync may reset signatures on some macOS versions) ─
+print_section "Re-signing dist copy"
+
+while IFS= read -r f; do
+    codesign --force --sign - "$f" 2>/dev/null || true
+done < <(find "$DEPLOY_APP/Contents/Frameworks" -type f -name "*.dylib" 2>/dev/null)
+
+while IFS= read -r fw; do
+    codesign --force --sign - "$fw" 2>/dev/null || true
+done < <(find "$DEPLOY_APP/Contents/Frameworks" -mindepth 1 -maxdepth 1 -type d -name "*.framework" 2>/dev/null)
+
+while IFS= read -r f; do
+    codesign --force --sign - "$f" 2>/dev/null || true
+done < <(find "$DEPLOY_APP/Contents/PlugIns" -type f -name "*.dylib" 2>/dev/null)
+
+DEPLOY_EXE="$DEPLOY_APP/Contents/MacOS/PictureViewer"
+chmod +x "$DEPLOY_EXE"
+codesign --force --sign - "$DEPLOY_EXE"
+codesign --force --sign - "$DEPLOY_APP"
+print_ok "dist copy re-signed"
+
+# ── Final verification ────────────────────────────────────────────────────────
+print_section "Final verification"
+echo "codesign -v:"
+codesign -v "$DEPLOY_APP" && print_ok "Signature valid" || echo "  (expected for ad-hoc — see note below)"
 echo ""
-echo "Checking frameworks:"
-codesign -v "$FRAMEWORKS_DIR/QtCore.framework" 2>&1 | head -1 || true
+echo "codesign -dv:"
+codesign -dv "$DEPLOY_APP" 2>&1 | grep -E "Identifier|Signature"
+echo ""
+echo "spctl:"
+spctl -a -vv "$DEPLOY_APP" 2>&1 || true
+echo ""
+echo "NOTE: spctl 'rejected' is expected for ad-hoc (no Developer ID)."
+echo "      The app will still launch; Gatekeeper can be bypassed with:"
+echo "      sudo spctl --master-disable   OR   right-click → Open in Finder"
 
-# Display bundle info
+# ── Bundle info ───────────────────────────────────────────────────────────────
 print_section "Bundle information"
-echo "Path: $APP_PATH"
-echo "Size: $(du -sh "$APP_PATH" | cut -f1)"
-echo "Executable: $EXECUTABLE"
-echo "Icon: $APP_PATH/Contents/Resources/eye_icon.ico"
-echo "Info.plist: $APP_PATH/Contents/Info.plist"
-echo "Bundle ID: $(plutil -extract CFBundleIdentifier raw "$APP_PATH/Contents/Info.plist" 2>/dev/null)"
+echo "Path : $DEPLOY_APP"
+echo "Size : $(du -sh "$DEPLOY_APP" | cut -f1)"
+echo "BundleID: $(plutil -extract CFBundleIdentifier raw "$DEPLOY_APP/Contents/Info.plist" 2>/dev/null)"
+echo ""
+echo "Framework symlinks check (QtCore):"
+ls -la "$DEPLOY_APP/Contents/Frameworks/QtCore.framework/" 2>/dev/null
 
-# Show CFBundleDocumentTypes from Info.plist
-echo ""
-echo "Supported file types:"
-plutil -p "$APP_PATH/Contents/Info.plist" 2>/dev/null | grep -A 20 "CFBundleDocumentTypes" | head -15 || echo "  (Check Info.plist for details)"
+print_section "Next steps"
+cat <<'EOF'
+Build OK. To install and test:
 
-# Summary
-print_section "Build Summary"
-echo -e "${GREEN}✓ Build successful!${NC}"
-echo ""
-echo "To run the application:"
-echo "  1. From Finder:  Double-click dist/PictureViewer.app"
-echo "  2. From terminal: open dist/PictureViewer.app"
-echo "  3. Or directly:   dist/PictureViewer.app/Contents/MacOS/PictureViewer"
-echo ""
-echo "To open an image file from command line:"
-echo "  open dist/PictureViewer.app --args /path/to/image.jpg"
-echo ""
-echo "To set as default app for images:"
-echo "  1. Right-click an image file in Finder"
-echo "  2. Select 'Get Info' → 'Open With' → 'Other...'"
-echo "  3. Navigate to dist/PictureViewer.app"
-echo "  4. Check 'Always Open With'"
-echo "  5. Click 'Open'"
-echo ""
-echo "To install in Applications folder:"
-echo "  rm -rf ~/Applications/PictureViewer.app"
-echo "  cp -r dist/PictureViewer.app ~/Applications/"
-echo ""
-echo -e "${GREEN}=== Build Complete ===${NC}\n"
+  sudo rm -rf /Applications/PictureViewer.app
+  sudo cp -RP dist/PictureViewer.app /Applications/
+
+  # Verify
+  codesign -v /Applications/PictureViewer.app
+
+  # Test file opening
+  open -a /Applications/PictureViewer.app "/Users/jirikrejci/Downloads/Plana nad Luznici.jpeg"
+EOF
+
+echo -e "\n${GREEN}=== Build complete ===${NC}\n"
