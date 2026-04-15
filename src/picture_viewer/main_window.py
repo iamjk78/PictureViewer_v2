@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -29,6 +29,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("PictureViewer")
         self.resize(1200, 750)
+
+        # Nastavení ikony okna
+        icon_path = Path(__file__).parent / "eye_icon.ico"
+        self.setWindowIcon(QIcon(str(icon_path)))
 
         self._image_paths: list[Path] = []
         self._current_index: int = -1
