@@ -3,6 +3,10 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+compile_commands.json
 .venv/
 venv/
 .pytest_cache/
