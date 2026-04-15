@@ -11,6 +11,10 @@
 #include <QDockWidget>
 #include <QFileInfo>
 #include <QUrl>
+
+#ifdef Q_OS_MACOS
+#include <sys/xattr.h>
+#endif
 #include <QFileDialog>
 #include <QIcon>
 #include <QKeySequence>
@@ -22,6 +26,20 @@
 #include <QToolBar>
 #include <QWidget>
 #include <QThreadPool>
+
+namespace {
+
+#ifdef Q_OS_MACOS
+// Removes the com.apple.quarantine xattr so the OS lets us load the file.
+// Called before every loadImage(); safe to call even if the attribute is absent.
+void removeQuarantine(const QString &path)
+{
+    const QByteArray p = path.toUtf8();
+    removexattr(p.constData(), "com.apple.quarantine", 0);
+}
+#endif
+
+} // anonymous namespace
 
 namespace pictureviewer {
 
@@ -335,6 +353,9 @@ void MainWindow::showImage(int index)
     }
 
     const QString path = m_imagePaths.at(index);
+#ifdef Q_OS_MACOS
+    removeQuarantine(path);
+#endif
     if (!m_imageView->loadImage(path)) {
         m_currentIndex = -1;
         m_statusLabel->setText(tr("Nepodařilo se načíst obrázek: %1").arg(path));
