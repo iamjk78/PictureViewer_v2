@@ -54,8 +54,17 @@ set_target_properties(PictureViewer PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "PictureViewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.jk78.pictureviewer"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "cz.jirikrejci.PictureViewer"
 )
+
+# macOS-specific settings
+if(APPLE)
+    # Set rpath for bundled Qt frameworks
+    set_target_properties(PictureViewer PROPERTIES
+        BUILD_RPATH "@executable_path/../Frameworks"
+        INSTALL_RPATH "@executable_path/../Frameworks"
+    )
+endif()
 
 # Copy icon to the macOS bundle's Resources directory
 if(APPLE)

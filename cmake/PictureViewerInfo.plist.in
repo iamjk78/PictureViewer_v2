@@ -20,7 +20,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>PictureViewer</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.jk78.pictureviewer</string>
+	<string>cz.jirikrejci.PictureViewer</string>
 	<key>CFBundleExecutable</key>
 	<string>PictureViewer</string>
 
@@ -190,7 +190,7 @@
 
 	<!-- Document support settings -->
 	<key>LSHandlerRank</key>
-	<string>Default</string>
+	<string>Owner</string>
 
 	<!-- App presentation name -->
 	<key>NSHumanReadableCopyright</key>

@@ -61,6 +61,15 @@ Application::~Application() = default;
 
 int Application::run()
 {
+    // Handle command-line arguments (e.g., open image passed from command line)
+    const QStringList args = m_qtApplication->arguments();
+    if (args.size() > 1) {
+        // Skip the first argument which is the program name
+        const QString filePath = args.at(1);
+        qDebug() << "Opening file from command line:" << filePath;
+        m_mainWindow->openFile(filePath);
+    }
+
     m_mainWindow->show();
     return m_qtApplication->exec();
 }
