@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QSize, QThreadPool
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtGui import QImage, QPixmap, QIcon
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
 from .thumbnail_worker import ThumbnailWorker
@@ -33,6 +33,7 @@ class ThumbnailPanel(QListWidget):
         )
         self.itemClicked.connect(self._on_item_clicked)
         self._current_worker: ThumbnailWorker | None = None
+        self._generation: int = 0
 
     # ------------------------------------------------------------------
     # Veřejné API
@@ -41,18 +42,26 @@ class ThumbnailPanel(QListWidget):
     def load_images(self, paths: list[Path]) -> None:
         """Vytvoří prázdné položky a spustí asynchronní načítání náhledů.
 
-        Náhledy se načítají v pozadí pomocí ThumbnailWorker v QThreadPool.
+        Před spuštěním nového workeru zruší předchozí, aby stale signály
+        od starého workeru neznečistily nový panel.
         """
-        self.clear()
+        # Zrušit předchozí worker (stale signály by jinak mapovaly
+        # náhledy z jiné složky na položky aktuálního panelu)
+        if self._current_worker is not None:
+            self._current_worker.cancel()
+            self._current_worker = None
 
-        # Vytvořit prázdné položky pro všechny cesty
+        # Každé volání load_images dostane novou generaci;
+        # signály s jinou generací jsou v _on_thumbnail_ready ignorovány
+        self._generation += 1
+
+        self.clear()
         for path in paths:
             item = QListWidgetItem()
             item.setToolTip(path.name)
             item.setData(Qt.UserRole, path)
             self.addItem(item)
 
-        # Spustit asynchronní načítání náhledů
         self._start_thumbnail_loader(paths)
 
     def set_current_index(self, index: int) -> None:
@@ -67,22 +76,30 @@ class ThumbnailPanel(QListWidget):
 
     def _start_thumbnail_loader(self, paths: list[Path]) -> None:
         """Spustí ThumbnailWorker v QThreadPool pro asynchronní načítání."""
-        self._current_worker = ThumbnailWorker(paths)
-        self._current_worker.signals.thumbnail_ready.connect(self._on_thumbnail_ready)
-        self._current_worker.signals.worker_finished.connect(self._on_thumbnails_complete)
+        worker = ThumbnailWorker(paths, self._generation)
+        worker.signals.thumbnail_ready.connect(self._on_thumbnail_ready)
+        worker.signals.worker_finished.connect(self._on_thumbnails_complete)
+        self._current_worker = worker
+        QThreadPool.globalInstance().start(worker)
 
-        threadpool = QThreadPool.globalInstance()
-        threadpool.start(self._current_worker)
+    def _on_thumbnail_ready(self, generation: int, index: int, image: QImage) -> None:
+        """Slot: náhled je připraven – konvertuj QImage → QIcon v hlavním vlákně.
 
-    def _on_thumbnail_ready(self, index: int, icon: QIcon) -> None:
-        """Slot: náhled je připraven, aktualizuj položku."""
+        QPixmap NESMÍ být vytvářen ve vedlejším vlákně; tato konverze
+        probíhá zde, tj. vždy v hlavním vlákně.
+        Signály s nesprávnou generací jsou ignorovány (stale worker).
+        """
+        if generation != self._generation:
+            return
         if 0 <= index < self.count():
             item = self.item(index)
-            item.setIcon(icon)
+            if not image.isNull():
+                item.setIcon(QIcon(QPixmap.fromImage(image)))
 
-    def _on_thumbnails_complete(self) -> None:
-        """Slot: všechny náhledy jsou načteny."""
-        self._current_worker = None
+    def _on_thumbnails_complete(self, generation: int) -> None:
+        """Slot: worker dokončil načítání."""
+        if generation == self._generation:
+            self._current_worker = None
 
     # ------------------------------------------------------------------
     # Interní

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .image_loader import ImageInfo, load_folder, load_image_info
+from .image_loader import ImageInfo, load_image_info
 from .image_view import ImageView
 from .slideshow import SlideshowController
 from .thumbnail_panel import ThumbnailPanel
+from .thumbnail_worker import FolderScanWorker
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
 
         self._image_paths: list[Path] = []
         self._current_index: int = -1
+        self._requested_file: Path | None = None
 
         self._image_view = ImageView(self)
         self.setCentralWidget(self._image_view)
@@ -162,23 +164,42 @@ class MainWindow(QMainWindow):
             "Obrázky (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.tiff *.tif)",
         )
         if path:
-            p = Path(path)
-            self._load_folder(p.parent)
-            # Přeskočí na vybraný soubor
-            try:
-                idx = self._image_paths.index(p)
-                self._show_image(idx)
-            except ValueError:
-                pass
+            # Cílový soubor si uložíme; _on_scan_complete na něj přeskočí
+            # poté, co FolderScanWorker dokončí skenování složky.
+            self._requested_file = Path(path)
+            self._load_folder(self._requested_file.parent)
 
     def _load_folder(self, folder: Path) -> None:
-        paths = load_folder(folder)
+        """Spustí skenování složky v pozadí – neblokuje hlavní vlákno."""
+        self._status_label.setText("Načítám složku…")
+        worker = FolderScanWorker(folder)
+        worker.signals.scan_complete.connect(self._on_scan_complete)
+        worker.signals.scan_error.connect(self._on_scan_error)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_scan_complete(self, paths: list[Path]) -> None:
+        """Slot: skenování složky hotovo – zobrazí první obrázek a spustí náhledy."""
         if not paths:
             self._status_label.setText("Ve složce nebyly nalezeny žádné obrázky.")
             return
+
         self._image_paths = paths
         self._thumbnail_panel.load_images(paths)
-        self._show_image(0)
+
+        # Pokud byl otevřen konkrétní soubor, přeskočíme na něj;
+        # jinak zobrazíme první obrázek v seřazeném seznamu.
+        idx = 0
+        if self._requested_file is not None:
+            try:
+                idx = paths.index(self._requested_file)
+            except ValueError:
+                idx = 0
+            self._requested_file = None
+
+        self._show_image(idx)
+
+    def _on_scan_error(self, error: str) -> None:
+        self._status_label.setText(f"Chyba při skenování: {error}")
 
     # ------------------------------------------------------------------
     # Navigace
