@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QThreadPool
 from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
+
+from .thumbnail_worker import ThumbnailWorker
 
 
 THUMBNAIL_SIZE = 96  # px
@@ -30,37 +32,57 @@ class ThumbnailPanel(QListWidget):
             "QListWidget::item:selected { background-color: #0d6efd; }"
         )
         self.itemClicked.connect(self._on_item_clicked)
+        self._current_worker: ThumbnailWorker | None = None
 
     # ------------------------------------------------------------------
     # Veřejné API
     # ------------------------------------------------------------------
 
     def load_images(self, paths: list[Path]) -> None:
-        """Naplní panel náhledy ze seznamu cest."""
+        """Vytvoří prázdné položky a spustí asynchronní načítání náhledů.
+
+        Náhledy se načítají v pozadí pomocí ThumbnailWorker v QThreadPool.
+        """
         self.clear()
+
+        # Vytvořit prázdné položky pro všechny cesty
         for path in paths:
             item = QListWidgetItem()
             item.setToolTip(path.name)
-            pixmap = QPixmap(str(path))
-            if not pixmap.isNull():
-                icon = QIcon(
-                    pixmap.scaled(
-                        THUMBNAIL_SIZE,
-                        THUMBNAIL_SIZE,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                )
-            else:
-                icon = QIcon()
-            item.setIcon(icon)
+            item.setData(Qt.UserRole, path)
             self.addItem(item)
+
+        # Spustit asynchronní načítání náhledů
+        self._start_thumbnail_loader(paths)
 
     def set_current_index(self, index: int) -> None:
         """Zvýrazní obrázek na daném indexu."""
         if 0 <= index < self.count():
             self.setCurrentRow(index)
             self.scrollToItem(self.item(index))
+
+    # ------------------------------------------------------------------
+    # Asynchronní načítání náhledů
+    # ------------------------------------------------------------------
+
+    def _start_thumbnail_loader(self, paths: list[Path]) -> None:
+        """Spustí ThumbnailWorker v QThreadPool pro asynchronní načítání."""
+        self._current_worker = ThumbnailWorker(paths)
+        self._current_worker.signals.thumbnail_ready.connect(self._on_thumbnail_ready)
+        self._current_worker.signals.worker_finished.connect(self._on_thumbnails_complete)
+
+        threadpool = QThreadPool.globalInstance()
+        threadpool.start(self._current_worker)
+
+    def _on_thumbnail_ready(self, index: int, icon: QIcon) -> None:
+        """Slot: náhled je připraven, aktualizuj položku."""
+        if 0 <= index < self.count():
+            item = self.item(index)
+            item.setIcon(icon)
+
+    def _on_thumbnails_complete(self) -> None:
+        """Slot: všechny náhledy jsou načteny."""
+        self._current_worker = None
 
     # ------------------------------------------------------------------
     # Interní
