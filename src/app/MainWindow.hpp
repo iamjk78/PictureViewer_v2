@@ -33,6 +33,7 @@ public:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void openFolderDialog();
@@ -47,6 +48,7 @@ private slots:
     void toggleFullscreen();
 
 private:
+    void cancelAllWorkers();   // cancel + disconnect every background task
     void loadFolder(const QString &folderPath);
     void enterFullscreen();
     void exitFullscreen();

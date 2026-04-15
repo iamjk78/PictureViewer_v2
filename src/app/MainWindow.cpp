@@ -7,6 +7,8 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
 #include <QFileInfo>
@@ -84,27 +86,55 @@ MainWindow::MainWindow(QWidget *parent)
     }
 }
 
-MainWindow::~MainWindow()
+// ── cancelAllWorkers ─────────────────────────────────────────────────────────
+// Single choke-point for all background-task teardown.
+// Safe to call multiple times (all branches are null-guarded).
+void MainWindow::cancelAllWorkers()
 {
-    // ── Step 1: cancel the folder scan worker and cut its signal connections ──
-    // The worker's own deleteLater (connected to finished) will free its memory
-    // once it exits run(). We must NOT delete it here — it may still be
-    // executing on a pool thread.
+    // Bump the generation counter so any cross-thread scanComplete / scanError
+    // signals that are already queued in the event system are silently dropped
+    // by the existing generation check in onScanComplete / onScanError.
+    ++m_scanGeneration;
+
     if (m_folderScanWorker != nullptr) {
         m_folderScanWorker->cancel();
+        // Sever connections from worker to this window; already-queued events
+        // for these connections will be dropped by Qt when the connection is gone.
         disconnect(m_folderScanWorker, nullptr, this, nullptr);
         m_folderScanWorker = nullptr;
     }
 
-    // ── Step 2: cancel the thumbnail worker and cut its signal connections ────
+    // Cancel + disconnect every signal from ThumbnailWorker to ThumbnailPanel.
     m_thumbnailPanel->shutdown();
+}
 
-    // ── Step 3: wait for every pool task to reach its natural end ────────────
-    // At this point all signals into UI have been disconnected, so workers that
-    // are still executing run() can finish safely without touching any object
-    // that is about to be destroyed.
-    // Child QObjects (ThumbnailPanel, ImageView, …) are still alive here —
-    // Qt destroys them AFTER this destructor body returns.
+// ── closeEvent ────────────────────────────────────────────────────────────────
+// Called while the Qt event loop is still live (user pressed ✕, Cmd+W, etc.).
+// Running the shutdown here — before exec() returns — guarantees that:
+//   1. Workers are cancelled and their signal connections severed.
+//   2. waitForDone() blocks until every run() exits (workers only touch their
+//      own members from this point; all signals into UI are disconnected).
+//   3. processEvents() flushes any cross-thread signals that were already
+//      posted before disconnect() ran; they are dropped because the connections
+//      no longer exist and no new workers will be started.
+// By the time exec() returns, the thread pool is completely idle.
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    cancelAllWorkers();
+    QThreadPool::globalInstance()->waitForDone();
+    QCoreApplication::processEvents();   // drain stale queued signals (no-ops)
+    QMainWindow::closeEvent(event);
+}
+
+// ── ~MainWindow ───────────────────────────────────────────────────────────────
+// Fallback safety net for paths that bypass closeEvent (e.g. programmatic
+// QApplication::quit() from Cmd+Q on macOS, or unit-test teardown).
+// cancelAllWorkers() is idempotent, waitForDone() returns immediately when
+// the pool is already idle (the common path after closeEvent ran).
+// Child QObjects are still alive here; Qt destroys them after this body returns.
+MainWindow::~MainWindow()
+{
+    cancelAllWorkers();
     QThreadPool::globalInstance()->waitForDone();
 }
 
