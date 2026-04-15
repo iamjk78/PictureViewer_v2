@@ -38,7 +38,7 @@ namespace pictureviewer {
 QString SettingsManager::configFilePath()
 {
     // QStandardPaths uses the org/app names set on QCoreApplication:
-    //   macOS   → ~/.config/JiriKrejci/PictureViewer/config.ini
+    //   macOS   → ~/Library/Preferences/JiriKrejci/PictureViewer/config.ini
     //   Windows → %APPDATA%\JiriKrejci\PictureViewer\config.ini
     const QString dir =
         QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
