@@ -13,6 +13,13 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
+# Generate Info.plist from template
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PictureViewerInfo.plist.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
+    @ONLY
+)
+
 # Build subdirectories for core, app, and workers
 add_subdirectory(src)
 
@@ -42,10 +49,12 @@ target_include_directories(PictureViewer
 set_target_properties(PictureViewer PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
     MACOSX_BUNDLE_ICON_FILE "eye_icon.ico"
     MACOSX_BUNDLE_BUNDLE_NAME "PictureViewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.jk78.pictureviewer"
 )
 
 # Copy icon to the macOS bundle's Resources directory

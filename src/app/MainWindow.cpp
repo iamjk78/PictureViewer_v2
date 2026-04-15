@@ -119,6 +119,15 @@ void MainWindow::openFileDialog()
     }
 }
 
+void MainWindow::openFile(const QString &filePath)
+{
+    // Called from macOS file open events (Finder, Open With, etc.)
+    // Extract folder and set requested file for opening after folder scan
+    m_requestedFile = filePath;
+    const QString folderPath = filePath.section('/', 0, -2);
+    loadFolder(folderPath);
+}
+
 void MainWindow::onRememberLastFolderToggled(bool checked)
 {
     m_settingsManager->setRememberLastFolder(checked);

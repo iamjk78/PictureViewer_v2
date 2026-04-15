@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Bundle information -->
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>@PROJECT_VERSION@</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@PROJECT_VERSION@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+
+	<!-- App identification -->
+	<key>CFBundleName</key>
+	<string>PictureViewer</string>
+	<key>CFBundleDisplayName</key>
+	<string>PictureViewer</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.jk78.pictureviewer</string>
+	<key>CFBundleExecutable</key>
+	<string>PictureViewer</string>
+
+	<!-- Application icon -->
+	<key>CFBundleIconFile</key>
+	<string>eye_icon.ico</string>
+
+	<!-- Localization -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>CFBundleLocalization</key>
+	<string>en</string>
+
+	<!-- System requirements -->
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>LSRequiresIPhoneOS</key>
+	<false/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+
+	<!-- File associations: Picture types this app can open -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<!-- JPEG/JPG images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>jpg</string>
+				<string>jpeg</string>
+				<string>JPG</string>
+				<string>JPEG</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/jpeg</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>JPEG Image</string>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>JPEG</string>
+			</array>
+		</dict>
+
+		<!-- PNG images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>png</string>
+				<string>PNG</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/png</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>PNG Image</string>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>PNGf</string>
+			</array>
+		</dict>
+
+		<!-- WebP images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>webp</string>
+				<string>WEBP</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/webp</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>WebP Image</string>
+		</dict>
+
+		<!-- GIF images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>gif</string>
+				<string>GIF</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/gif</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>GIF Image</string>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>GIFf</string>
+			</array>
+		</dict>
+
+		<!-- TIFF images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>tiff</string>
+				<string>tif</string>
+				<string>TIFF</string>
+				<string>TIF</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/tiff</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>TIFF Image</string>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>TIFF</string>
+			</array>
+		</dict>
+
+		<!-- BMP images -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>bmp</string>
+				<string>BMP</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/bmp</string>
+				<string>image/x-bmp</string>
+				<string>image/x-ms-bmp</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>BMP Image</string>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>BMP </string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- High resolution support -->
+	<key>NSHighResolutionCapable</key>
+	<true/>
+
+	<!-- Dark mode support -->
+	<key>NSAppearance</key>
+	<string>NSAppearanceNameAqua</string>
+
+	<!-- Launch at login (optional) -->
+	<key>LSUIElement</key>
+	<false/>
+
+	<!-- Document support settings -->
+	<key>LSHandlerRank</key>
+	<string>Default</string>
+
+	<!-- App presentation name -->
+	<key>NSHumanReadableCopyright</key>
+	<string>PictureViewer © 2026</string>
+
+	<!-- Enable file opening from command line -->
+	<key>NSDocumentsFolderPath</key>
+	<true/>
+
+	<!-- Principal class -->
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+
+	<!-- Service support -->
+	<key>NSServices</key>
+	<array/>
+
+</dict>
+</plist>
