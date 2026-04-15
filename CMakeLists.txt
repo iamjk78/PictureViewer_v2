@@ -13,13 +13,6 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
-# Generate Info.plist from template
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PictureViewerInfo.plist.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
-    @ONLY
-)
-
 # Build subdirectories for core, app, and workers
 add_subdirectory(src)
 
@@ -46,10 +39,10 @@ target_include_directories(PictureViewer
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# Platform-agnostic target properties
 set_target_properties(PictureViewer PROPERTIES
-    WIN32_EXECUTABLE TRUE
+    WIN32_EXECUTABLE TRUE      # hides the console window on Windows
     MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
     MACOSX_BUNDLE_ICON_FILE "eye_icon.ico"
     MACOSX_BUNDLE_BUNDLE_NAME "PictureViewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
@@ -59,8 +52,15 @@ set_target_properties(PictureViewer PROPERTIES
 
 # macOS-specific settings
 if(APPLE)
-    # Set rpath for bundled Qt frameworks
+    # Generate Info.plist from template (macOS only — not needed on Windows)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PictureViewerInfo.plist.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
+        @ONLY
+    )
+
     set_target_properties(PictureViewer PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/PictureViewerInfo.plist"
         BUILD_RPATH "@executable_path/../Frameworks"
         INSTALL_RPATH "@executable_path/../Frameworks"
     )
