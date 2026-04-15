@@ -42,4 +42,18 @@ target_include_directories(PictureViewer
 set_target_properties(PictureViewer PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_ICON_FILE "eye_icon.ico"
+    MACOSX_BUNDLE_BUNDLE_NAME "PictureViewer"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
 )
+
+# Copy icon to the macOS bundle's Resources directory
+if(APPLE)
+    add_custom_command(TARGET PictureViewer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/eye_icon.ico"
+            "$<TARGET_BUNDLE_CONTENT_DIR:PictureViewer>/Resources/eye_icon.ico"
+        COMMENT "Copying icon to macOS bundle"
+    )
+endif()
