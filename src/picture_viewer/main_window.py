@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QSettings, QThreadPool
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -39,6 +39,9 @@ class MainWindow(QMainWindow):
         self._current_index: int = -1
         self._requested_file: Path | None = None
 
+        # QSettings používá ApplicationName + OrganizationName z app.py
+        self._settings = QSettings()
+
         self._image_view = ImageView(self)
         self.setCentralWidget(self._image_view)
 
@@ -53,6 +56,8 @@ class MainWindow(QMainWindow):
         self._setup_toolbar()
         self._setup_statusbar()
         self._is_fullscreen: bool = False
+
+        self._restore_last_folder()
 
     # ------------------------------------------------------------------
     # Sestavení UI
@@ -110,6 +115,15 @@ class MainWindow(QMainWindow):
         act_panel.setChecked(True)
         act_panel.triggered.connect(self._thumbnail_dock.setVisible)
         zobraz.addAction(act_panel)
+
+        nastav = menubar.addMenu("&Nastavení")
+        self._act_remember_folder = QAction("Zapamatovat poslední složku", self)
+        self._act_remember_folder.setCheckable(True)
+        self._act_remember_folder.setChecked(
+            self._settings.value("remember_last_folder", False, type=bool)
+        )
+        self._act_remember_folder.triggered.connect(self._on_remember_folder_toggled)
+        nastav.addAction(self._act_remember_folder)
 
     def _setup_toolbar(self) -> None:
         tb = QToolBar("Navigace", self)
@@ -198,8 +212,30 @@ class MainWindow(QMainWindow):
 
         self._show_image(idx)
 
+        # Zapamatování složky – uloží se pokaždé, když je volba aktivní
+        if self._act_remember_folder.isChecked():
+            self._settings.setValue("last_folder", str(paths[0].parent))
+
     def _on_scan_error(self, error: str) -> None:
         self._status_label.setText(f"Chyba při skenování: {error}")
+
+    # ------------------------------------------------------------------
+    # Nastavení
+    # ------------------------------------------------------------------
+
+    def _on_remember_folder_toggled(self, checked: bool) -> None:
+        """Uloží volbu zapamatování; při deaktivaci vymaže uloženou cestu."""
+        self._settings.setValue("remember_last_folder", checked)
+        if not checked:
+            self._settings.remove("last_folder")
+
+    def _restore_last_folder(self) -> None:
+        """Při startu otevře naposledy použitou složku, je-li volba aktivní."""
+        if not self._settings.value("remember_last_folder", False, type=bool):
+            return
+        last = self._settings.value("last_folder", "", type=str)
+        if last:
+            self._load_folder(Path(last))
 
     # ------------------------------------------------------------------
     # Navigace
