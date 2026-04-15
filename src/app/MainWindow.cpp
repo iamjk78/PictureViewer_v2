@@ -6,9 +6,11 @@
 #include "workers/FolderScanWorker.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QDebug>
 #include <QDockWidget>
 #include <QFileInfo>
+#include <QUrl>
 #include <QFileDialog>
 #include <QIcon>
 #include <QKeySequence>
@@ -54,7 +56,14 @@ MainWindow::MainWindow(QWidget *parent)
     setupMenu();
     setupToolbar();
     setupStatusBar();
-    restoreLastFolder();
+
+    // Only restore last folder if no image file is being opened
+    // This prevents race condition when opening image from Finder
+    if (qApp->arguments().size() <= 1) {
+        restoreLastFolder();
+    } else {
+        qDebug() << "Skipping restoreLastFolder() - image file passed as argument";
+    }
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
@@ -126,8 +135,22 @@ void MainWindow::openFile(const QString &filePath)
     // Called from macOS file open events (Finder, Open With, etc.)
     // Extract folder and set requested file for opening after folder scan
     qDebug() << "openFile() called with:" << filePath;
-    m_requestedFile = filePath;
-    const QString folderPath = filePath.section('/', 0, -2);
+    qDebug() << "MainWindow initialized:" << (m_imageView != nullptr);
+
+    if (filePath.isEmpty()) {
+        qDebug() << "ERROR: Empty file path received!";
+        return;
+    }
+
+    // Handle both absolute paths and file URLs (macOS sometimes uses file://)
+    QString cleanPath = filePath;
+    if (cleanPath.startsWith("file://")) {
+        cleanPath = QUrl(cleanPath).toLocalFile();
+        qDebug() << "Converted file URL to local path:" << cleanPath;
+    }
+
+    m_requestedFile = cleanPath;
+    const QString folderPath = cleanPath.section('/', 0, -2);
     qDebug() << "Extracted folder path:" << folderPath;
     loadFolder(folderPath);
 }
