@@ -7,5 +7,13 @@ set(CORE_SOURCES
     ImageCatalog.cpp
 )
 
-add_library(picture_viewer_core INTERFACE ${CORE_SOURCES})
-target_include_directories(picture_viewer_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(picture_viewer_core STATIC ${CORE_SOURCES})
+target_include_directories(picture_viewer_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+target_link_libraries(picture_viewer_core
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
+)

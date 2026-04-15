@@ -20,10 +20,13 @@ add_subdirectory(src)
 qt_add_executable(PictureViewer
     src/main.cpp
     resources/resources.qrc
+    $<TARGET_OBJECTS:picture_viewer_app>
+    $<TARGET_OBJECTS:picture_viewer_workers>
 )
 
 target_link_libraries(PictureViewer
     PRIVATE
+        picture_viewer_core
         picture_viewer_app
         picture_viewer_workers
         Qt6::Core
