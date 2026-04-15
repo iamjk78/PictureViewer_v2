@@ -66,7 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_rememberLastFolderAction(new QAction(tr("Zapamatovat poslední složku"), this))
     , m_togglePanelAction(nullptr)
 {
-    setWindowTitle("PictureViewer");
+    setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
     setCentralWidget(m_imageView);
@@ -91,6 +91,10 @@ MainWindow::MainWindow(QWidget *parent)
 // Safe to call multiple times (all branches are null-guarded).
 void MainWindow::cancelAllWorkers()
 {
+    // Hard gate: set before anything else so every re-entrant call
+    // to loadFolder() / onScanComplete() becomes a no-op immediately.
+    m_shuttingDown = true;
+
     // Bump the generation counter so any cross-thread scanComplete / scanError
     // signals that are already queued in the event system are silently dropped
     // by the existing generation check in onScanComplete / onScanError.
@@ -122,7 +126,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     cancelAllWorkers();
     QThreadPool::globalInstance()->waitForDone();
-    QCoreApplication::processEvents();   // drain stale queued signals (no-ops)
+    // NOTE: processEvents() is intentionally omitted here.
+    // cancelAllWorkers() sets m_shuttingDown=true so any stale queued signals
+    // that processEvents() would have delivered are dropped at their own entry
+    // points (loadFolder / onScanComplete / loadImages) without starting new work.
+    // Calling processEvents() inside closeEvent() is re-entrant and was the
+    // root cause of new workers being spawned after waitForDone() returned.
     QMainWindow::closeEvent(event);
 }
 
@@ -237,7 +246,7 @@ void MainWindow::onRememberLastFolderToggled(bool checked)
 
 void MainWindow::onScanComplete(int generation, const QStringList &paths)
 {
-    if (generation != m_scanGeneration) {
+    if (m_shuttingDown || generation != m_scanGeneration) {
         return;
     }
 
@@ -343,6 +352,10 @@ void MainWindow::toggleSlideshow()
 
 void MainWindow::loadFolder(const QString &folderPath)
 {
+    if (m_shuttingDown) {
+        return;
+    }
+
     ++m_scanGeneration;
     m_statusLabel->setText(tr("Načítám složku…"));
 
