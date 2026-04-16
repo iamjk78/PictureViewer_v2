@@ -1,3 +1,4 @@
+#include "app/HelpDialog.hpp"
 #include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
 #include "app/SettingsManager.hpp"
@@ -495,6 +496,16 @@ void MainWindow::setupMenu()
     m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
     connect(m_rememberLastFolderAction, &QAction::toggled, this, &MainWindow::onRememberLastFolderToggled);
     settingsMenu->addAction(m_rememberLastFolderAction);
+
+    // ── Nápověda ──────────────────────────────────────────────────────────────
+    // POZOR: Při přidání nových funkcí nebo zkratek aktualizuj HelpDialog.cpp!
+    QMenu *helpMenu = menuBar()->addMenu(tr("&Nápověda"));
+    helpMenu->addAction(tr("O programu"),            this, [this] { HelpDialog::showAbout(this);     });
+    helpMenu->addSeparator();
+    helpMenu->addAction(tr("Podporované formáty"),   this, [this] { HelpDialog::showFormats(this);   });
+    helpMenu->addAction(tr("Klávesové zkratky"),     this, [this] { HelpDialog::showShortcuts(this); });
+    helpMenu->addSeparator();
+    helpMenu->addAction(tr("Co je nového"),          this, [this] { HelpDialog::showWhatsNew(this);  });
 }
 
 void MainWindow::toggleFullscreen()

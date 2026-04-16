@@ -1,6 +1,8 @@
 set(APP_SOURCES
     Application.hpp
     Application.cpp
+    HelpDialog.hpp
+    HelpDialog.cpp
     MainWindow.hpp
     MainWindow.cpp
     ImageView.hpp
