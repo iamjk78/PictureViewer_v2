@@ -24,16 +24,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Instalace Qt 6 (MSVC 2022 64-bit) ─────────────────────────────
+      # ── 2. Instalace Qt 6 (MSVC 2019 64-bit, LTS 6.5.x) ─────────────────
+      # Qt 6.5 LTS je nejstabilnější volba pro CI – garantovaná dostupnost
+      # v aqt mirrorech. MSVC 2019 binaries jsou plně kompatibilní s
+      # kompilátorem MSVC 2022 přítomným na windows-latest runneru.
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.7.2'
+          version: '6.5.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2022_64'
+          arch: 'win64_msvc2019_64'
           cache: true
-          cache-key-prefix: 'qt6-windows-msvc2022'
+          cache-key-prefix: 'qt6-windows-6.5.3-msvc2019'
 
       # ── 3. CMake konfigurace (Visual Studio 2022, x64) ────────────────────
       - name: Configure CMake
