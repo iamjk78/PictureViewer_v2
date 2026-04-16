@@ -67,6 +67,7 @@ private:
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
+    bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     FolderScanWorker *m_folderScanWorker;
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;

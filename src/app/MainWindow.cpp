@@ -383,6 +383,9 @@ void MainWindow::enterFullscreen()
         toolbar->hide();
     }
     if (m_thumbnailDock != nullptr) {
+        // Zapamatovat viditelnost PŘED hide() — hide() automaticky odškrtne
+        // toggleViewAction, takže isChecked() by po hide() vrátilo false.
+        m_thumbnailDockWasVisible = m_thumbnailDock->isVisible();
         m_thumbnailDock->hide();
     }
     statusBar()->hide();
@@ -397,7 +400,7 @@ void MainWindow::exitFullscreen()
     for (QToolBar *toolbar : findChildren<QToolBar *>()) {
         toolbar->show();
     }
-    if (m_thumbnailDock != nullptr && m_togglePanelAction->isChecked()) {
+    if (m_thumbnailDock != nullptr && m_thumbnailDockWasVisible) {
         m_thumbnailDock->show();
     }
     statusBar()->show();
