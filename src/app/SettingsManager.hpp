@@ -31,6 +31,14 @@ public:
     void setUpdateCheckIntervalDays(int days);
     void setLastUpdateCheck(const QDateTime &dt);
 
+    // ── File Handling ────────────────────────────────────────────────────────
+    bool enableDeleteImage() const;
+    void setEnableDeleteImage(bool enabled);
+    bool enableMoveToDelete() const;
+    void setEnableMoveToDelete(bool enabled);
+    bool askConfirmationDelete() const;
+    void setAskConfirmationDelete(bool enabled);
+
 private:
     QSettings *m_settings;
 };

@@ -94,6 +94,13 @@ void ThumbnailPanel::setCurrentIndex(int index)
     }
 }
 
+void ThumbnailPanel::removeImage(int index)
+{
+    if (index >= 0 && index < count()) {
+        delete takeItem(index);
+    }
+}
+
 void ThumbnailPanel::onItemClicked(QListWidgetItem *item)
 {
     emit imageSelected(row(item));

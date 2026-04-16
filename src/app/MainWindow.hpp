@@ -39,6 +39,9 @@ private slots:
     void openFolderDialog();
     void openFileDialog();
     void onRememberLastFolderToggled(bool checked);
+    void onEnableDeleteImageToggled(bool checked);
+    void onEnableMoveToDeleteToggled(bool checked);
+    void onAskConfirmationToggled(bool checked);
     void onScanComplete(int generation, const QStringList &paths);
     void onScanError(int generation, const QString &error);
     void onScanFinished(int generation);
@@ -46,6 +49,9 @@ private slots:
     void showNextImage();
     void toggleSlideshow();
     void toggleFullscreen();
+    void deleteOrMoveCurrentImage();
+    void deleteImageToTrash();
+    void moveImageToDeleteFolder();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -59,6 +65,9 @@ private:
     void setupMenu();
     void setupStatusBar();
     void setupToolbar();
+    bool showDeleteConfirmationDialog();
+    void removeImageFromList(int index);
+    void updateConfirmationActionState();
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
@@ -86,6 +95,9 @@ private:
     QAction *m_fullscreenAction;
     QAction *m_rememberLastFolderAction;
     QAction *m_togglePanelAction;
+    QAction *m_enableDeleteImageAction;
+    QAction *m_enableMoveToDeleteAction;
+    QAction *m_askConfirmationAction;
 };
 
 } // namespace pictureviewer

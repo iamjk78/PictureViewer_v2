@@ -20,6 +20,7 @@ public:
 
     void loadImages(const QStringList &paths);
     void setCurrentIndex(int index);
+    void removeImage(int index);
 
     // Cancel the running worker and disconnect all its signals.
     // Must be called before QThreadPool::waitForDone() so the worker cannot

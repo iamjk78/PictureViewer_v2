@@ -27,6 +27,10 @@ constexpr auto kUpdateDelayMinutesKey    = "Updates/update_check_delay_minutes";
 constexpr auto kUpdateIntervalDaysKey    = "Updates/update_check_interval_days";
 constexpr auto kLastUpdateCheckKey       = "Updates/last_update_check";
 
+constexpr auto kEnableDeleteImageKey     = "FileHandling/enable_delete_image";
+constexpr auto kEnableMoveToDeleteKey    = "FileHandling/enable_move_to_delete";
+constexpr auto kAskConfirmationDeleteKey = "FileHandling/ask_confirmation_delete";
+
 constexpr int kDefaultUpdateDelayMinutes = 5;
 constexpr int kDefaultUpdateIntervalDays = 1;
 
@@ -119,6 +123,38 @@ void SettingsManager::setUpdateCheckIntervalDays(int days)
 void SettingsManager::setLastUpdateCheck(const QDateTime &dt)
 {
     m_settings->setValue(kLastUpdateCheckKey, dt.toString(Qt::ISODate));
+}
+
+// ── File Handling ────────────────────────────────────────────────────────────
+
+bool SettingsManager::enableDeleteImage() const
+{
+    return m_settings->value(kEnableDeleteImageKey, false).toBool();
+}
+
+void SettingsManager::setEnableDeleteImage(bool enabled)
+{
+    m_settings->setValue(kEnableDeleteImageKey, enabled);
+}
+
+bool SettingsManager::enableMoveToDelete() const
+{
+    return m_settings->value(kEnableMoveToDeleteKey, false).toBool();
+}
+
+void SettingsManager::setEnableMoveToDelete(bool enabled)
+{
+    m_settings->setValue(kEnableMoveToDeleteKey, enabled);
+}
+
+bool SettingsManager::askConfirmationDelete() const
+{
+    return m_settings->value(kAskConfirmationDeleteKey, false).toBool();
+}
+
+void SettingsManager::setAskConfirmationDelete(bool enabled)
+{
+    m_settings->setValue(kAskConfirmationDeleteKey, enabled);
 }
 
 } // namespace pictureviewer

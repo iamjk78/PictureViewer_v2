@@ -11,7 +11,9 @@
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QDockWidget>
+#include <QFile>
 #include <QFileInfo>
 #include <QUrl>
 
@@ -24,6 +26,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
@@ -66,6 +69,9 @@ MainWindow::MainWindow(QWidget *parent)
     , m_fullscreenAction(new QAction(tr("Celá obrazovka (F)"), this))
     , m_rememberLastFolderAction(new QAction(tr("Zapamatovat poslední složku"), this))
     , m_togglePanelAction(nullptr)
+    , m_enableDeleteImageAction(new QAction(tr("Odstranění obrázku"), this))
+    , m_enableMoveToDeleteAction(new QAction(tr("Přesunutí obrázku do složky Delete"), this))
+    , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
 {
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
@@ -167,6 +173,10 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         toggleFullscreen();
         event->accept();
         return;
+    case Qt::Key_Delete:
+        deleteOrMoveCurrentImage();
+        event->accept();
+        return;
     case Qt::Key_Escape:
         if (m_isFullscreen) {
             exitFullscreen();
@@ -184,6 +194,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     default:
+        // Handle 'd' and 'D' key
+        if (event->text() == 'd' || event->text() == 'D') {
+            deleteOrMoveCurrentImage();
+            event->accept();
+            return;
+        }
         QMainWindow::keyPressEvent(event);
         return;
     }
@@ -496,6 +512,24 @@ void MainWindow::setupMenu()
     m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
     connect(m_rememberLastFolderAction, &QAction::toggled, this, &MainWindow::onRememberLastFolderToggled);
     settingsMenu->addAction(m_rememberLastFolderAction);
+    settingsMenu->addSeparator();
+
+    m_enableDeleteImageAction->setCheckable(true);
+    m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
+    connect(m_enableDeleteImageAction, &QAction::toggled, this, &MainWindow::onEnableDeleteImageToggled);
+    settingsMenu->addAction(m_enableDeleteImageAction);
+
+    m_enableMoveToDeleteAction->setCheckable(true);
+    m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
+    connect(m_enableMoveToDeleteAction, &QAction::toggled, this, &MainWindow::onEnableMoveToDeleteToggled);
+    settingsMenu->addAction(m_enableMoveToDeleteAction);
+
+    m_askConfirmationAction->setCheckable(true);
+    m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
+    connect(m_askConfirmationAction, &QAction::toggled, this, &MainWindow::onAskConfirmationToggled);
+    settingsMenu->addAction(m_askConfirmationAction);
+
+    updateConfirmationActionState();
 
     // ── Nápověda ──────────────────────────────────────────────────────────────
     // POZOR: Při přidání nových funkcí nebo zkratek aktualizuj HelpDialog.cpp!
@@ -547,6 +581,160 @@ void MainWindow::setupStatusBar()
 {
     statusBar()->addWidget(m_statusLabel);
     m_statusLabel->setText(tr("Vyber složku s obrázky."));
+}
+
+void MainWindow::onEnableDeleteImageToggled(bool checked)
+{
+    if (checked && m_enableMoveToDeleteAction->isChecked()) {
+        m_enableMoveToDeleteAction->blockSignals(true);
+        m_enableMoveToDeleteAction->setChecked(false);
+        m_enableMoveToDeleteAction->blockSignals(false);
+        m_settingsManager->setEnableMoveToDelete(false);
+    }
+    m_settingsManager->setEnableDeleteImage(checked);
+    updateConfirmationActionState();
+}
+
+void MainWindow::onEnableMoveToDeleteToggled(bool checked)
+{
+    if (checked && m_enableDeleteImageAction->isChecked()) {
+        m_enableDeleteImageAction->blockSignals(true);
+        m_enableDeleteImageAction->setChecked(false);
+        m_enableDeleteImageAction->blockSignals(false);
+        m_settingsManager->setEnableDeleteImage(false);
+    }
+    m_settingsManager->setEnableMoveToDelete(checked);
+    updateConfirmationActionState();
+}
+
+void MainWindow::onAskConfirmationToggled(bool checked)
+{
+    m_settingsManager->setAskConfirmationDelete(checked);
+}
+
+void MainWindow::updateConfirmationActionState()
+{
+    bool anyEnabled = m_enableDeleteImageAction->isChecked() || m_enableMoveToDeleteAction->isChecked();
+    m_askConfirmationAction->setEnabled(anyEnabled);
+}
+
+void MainWindow::deleteOrMoveCurrentImage()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    bool deleteEnabled = m_settingsManager->enableDeleteImage();
+    bool moveEnabled = m_settingsManager->enableMoveToDelete();
+
+    if (!deleteEnabled && !moveEnabled) {
+        return;
+    }
+
+    bool shouldAskConfirmation = m_settingsManager->askConfirmationDelete();
+    if (shouldAskConfirmation) {
+        if (!showDeleteConfirmationDialog()) {
+            return;  // User cancelled
+        }
+    }
+
+    if (deleteEnabled) {
+        deleteImageToTrash();
+    } else if (moveEnabled) {
+        moveImageToDeleteFolder();
+    }
+}
+
+void MainWindow::deleteImageToTrash()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    if (QFile::moveToTrash(currentPath)) {
+        removeImageFromList(m_currentIndex);
+    } else {
+        m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(currentPath));
+    }
+}
+
+void MainWindow::moveImageToDeleteFolder()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    const QString folderPath = currentPath.section('/', 0, -2);
+    const QString deleteFolderPath = folderPath + "/Delete";
+
+    QDir deleteFolder(deleteFolderPath);
+    if (!deleteFolder.exists()) {
+        if (!QDir(folderPath).mkdir("Delete")) {
+            m_statusLabel->setText(tr("Nepodařilo se vytvořit složku Delete."));
+            return;
+        }
+    }
+
+    QFileInfo fileInfo(currentPath);
+    const QString newPath = deleteFolderPath + "/" + fileInfo.fileName();
+
+    if (QFile::rename(currentPath, newPath)) {
+        removeImageFromList(m_currentIndex);
+    } else {
+        m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete."));
+    }
+}
+
+bool MainWindow::showDeleteConfirmationDialog()
+{
+    QString title;
+    QString message;
+
+    if (m_settingsManager->enableDeleteImage()) {
+        title = tr("Smazat obrázek");
+        message = tr("Opravdu chceš smazat tento obrázek?");
+    } else if (m_settingsManager->enableMoveToDelete()) {
+        title = tr("Přesunout obrázek");
+        message = tr("Opravdu chceš přesunout tento obrázek do Delete?");
+    } else {
+        return false;
+    }
+
+    int result = QMessageBox::question(
+        this,
+        title,
+        message,
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No
+    );
+
+    return result == QMessageBox::Yes;
+}
+
+void MainWindow::removeImageFromList(int index)
+{
+    if (index < 0 || index >= m_imagePaths.size()) {
+        return;
+    }
+
+    m_imagePaths.removeAt(index);
+    m_thumbnailPanel->removeImage(index);
+
+    if (m_imagePaths.isEmpty()) {
+        m_currentIndex = -1;
+        m_imageView->clearImage();
+        m_statusLabel->setText(tr("Ve složce nebyly nalezeny žádné obrázky."));
+        return;
+    }
+
+    // Show next image or previous if we deleted the last one
+    int nextIndex = index;
+    if (nextIndex >= m_imagePaths.size()) {
+        nextIndex = m_imagePaths.size() - 1;
+    }
+    showImage(nextIndex);
 }
 
 } // namespace pictureviewer
