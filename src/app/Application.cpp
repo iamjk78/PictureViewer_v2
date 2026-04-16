@@ -3,6 +3,7 @@
 
 #include <QEvent>
 #include <QFileOpenEvent>
+#include <QProcess>
 #include <QDebug>
 
 namespace pictureviewer {
@@ -22,21 +23,18 @@ void PictureViewerApplication::setMainWindow(MainWindow *window)
 bool PictureViewerApplication::event(QEvent *event)
 {
     // Handle file open events from macOS Finder
+    // Instead of opening in the existing instance, spawn a new instance
     if (event->type() == QEvent::FileOpen) {
         auto fileEvent = dynamic_cast<QFileOpenEvent *>(event);
-        if (fileEvent && m_mainWindow) {
+        if (fileEvent) {
             const QString filePath = fileEvent->file();
-            qDebug() << "File open event received:" << filePath;
+            qDebug() << "File open event received - spawning new instance:" << filePath;
 
-            // Tell MainWindow to open this file
-            // The file will be loaded and displayed
-            m_mainWindow->openFile(filePath);
+            // Spawn new instance with file path as command-line argument
+            // The new instance will receive the file path via args in Application::run()
+            QProcess::startDetached(qApp->applicationFilePath(), QStringList() << filePath);
 
-            m_mainWindow->show();
-            m_mainWindow->raise();
-            m_mainWindow->activateWindow();
-
-            return true;
+            return true;  // Event handled
         }
     }
 
