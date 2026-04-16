@@ -28,10 +28,10 @@ jobs:
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.7.3'
+          version: '6.7.2'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2022'
+          arch: 'win64_msvc2022_64'
           cache: true
           cache-key-prefix: 'qt6-windows-msvc2022'
 
