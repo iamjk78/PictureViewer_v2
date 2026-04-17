@@ -70,6 +70,9 @@ public:
     // Get current VLC state
     VlcState state() const { return m_state; }
 
+    // Path to last diagnostic log (empty if not written)
+    QString lastLogPath() const { return m_lastLogPath; }
+
 signals:
     void statusChanged(VlcState newState);
     void connectionLost();
@@ -99,6 +102,7 @@ private:
     QString m_videoPath;
     QString m_lastVlcPath;
     QStringList m_lastVlcArgs;
+    QString m_lastLogPath;
     VlcState m_state;
     int m_vlcGeneration;  // For stale signal prevention
 };

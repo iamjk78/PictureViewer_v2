@@ -329,6 +329,7 @@ void VlcController::onProcessError(QProcess::ProcessError error)
 
 void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
+    // Read output before any cleanup
     const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
     const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
 
@@ -340,24 +341,30 @@ void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
         emit processCrashed();
     }
     setStateAndEmit(VlcState::Stopped);
-    cleanup();
+
+    // Defer cleanup — deleting m_process (signal sender) from within its own slot causes crash
+    QTimer::singleShot(0, this, &VlcController::cleanup);
 }
 
 void VlcController::writeDiagnosticLog(int exitCode, QProcess::ExitStatus exitStatus,
                                         const QString &stdOut, const QString &stdErr)
 {
-    const QString logPath = QCoreApplication::applicationDirPath() + "/vlc_debug.log";
-    QFile file(logPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    const QString downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    m_lastLogPath = downloads + "/vlc_debug.log";
+
+    QFile file(m_lastLogPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        m_lastLogPath.clear();
         return;
+    }
 
     QTextStream out(&file);
     out << "=== VLC Diagnostic Log ===\n";
-    out << "Time:      " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
-    out << "VLC path:  " << m_lastVlcPath << "\n";
-    out << "Arguments: " << m_lastVlcArgs.join(" ") << "\n";
-    out << "Video:     " << m_videoPath << "\n";
-    out << "Exit code: " << exitCode << "\n";
+    out << "Time:        " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+    out << "VLC path:    " << m_lastVlcPath << "\n";
+    out << "Arguments:   " << m_lastVlcArgs.join(" ") << "\n";
+    out << "Video:       " << m_videoPath << "\n";
+    out << "Exit code:   " << exitCode << "\n";
     out << "Exit status: " << (exitStatus == QProcess::CrashExit ? "CrashExit" : "NormalExit") << "\n";
     if (!stdOut.isEmpty())
         out << "\n--- stdout ---\n" << stdOut << "\n";

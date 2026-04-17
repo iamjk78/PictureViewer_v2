@@ -938,7 +938,11 @@ void MainWindow::onVlcConnectionLost()
 
 void MainWindow::onVlcProcessCrashed()
 {
-    QMessageBox::critical(this, tr("Chyba"), tr("VLC se nečekaně ukončil."));
+    const QString logPath = m_vlcController->lastLogPath();
+    QString msg = tr("VLC se nečekaně ukončil.");
+    if (!logPath.isEmpty())
+        msg += tr("\n\nDiagnostický log:\n%1").arg(logPath);
+    QMessageBox::critical(this, tr("Chyba VLC"), msg);
     m_vlcActive = false;
     enableImageBrowsing();
     applyGrayscaleEffect(false);
