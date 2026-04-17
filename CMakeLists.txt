@@ -17,9 +17,15 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 add_subdirectory(src)
 
 # Main executable combining all modules
+set(_app_icon_sources)
+if(WIN32)
+    set(_app_icon_sources resources/PictureViewer.rc)
+endif()
+
 qt_add_executable(PictureViewer
     src/main.cpp
     resources/resources.qrc
+    ${_app_icon_sources}
     $<TARGET_OBJECTS:picture_viewer_app>
     $<TARGET_OBJECTS:picture_viewer_workers>
 )
