@@ -212,6 +212,11 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
 
     m_process = new QProcess(this);
 
+    // Redirect all I/O to null — prevents VLC's RC interface from opening a console window
+    m_process->setStandardInputFile(QProcess::nullDevice());
+    m_process->setStandardOutputFile(QProcess::nullDevice());
+    m_process->setStandardErrorFile(QProcess::nullDevice());
+
 #ifdef Q_OS_WIN
     m_process->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
         args->flags |= CREATE_NO_WINDOW;
@@ -232,6 +237,7 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
     QStringList args;
     args << "--extraintf=rc"
          << "--rc-host=127.0.0.1:4444"
+         << "--no-qt-keyboard-events"   // prevent VLC Qt window from intercepting keys
          << vlcVideoPath;
 
     m_lastVlcPath = vlcPath;

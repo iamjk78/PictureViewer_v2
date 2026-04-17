@@ -1026,15 +1026,13 @@ void MainWindow::enableImageBrowsing()
 
 void MainWindow::applyGrayscaleEffect(bool enable)
 {
+    // QGraphicsColorizeEffect conflicts with VLC D3D11VA hardware decoding
+    // (causes "QWidget::paintEngine: Should no longer be called" crash).
+    // Use window opacity instead — safe with any renderer.
     if (enable) {
-        if (!m_grayscaleEffect) {
-            m_grayscaleEffect = new QGraphicsColorizeEffect(this);
-            m_grayscaleEffect->setColor(Qt::gray);
-            m_grayscaleEffect->setStrength(1.0);  // Full grayscale
-        }
-        m_imageView->setGraphicsEffect(m_grayscaleEffect);
+        setWindowOpacity(0.6);
     } else {
-        m_imageView->setGraphicsEffect(nullptr);
+        setWindowOpacity(1.0);
     }
 }
 
