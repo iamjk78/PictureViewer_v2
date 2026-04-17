@@ -187,23 +187,7 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
         return false;
     }
 
-    // Give VLC 800ms to either start or exit immediately (catches bad-argument exits)
-    m_process->waitForFinished(800);
-    if (m_process->state() != QProcess::Running) {
-        const QString stdOut = QString::fromLocal8Bit(m_process->readAllStandardOutput());
-        const QString stdErr = QString::fromLocal8Bit(m_process->readAllStandardError());
-        writeDiagnosticLog(m_process->exitCode(), m_process->exitStatus(), stdOut, stdErr);
-        outErrorMsg = QString("VLC se ukončil hned po startu (exit %1).\nLog: %2")
-                          .arg(m_process->exitCode()).arg(m_lastLogPath);
-        // cleanup without blocking signals — process already dead
-        m_process->disconnect();
-        delete m_process;
-        m_process = nullptr;
-        setStateAndEmit(VlcState::Error);
-        return false;
-    }
-
-    // Start process monitor
+    // Start process monitor — early VLC exit detected within first tick
     if (!m_monitorTimer) {
         m_monitorTimer = new QTimer(this);
         connect(m_monitorTimer, &QTimer::timeout, this, &VlcController::onMonitorTimeout);
@@ -282,20 +266,26 @@ void VlcController::sendCommand(const QString &command)
 
 void VlcController::stop()
 {
+    if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
+        return;
+
+    // Stop timer and update state FIRST — prevents re-entry from timer or onProcessFinished
     if (m_monitorTimer)
         m_monitorTimer->stop();
+    setStateAndEmit(VlcState::Stopped);
 
     if (m_process && m_process->state() == QProcess::Running) {
+        // Disconnect slots before sending quit so onProcessFinished won't fire after this
+        m_process->disconnect(this);
         sendCommand("quit");
-        // Terminate after short grace period without blocking
         QTimer::singleShot(1500, this, [this]() {
             if (m_process && m_process->state() == QProcess::Running)
                 m_process->terminate();
         });
     }
 
-    setStateAndEmit(VlcState::Stopped);
-    cleanup();
+    // Defer object deletion — never delete from within a connected slot
+    QTimer::singleShot(0, this, &VlcController::cleanup);
 }
 
 bool VlcController::isRunning() const
@@ -309,9 +299,19 @@ void VlcController::onMonitorTimeout()
         return;
 
     if (!m_process || m_process->state() != QProcess::Running) {
-        qWarning() << "VLC process is not running anymore";
+        // Stop timer immediately — prevent re-entry while dialogs are open
+        m_monitorTimer->stop();
+        setStateAndEmit(VlcState::Stopped);
+
+        // Capture output and write log BEFORE emitting any signal
+        const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
+        const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
+        const int exitCode   = m_process ? m_process->exitCode() : -1;
+        const auto exitStatus = m_process ? m_process->exitStatus() : QProcess::CrashExit;
+        writeDiagnosticLog(exitCode, exitStatus, stdOut, stdErr);
+
         emit processCrashed();
-        stop();
+        QTimer::singleShot(0, this, &VlcController::cleanup);
     }
 }
 
@@ -322,27 +322,40 @@ void VlcController::onProcessStarted()
 
 void VlcController::onProcessError(QProcess::ProcessError error)
 {
-    qWarning() << "VLC process error:" << m_process->errorString();
+    if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
+        return;
+
+    if (m_monitorTimer)
+        m_monitorTimer->stop();
+    setStateAndEmit(VlcState::Stopped);
+
+    const QString errStr = m_process ? m_process->errorString() : QString("unknown");
+    writeDiagnosticLog(-1, QProcess::CrashExit, QString(), errStr);
+
     emit processCrashed();
-    stop();
+    QTimer::singleShot(0, this, &VlcController::cleanup);
 }
 
 void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
-    // Read output before any cleanup
+    // Guard — onMonitorTimeout may have already handled this
+    if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
+        return;
+
+    if (m_monitorTimer)
+        m_monitorTimer->stop();
+
     const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
     const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
 
-    qDebug() << "VLC process finished, exit code:" << exitCode << "status:" << exitStatus;
-
     writeDiagnosticLog(exitCode, exitStatus, stdOut, stdErr);
+    setStateAndEmit(VlcState::Stopped);
 
     if (exitStatus == QProcess::CrashExit || exitCode != 0) {
         emit processCrashed();
     }
-    setStateAndEmit(VlcState::Stopped);
 
-    // Defer cleanup — deleting m_process (signal sender) from within its own slot causes crash
+    // Defer cleanup — never delete signal sender (m_process) from within its own slot
     QTimer::singleShot(0, this, &VlcController::cleanup);
 }
 
