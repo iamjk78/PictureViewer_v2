@@ -39,6 +39,12 @@ public:
     bool askConfirmationDelete() const;
     void setAskConfirmationDelete(bool enabled);
 
+    // ── VLC Settings ─────────────────────────────────────────────────────────
+    QString vlcPath() const;
+    void setVlcPath(const QString &path);
+    int vlcTimeoutMs() const;
+    void setVlcTimeoutMs(int ms);
+
 private:
     QSettings *m_settings;
 };

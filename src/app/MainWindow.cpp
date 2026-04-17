@@ -4,6 +4,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/VlcController.hpp"
 #include "workers/FolderScanWorker.hpp"
 
 #include <QAction>
@@ -15,6 +16,8 @@
 #include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
+#include <QGraphicsColorizeEffect>
+#include <QMessageBox>
 #include <QUrl>
 
 #ifdef Q_OS_MACOS
@@ -74,6 +77,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
     , m_deleteFolderAction(new QAction(this))
     , m_deletePictureAction(new QAction(this))
+    , m_vlcController(new VlcController(m_settingsManager, this))
+    , m_grayscaleEffect(nullptr)
 {
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
@@ -82,6 +87,15 @@ MainWindow::MainWindow(QWidget *parent)
     m_deletePictureAction->setIcon(QIcon(":/icons/delete_picture_icon.ico"));
     m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
+
+    // Connect VLC signals
+    connect(m_vlcController, QOverload<int>::of(&VlcController::statusChanged),
+            this, &MainWindow::onVlcStatusChanged);
+    connect(m_vlcController, &VlcController::connectionLost,
+            this, &MainWindow::onVlcConnectionLost);
+    connect(m_vlcController, &VlcController::processCrashed,
+            this, &MainWindow::onVlcProcessCrashed);
+
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
@@ -165,6 +179,45 @@ MainWindow::~MainWindow()
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
+    // ── VLC playback active ──────────────────────────────────────────────────
+    if (m_vlcActive) {
+        switch (event->key()) {
+        case Qt::Key_Escape:
+            m_vlcController->stop();
+            event->accept();
+            return;
+        case Qt::Key_Space:
+            m_vlcController->sendCommand("pause");
+            event->accept();
+            return;
+        case Qt::Key_Left:
+            m_vlcController->sendCommand("seek -10");
+            event->accept();
+            return;
+        case Qt::Key_Right:
+            m_vlcController->sendCommand("seek +10");
+            event->accept();
+            return;
+        case Qt::Key_F:
+            m_vlcController->sendCommand("f");
+            event->accept();
+            return;
+        case Qt::Key_Plus:
+        case Qt::Key_Equal:
+            m_vlcController->sendCommand("volup");
+            event->accept();
+            return;
+        case Qt::Key_Minus:
+            m_vlcController->sendCommand("voldown");
+            event->accept();
+            return;
+        default:
+            event->ignore();
+            return;
+        }
+    }
+
+    // ── Normal image browsing ────────────────────────────────────────────────
     switch (event->key()) {
     case Qt::Key_Left:
         showPreviousImage();
@@ -199,6 +252,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     default:
+        // Handle 'g' and 'G' key for play video
+        if (event->text() == 'g' || event->text() == 'G') {
+            onPlayVideo();
+            event->accept();
+            return;
+        }
         // Handle 's' and 'S' key for slideshow
         if (event->text() == 's' || event->text() == 'S') {
             toggleSlideshow();
@@ -814,6 +873,149 @@ void MainWindow::removeImageFromList(int index)
         nextIndex = m_imagePaths.size() - 1;
     }
     showImage(nextIndex);
+}
+
+// ── VLC Integration ─────────────────────────────────────────────────────────
+
+void MainWindow::onPlayVideo()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString imagePath = m_imagePaths.at(m_currentIndex);
+    QString videoPath;
+
+    // Find matching video file
+    if (!VlcController::findVideoFile(imagePath, videoPath)) {
+        m_statusLabel->setText(tr("Video se stejným názvem neexistuje."));
+        return;
+    }
+
+    // Initialize VLC
+    QString errorMsg;
+    if (!m_vlcController->initialize(videoPath, errorMsg)) {
+        QMessageBox::critical(this, tr("Chyba VLC"), errorMsg);
+        m_statusLabel->setText(tr("Nepodařilo se spustit VLC."));
+        return;
+    }
+
+    // UI will be updated in onVlcStatusChanged
+}
+
+void MainWindow::onVlcStatusChanged(int vlcState)
+{
+    const auto state = static_cast<VlcState>(vlcState);
+
+    switch (state) {
+    case VlcState::Running:
+        m_vlcActive = true;
+        disableImageBrowsing();
+        applyGrayscaleEffect(true);
+        updateVideoMetadata(m_imagePaths.at(m_currentIndex));
+        break;
+
+    case VlcState::Stopped:
+    case VlcState::Error:
+        m_vlcActive = false;
+        enableImageBrowsing();
+        applyGrayscaleEffect(false);
+        m_statusLabel->setText(tr("Vyber složku s obrázky."));
+        break;
+
+    default:
+        break;
+    }
+}
+
+void MainWindow::onVlcConnectionLost()
+{
+    QMessageBox::warning(this, tr("Chyba"), tr("Spojení s VLC bylo ztraceno."));
+    m_vlcActive = false;
+    enableImageBrowsing();
+    applyGrayscaleEffect(false);
+}
+
+void MainWindow::onVlcProcessCrashed()
+{
+    QMessageBox::critical(this, tr("Chyba"), tr("VLC se nečekaně ukončil."));
+    m_vlcActive = false;
+    enableImageBrowsing();
+    applyGrayscaleEffect(false);
+}
+
+void MainWindow::disableImageBrowsing()
+{
+    m_openFolderAction->setEnabled(false);
+    m_openFileAction->setEnabled(false);
+    m_previousImageAction->setEnabled(false);
+    m_nextImageAction->setEnabled(false);
+    m_toggleSlideshowAction->setEnabled(false);
+    m_fitToWindowAction->setEnabled(false);
+    m_resetZoomAction->setEnabled(false);
+    m_fullscreenAction->setEnabled(false);
+    m_enableDeleteImageAction->setEnabled(false);
+    m_enableMoveToDeleteAction->setEnabled(false);
+    m_deletePictureAction->setEnabled(false);
+    m_deleteFolderAction->setEnabled(false);
+
+    if (m_thumbnailDock) {
+        m_thumbnailDock->setEnabled(false);
+    }
+}
+
+void MainWindow::enableImageBrowsing()
+{
+    m_openFolderAction->setEnabled(true);
+    m_openFileAction->setEnabled(true);
+    m_previousImageAction->setEnabled(!m_imagePaths.isEmpty());
+    m_nextImageAction->setEnabled(!m_imagePaths.isEmpty());
+    m_toggleSlideshowAction->setEnabled(!m_imagePaths.isEmpty());
+    m_fitToWindowAction->setEnabled(!m_imagePaths.isEmpty());
+    m_resetZoomAction->setEnabled(!m_imagePaths.isEmpty());
+    m_fullscreenAction->setEnabled(!m_imagePaths.isEmpty());
+    m_enableDeleteImageAction->setEnabled(true);
+    m_enableMoveToDeleteAction->setEnabled(true);
+    m_deletePictureAction->setEnabled(!m_imagePaths.isEmpty());
+    m_deleteFolderAction->setEnabled(!m_imagePaths.isEmpty());
+
+    if (m_thumbnailDock) {
+        m_thumbnailDock->setEnabled(true);
+    }
+
+    updateConfirmationActionState();
+}
+
+void MainWindow::applyGrayscaleEffect(bool enable)
+{
+    if (enable) {
+        if (!m_grayscaleEffect) {
+            m_grayscaleEffect = new QGraphicsColorizeEffect(this);
+            m_grayscaleEffect->setColor(Qt::gray);
+            m_grayscaleEffect->setStrength(1.0);  // Full grayscale
+        }
+        m_imageView->setGraphicsEffect(m_grayscaleEffect);
+    } else {
+        m_imageView->setGraphicsEffect(nullptr);
+    }
+}
+
+void MainWindow::updateVideoMetadata(const QString &videoPath)
+{
+    const QFileInfo fileInfo(videoPath);
+    const QString fileName = fileInfo.fileName();
+    const qint64 fileSize = fileInfo.size();
+
+    // Format file size
+    QString sizeStr;
+    if (fileSize > 1024 * 1024) {
+        sizeStr = QString::number(fileSize / (1024.0 * 1024.0), 'f', 1) + " MB";
+    } else {
+        sizeStr = QString::number(fileSize / 1024.0, 'f', 1) + " KB";
+    }
+
+    const QString statusText = tr("▶ Video: %1 (%2) [ESC = exit]").arg(fileName, sizeStr);
+    m_statusLabel->setText(statusText);
 }
 
 } // namespace pictureviewer

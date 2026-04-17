@@ -1,0 +1,370 @@
+#include "app/VlcController.hpp"
+#include "app/SettingsManager.hpp"
+
+#include <QCoreApplication>
+#include <QDebug>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QMessageBox>
+#include <QProcess>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QTcpSocket>
+#include <QTimer>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+namespace pictureviewer {
+
+// ── VLC Utilities ────────────────────────────────────────────────────────────
+
+QString VlcUtils::autoDetectVlcPath()
+{
+#ifdef Q_OS_WIN
+    // Windows: Try registry first
+    const QString registryPath = "HKEY_LOCAL_MACHINE\\SOFTWARE\\VideoLAN\\VLC";
+    QSettings regSettings(registryPath, QSettings::NativeFormat);
+    const QString installDir = regSettings.value("InstallDir", QString()).toString();
+
+    if (!installDir.isEmpty()) {
+        const QString vlcExe = installDir + "/vlc.exe";
+        if (isValidVlcPath(vlcExe)) {
+            return vlcExe;
+        }
+    }
+
+    // Try standard installation paths
+    const QStringList standardPaths = {
+        "C:/Program Files/VideoLAN/VLC/vlc.exe",
+        "C:/Program Files (x86)/VideoLAN/VLC/vlc.exe"
+    };
+
+    for (const QString &path : standardPaths) {
+        if (isValidVlcPath(path)) {
+            return path;
+        }
+    }
+
+#elif defined(Q_OS_MAC)
+    const QString vlcPath = "/Applications/VLC.app/Contents/MacOS/VLC";
+    if (isValidVlcPath(vlcPath)) {
+        return vlcPath;
+    }
+
+#else  // Linux
+    // Try 'which vlc' command
+    QProcess which;
+    which.start("which", QStringList() << "vlc");
+    if (which.waitForFinished(2000)) {
+        const QString path = QString::fromLocal8Bit(which.readAllStandardOutput()).trimmed();
+        if (!path.isEmpty() && isValidVlcPath(path)) {
+            return path;
+        }
+    }
+#endif
+
+    return QString();  // Not found
+}
+
+bool VlcUtils::isValidVlcPath(const QString &path)
+{
+    return QFileInfo::exists(path) && QFileInfo(path).isFile();
+}
+
+QString VlcUtils::selectVlcPathDialog(QWidget *parent, SettingsManager *settings)
+{
+    const int maxRetries = 3;
+    QString selectedPath;
+
+    for (int attempt = 0; attempt < maxRetries; ++attempt) {
+        const QString filter = tr("VLC Media Player (vlc.exe vlc)");
+        selectedPath = QFileDialog::getOpenFileName(
+            parent,
+            tr("Vyberte VLC Media Player"),
+            QString(),
+            filter
+        );
+
+        // User cancelled
+        if (selectedPath.isEmpty()) {
+            return QString();
+        }
+
+        // Validate path
+        if (isValidVlcPath(selectedPath)) {
+            // Save to settings
+            settings->setVlcPath(selectedPath);
+            return selectedPath;
+        }
+
+        // Invalid path - show error and retry
+        const QString errorMsg = tr("Soubor VLC nebyl nalezen na:\n%1\n\nZkuste znova.").arg(selectedPath);
+        QMessageBox::warning(parent, tr("Neplatná cesta"), errorMsg);
+    }
+
+    // Max retries reached
+    const QString finalError = tr("Dosáhli jste maximálního počtu pokusů.\nVLC nelze spustit.");
+    QMessageBox::critical(parent, tr("Chyba"), finalError);
+
+    return QString();
+}
+
+// ── VLC Controller ───────────────────────────────────────────────────────────
+
+VlcController::VlcController(SettingsManager *settings, QObject *parent)
+    : QObject(parent)
+    , m_settings(settings)
+    , m_process(nullptr)
+    , m_socket(nullptr)
+    , m_monitorTimer(nullptr)
+    , m_state(VlcState::Idle)
+    , m_vlcGeneration(0)
+{
+}
+
+VlcController::~VlcController()
+{
+    stop();
+    cleanup();
+}
+
+bool VlcController::findVideoFile(const QString &imagePath, QString &outVideoPath)
+{
+    const QFileInfo imageFile(imagePath);
+    const QString imageDir = imageFile.absolutePath();
+    const QString imageName = imageFile.baseName();  // without extension
+
+    // Video extensions to check (first found wins)
+    const QStringList videoExtensions = { "mp4", "mkv", "avi", "mov", "ts", "mpg" };
+
+    for (const QString &ext : videoExtensions) {
+        const QString videoPath = imageDir + "/" + imageName + "." + ext;
+        if (QFileInfo::exists(videoPath)) {
+            outVideoPath = videoPath;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
+{
+    ++m_vlcGeneration;  // Invalidate any stale signals
+    m_videoPath = videoPath;
+
+    setStateAndEmit(VlcState::Starting);
+
+    // Get VLC path from settings or auto-detect
+    QString vlcPath = m_settings->vlcPath();
+
+    if (!VlcUtils::isValidVlcPath(vlcPath)) {
+        // Try auto-detect
+        vlcPath = VlcUtils::autoDetectVlcPath();
+    }
+
+    if (!VlcUtils::isValidVlcPath(vlcPath)) {
+        // Need to prompt user
+        vlcPath = VlcUtils::selectVlcPathDialog(nullptr, m_settings);
+    }
+
+    if (vlcPath.isEmpty()) {
+        outErrorMsg = tr("VLC nebyl nalezen. Přihlaste se k instalaci VLC.");
+        setStateAndEmit(VlcState::Error);
+        return false;
+    }
+
+    // Start VLC process
+    if (!startVlcProcess(videoPath)) {
+        outErrorMsg = tr("Nepodařilo se spustit VLC.");
+        setStateAndEmit(VlcState::Error);
+        return false;
+    }
+
+    // Connect to RC socket with timeout
+    if (!connectToVlcSocket()) {
+        outErrorMsg = tr("Nepodařilo se připojit k VLC RC rozhraní.");
+        setStateAndEmit(VlcState::Error);
+        cleanup();
+        return false;
+    }
+
+    // Start process monitor
+    if (!m_monitorTimer) {
+        m_monitorTimer = new QTimer(this);
+        connect(m_monitorTimer, &QTimer::timeout, this, &VlcController::onMonitorTimeout);
+    }
+    m_monitorTimer->start(100);  // Check every 100ms
+
+    setStateAndEmit(VlcState::Running);
+    return true;
+}
+
+bool VlcController::startVlcProcess(const QString &videoPath)
+{
+    if (m_process) {
+        delete m_process;
+    }
+
+    m_process = new QProcess(this);
+
+    connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &VlcController::onProcessFinished);
+    connect(m_process, QOverload<QProcess::ProcessError>::of(&QProcess::error),
+            this, &VlcController::onProcessError);
+
+    const QString vlcPath = m_settings->vlcPath();
+    QStringList args;
+    args << "--rc-host=127.0.0.1:4444"
+         << "--rc-handler-host=127.0.0.1:4444"
+         << "--volume=0"  // Start with 0% volume
+         << videoPath;
+
+    m_process->start(vlcPath, args);
+
+    if (!m_process->waitForStarted(2000)) {
+        qWarning() << "Failed to start VLC process";
+        return false;
+    }
+
+    qDebug() << "VLC process started:" << vlcPath << args;
+    return true;
+}
+
+bool VlcController::connectToVlcSocket()
+{
+    if (m_socket) {
+        delete m_socket;
+    }
+
+    m_socket = new QTcpSocket(this);
+
+    connect(m_socket, &QTcpSocket::connected, this, &VlcController::onSocketConnected);
+    connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
+            this, &VlcController::onSocketError);
+
+    const int timeoutMs = m_settings->vlcTimeoutMs();
+    m_socket->connectToHost("127.0.0.1", 4444);
+
+    if (!m_socket->waitForConnected(timeoutMs)) {
+        qWarning() << "Failed to connect to VLC RC socket within" << timeoutMs << "ms";
+        return false;
+    }
+
+    qDebug() << "Connected to VLC RC socket";
+    return true;
+}
+
+void VlcController::sendCommand(const QString &command)
+{
+    if (!m_socket || !m_socket->isConnected()) {
+        qWarning() << "VLC socket not connected, cannot send command:" << command;
+        return;
+    }
+
+    const QString msg = command + "\n";
+    m_socket->write(msg.toUtf8());
+    m_socket->waitForBytesWritten(1000);
+
+    qDebug() << "Sent VLC command:" << command;
+}
+
+void VlcController::stop()
+{
+    if (m_process && m_process->state() == QProcess::Running) {
+        // Send graceful quit command
+        sendCommand("quit");
+
+        // Wait for process to exit gracefully
+        if (!m_process->waitForFinished(2000)) {
+            qWarning() << "VLC did not exit gracefully, terminating";
+            m_process->terminate();
+            m_process->waitForFinished(1000);
+        }
+    }
+
+    if (m_monitorTimer) {
+        m_monitorTimer->stop();
+    }
+
+    setStateAndEmit(VlcState::Stopped);
+    cleanup();
+}
+
+bool VlcController::isRunning() const
+{
+    return m_process && m_process->state() == QProcess::Running;
+}
+
+void VlcController::onMonitorTimeout()
+{
+    if (!m_process || m_process->state() != QProcess::Running) {
+        qWarning() << "VLC process is not running anymore";
+        emit processCrashed();
+        stop();
+    }
+}
+
+void VlcController::onProcessStarted()
+{
+    qDebug() << "VLC process started";
+}
+
+void VlcController::onProcessError()
+{
+    qWarning() << "VLC process error:" << m_process->errorString();
+    emit processCrashed();
+    stop();
+}
+
+void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    qDebug() << "VLC process finished with exit code" << exitCode << "status" << exitStatus;
+    emit processCrashed();
+    setStateAndEmit(VlcState::Stopped);
+    cleanup();
+}
+
+void VlcController::onSocketConnected()
+{
+    qDebug() << "VLC RC socket connected";
+}
+
+void VlcController::onSocketError()
+{
+    qWarning() << "VLC socket error:" << m_socket->errorString();
+    emit connectionLost();
+}
+
+void VlcController::cleanup()
+{
+    if (m_monitorTimer) {
+        m_monitorTimer->stop();
+        delete m_monitorTimer;
+        m_monitorTimer = nullptr;
+    }
+
+    if (m_socket) {
+        m_socket->disconnectFromHost();
+        delete m_socket;
+        m_socket = nullptr;
+    }
+
+    if (m_process) {
+        delete m_process;
+        m_process = nullptr;
+    }
+}
+
+void VlcController::setStateAndEmit(VlcState newState)
+{
+    if (m_state != newState) {
+        m_state = newState;
+        emit statusChanged(newState);
+    }
+}
+
+} // namespace pictureviewer

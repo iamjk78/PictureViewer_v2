@@ -13,6 +13,8 @@ set(APP_SOURCES
     SlideshowController.cpp
     SettingsManager.hpp
     SettingsManager.cpp
+    VlcController.hpp
+    VlcController.cpp
 )
 
 add_library(picture_viewer_app OBJECT ${APP_SOURCES})
@@ -27,4 +29,5 @@ target_link_libraries(picture_viewer_app
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        Qt6::Network
 )

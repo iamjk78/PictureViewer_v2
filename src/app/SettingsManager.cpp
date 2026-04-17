@@ -31,8 +31,12 @@ constexpr auto kEnableDeleteImageKey     = "FileHandling/enable_delete_image";
 constexpr auto kEnableMoveToDeleteKey    = "FileHandling/enable_move_to_delete";
 constexpr auto kAskConfirmationDeleteKey = "FileHandling/ask_confirmation_delete";
 
+constexpr auto kVlcPathKey               = "VLC/vlc_path";
+constexpr auto kVlcTimeoutMsKey          = "VLC/vlc_timeout_ms";
+
 constexpr int kDefaultUpdateDelayMinutes = 5;
 constexpr int kDefaultUpdateIntervalDays = 1;
+constexpr int kDefaultVlcTimeoutMs       = 5000;
 
 } // namespace
 
@@ -155,6 +159,28 @@ bool SettingsManager::askConfirmationDelete() const
 void SettingsManager::setAskConfirmationDelete(bool enabled)
 {
     m_settings->setValue(kAskConfirmationDeleteKey, enabled);
+}
+
+// ── VLC Settings ─────────────────────────────────────────────────────────────
+
+QString SettingsManager::vlcPath() const
+{
+    return m_settings->value(kVlcPathKey, QString()).toString();
+}
+
+void SettingsManager::setVlcPath(const QString &path)
+{
+    m_settings->setValue(kVlcPathKey, path);
+}
+
+int SettingsManager::vlcTimeoutMs() const
+{
+    return m_settings->value(kVlcTimeoutMsKey, kDefaultVlcTimeoutMs).toInt();
+}
+
+void SettingsManager::setVlcTimeoutMs(int ms)
+{
+    m_settings->setValue(kVlcTimeoutMsKey, ms);
 }
 
 } // namespace pictureviewer

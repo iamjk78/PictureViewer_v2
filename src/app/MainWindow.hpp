@@ -9,6 +9,7 @@
 
 class QAction;
 class QDockWidget;
+class QGraphicsColorizeEffect;
 class QLabel;
 class QSpinBox;
 
@@ -19,6 +20,7 @@ class FolderScanWorker;
 class SettingsManager;
 class SlideshowController;
 class ThumbnailPanel;
+class VlcController;
 
 class MainWindow : public QMainWindow
 {
@@ -53,6 +55,10 @@ private slots:
     void deleteImageToTrash();
     void moveImageToDeleteFolder();
     void onDeleteFolder();
+    void onPlayVideo();
+    void onVlcStatusChanged(int vlcState);
+    void onVlcConnectionLost();
+    void onVlcProcessCrashed();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -69,6 +75,10 @@ private:
     bool showDeleteConfirmationDialog();
     void removeImageFromList(int index);
     void updateConfirmationActionState();
+    void disableImageBrowsing();
+    void enableImageBrowsing();
+    void applyGrayscaleEffect(bool enable);
+    void updateVideoMetadata(const QString &videoPath);
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
@@ -77,10 +87,13 @@ private:
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
+    bool m_vlcActive = false;  // True when VLC is playing video
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     FolderScanWorker *m_folderScanWorker;
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;
+    VlcController *m_vlcController;
+    QGraphicsColorizeEffect *m_grayscaleEffect;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;
     QLabel *m_statusLabel;
