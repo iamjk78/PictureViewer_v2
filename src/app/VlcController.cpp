@@ -216,9 +216,9 @@ bool VlcController::startVlcProcess(const QString &videoPath)
 
     const QString vlcPath = m_settings->vlcPath();
     QStringList args;
-    args << "--rc-host=127.0.0.1:4444"
-         << "--rc-handler-host=127.0.0.1:4444"
-         << "--volume=0"  // Start with 0% volume
+    args << "--extraintf=rc"
+         << "--rc-host=127.0.0.1:4444"
+         << "--volume=0"
          << videoPath;
 
     m_process->start(vlcPath, args);
@@ -298,6 +298,9 @@ bool VlcController::isRunning() const
 
 void VlcController::onMonitorTimeout()
 {
+    if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
+        return;
+
     if (!m_process || m_process->state() != QProcess::Running) {
         qWarning() << "VLC process is not running anymore";
         emit processCrashed();
@@ -319,8 +322,14 @@ void VlcController::onProcessError(QProcess::ProcessError error)
 
 void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
-    qDebug() << "VLC process finished with exit code" << exitCode << "status" << exitStatus;
-    emit processCrashed();
+    const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
+    qDebug() << "VLC process finished, exit code:" << exitCode << "status:" << exitStatus;
+    if (!stdErr.isEmpty())
+        qWarning() << "VLC stderr:" << stdErr;
+
+    if (exitStatus == QProcess::CrashExit || exitCode != 0) {
+        emit processCrashed();
+    }
     setStateAndEmit(VlcState::Stopped);
     cleanup();
 }
