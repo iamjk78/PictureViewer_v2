@@ -112,6 +112,7 @@ void ImageView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     case Qt::Key_0:
+    case Qt::Key_Space:
         resetZoom();
         event->accept();
         return;

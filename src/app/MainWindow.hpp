@@ -52,6 +52,7 @@ private slots:
     void deleteOrMoveCurrentImage();
     void deleteImageToTrash();
     void moveImageToDeleteFolder();
+    void onDeleteFolder();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -98,6 +99,7 @@ private:
     QAction *m_enableDeleteImageAction;
     QAction *m_enableMoveToDeleteAction;
     QAction *m_askConfirmationAction;
+    QAction *m_deleteFolderAction;
 };
 
 } // namespace pictureviewer

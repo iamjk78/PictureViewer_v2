@@ -72,7 +72,11 @@ MainWindow::MainWindow(QWidget *parent)
     , m_enableDeleteImageAction(new QAction(tr("Odstranění obrázku"), this))
     , m_enableMoveToDeleteAction(new QAction(tr("Přesunutí obrázku do složky Delete"), this))
     , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
+    , m_deleteFolderAction(new QAction(this))
 {
+    m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
+    m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
+    connect(m_deleteFolderAction, &QAction::triggered, this, &MainWindow::onDeleteFolder);
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
@@ -575,6 +579,8 @@ void MainWindow::setupToolbar()
     toolbar->addSeparator();
     toolbar->addAction(m_toggleSlideshowAction);
     toolbar->addWidget(m_intervalSpinBox);
+    toolbar->addSeparator();
+    toolbar->addAction(m_deleteFolderAction);
 }
 
 void MainWindow::setupStatusBar()
@@ -684,6 +690,71 @@ void MainWindow::moveImageToDeleteFolder()
         removeImageFromList(m_currentIndex);
     } else {
         m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete."));
+    }
+}
+
+void MainWindow::onDeleteFolder()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    const QString folderPath = currentPath.section('/', 0, -2);
+    const QString deleteFolderPath = folderPath + "/Delete";
+
+    QDir deleteFolder(deleteFolderPath);
+    if (!deleteFolder.exists()) {
+        QMessageBox::information(
+            this,
+            QString(),
+            tr("Složka Delete neexistuje, nemohu ji smazat")
+        );
+        return;
+    }
+
+    const QFileInfoList entries = deleteFolder.entryInfoList(
+        QDir::AllEntries | QDir::NoDotAndDotDot
+    );
+
+    if (entries.isEmpty()) {
+        if (deleteFolder.removeRecursively()) {
+            QMessageBox::information(
+                this,
+                QString(),
+                tr("Složka Delete neobsahovala soubory, smazal jsem ji")
+            );
+        }
+        return;
+    }
+
+    int fileCount = 0;
+    int dirCount = 0;
+
+    for (const QFileInfo &entry : entries) {
+        if (entry.isDir()) {
+            dirCount++;
+        } else {
+            fileCount++;
+        }
+    }
+
+    int result = QMessageBox::question(
+        this,
+        QString(),
+        tr("Složka Delete obsahuje %1 souborů a %2 adresářů, chcete ji skutečně smazat?")
+            .arg(fileCount)
+            .arg(dirCount),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No
+    );
+
+    if (result == QMessageBox::Yes) {
+        if (deleteFolder.removeRecursively()) {
+            m_statusLabel->setText(tr("Složka Delete byla smazána."));
+        } else {
+            m_statusLabel->setText(tr("Nepodařilo se smazat složku Delete."));
+        }
     }
 }
 
