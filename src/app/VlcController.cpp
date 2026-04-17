@@ -237,7 +237,6 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
     QStringList args;
     args << "--extraintf=rc"
          << "--rc-host=127.0.0.1:4444"
-         << "--no-qt-keyboard-events"   // prevent VLC Qt window from intercepting keys
          << vlcVideoPath;
 
     m_lastVlcPath = vlcPath;
@@ -327,11 +326,14 @@ void VlcController::onMonitorTimeout()
         // Capture output and write log BEFORE emitting any signal
         const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
         const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
-        const int exitCode   = m_process ? m_process->exitCode() : -1;
+        const int exitCode    = m_process ? m_process->exitCode() : -1;
         const auto exitStatus = m_process ? m_process->exitStatus() : QProcess::CrashExit;
         writeDiagnosticLog(exitCode, exitStatus, stdOut, stdErr);
 
-        emit processCrashed();
+        // Only report crash for non-zero exit or OS-level crash; code 0 = normal close
+        if (exitStatus == QProcess::CrashExit || exitCode != 0)
+            emit processCrashed();
+
         QTimer::singleShot(0, this, &VlcController::cleanup);
     }
 }
