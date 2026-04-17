@@ -18,7 +18,6 @@ public:
     explicit PictureViewerApplication(int &argc, char **argv);
 
     void setMainWindow(MainWindow *window);
-    void setLaunchedWithFile(bool launched) { m_launchedWithFile = launched; }
 
 protected:
     // Handle file open events (macOS: double-click, Open With, drag-drop)
@@ -26,7 +25,6 @@ protected:
 
 private:
     MainWindow *m_mainWindow = nullptr;
-    bool m_launchedWithFile = false;
 };
 
 

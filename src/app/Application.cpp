@@ -23,25 +23,23 @@ void PictureViewerApplication::setMainWindow(MainWindow *window)
 bool PictureViewerApplication::event(QEvent *event)
 {
     // Handle file open events from macOS Finder
-    // Only spawn a new instance if this instance wasn't launched with a file
     if (event->type() == QEvent::FileOpen) {
         auto fileEvent = dynamic_cast<QFileOpenEvent *>(event);
         if (fileEvent) {
             const QString filePath = fileEvent->file();
+            qDebug() << "File open event received:" << filePath << "- window visible:" << m_mainWindow->isVisible();
 
-            // If this instance was launched with a file, just open it here
-            if (m_launchedWithFile) {
-                qDebug() << "File open event ignored - instance launched with file:" << filePath;
+            // If window is not visible (first run), open file in this instance
+            // If window is already visible (app running), spawn new instance
+            if (!m_mainWindow->isVisible()) {
+                qDebug() << "Opening file in startup instance:" << filePath;
+                m_mainWindow->openFile(filePath);
                 return true;
             }
 
-            qDebug() << "File open event received - spawning new instance:" << filePath;
-
-            // Spawn new instance with file path as command-line argument
-            // The new instance will receive the file path via args in Application::run()
+            qDebug() << "App already running - spawning new instance:" << filePath;
             QProcess::startDetached(qApp->applicationFilePath(), QStringList() << filePath);
-
-            return true;  // Event handled
+            return true;
         }
     }
 
@@ -69,13 +67,9 @@ int Application::run()
     // Handle command-line arguments (e.g., open image passed from command line)
     const QStringList args = m_qtApplication->arguments();
     if (args.size() > 1) {
-        // Skip the first argument which is the program name
         const QString filePath = args.at(1);
         qDebug() << "Opening file from command line:" << filePath;
         m_mainWindow->openFile(filePath);
-        // Mark that this instance was launched with a file
-        // so it won't spawn a new instance on FileOpen events
-        m_qtApplication->setLaunchedWithFile(true);
     }
 
     m_mainWindow->show();
