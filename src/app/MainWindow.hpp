@@ -100,6 +100,7 @@ private:
     QAction *m_enableMoveToDeleteAction;
     QAction *m_askConfirmationAction;
     QAction *m_deleteFolderAction;
+    QAction *m_deletePictureAction;
 };
 
 } // namespace pictureviewer

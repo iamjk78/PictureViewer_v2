@@ -148,6 +148,17 @@ void ImageView::wheelEvent(QWheelEvent *event)
     QGraphicsView::wheelEvent(event);
 }
 
+void ImageView::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::MiddleButton) {
+        resetZoom();
+        event->accept();
+        return;
+    }
+
+    QGraphicsView::mousePressEvent(event);
+}
+
 void ImageView::applyZoom(double factor)
 {
     const double nextZoom = m_zoomLevel * factor;

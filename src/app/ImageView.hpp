@@ -5,6 +5,7 @@
 class QGraphicsPixmapItem;
 class QGraphicsScene;
 class QKeyEvent;
+class QMouseEvent;
 class QString;
 class QResizeEvent;
 class QWheelEvent;
@@ -27,6 +28,7 @@ public:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
 

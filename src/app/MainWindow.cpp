@@ -63,7 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_openFileAction(new QAction(tr("Otevřít soubor…"), this))
     , m_previousImageAction(new QAction(tr("◀ Předchozí"), this))
     , m_nextImageAction(new QAction(tr("Další ▶"), this))
-    , m_toggleSlideshowAction(new QAction(tr("▶ Slideshow"), this))
+    , m_toggleSlideshowAction(new QAction(tr("▶ Slideshow (S)"), this))
     , m_fitToWindowAction(new QAction(tr("Přizpůsobit oknu"), this))
     , m_resetZoomAction(new QAction(tr("Originální velikost (1:1)"), this))
     , m_fullscreenAction(new QAction(tr("Celá obrazovka (F)"), this))
@@ -73,10 +73,15 @@ MainWindow::MainWindow(QWidget *parent)
     , m_enableMoveToDeleteAction(new QAction(tr("Přesunutí obrázku do složky Delete"), this))
     , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
     , m_deleteFolderAction(new QAction(this))
+    , m_deletePictureAction(new QAction(this))
 {
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     connect(m_deleteFolderAction, &QAction::triggered, this, &MainWindow::onDeleteFolder);
+
+    m_deletePictureAction->setIcon(QIcon(":/icons/delete_picture_icon.ico"));
+    m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
+    connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
@@ -169,10 +174,6 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         showNextImage();
         event->accept();
         return;
-    case Qt::Key_Space:
-        toggleSlideshow();
-        event->accept();
-        return;
     case Qt::Key_F:
         toggleFullscreen();
         event->accept();
@@ -198,7 +199,13 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     default:
-        // Handle 'd' and 'D' key
+        // Handle 's' and 'S' key for slideshow
+        if (event->text() == 's' || event->text() == 'S') {
+            toggleSlideshow();
+            event->accept();
+            return;
+        }
+        // Handle 'd' and 'D' key for delete
         if (event->text() == 'd' || event->text() == 'D') {
             deleteOrMoveCurrentImage();
             event->accept();
@@ -562,7 +569,7 @@ void MainWindow::setupToolbar()
 
     m_previousImageAction->setShortcut(QKeySequence(Qt::Key_Left));
     m_nextImageAction->setShortcut(QKeySequence(Qt::Key_Right));
-    m_toggleSlideshowAction->setShortcut(QKeySequence(Qt::Key_Space));
+    m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
     m_intervalSpinBox->setRange(1, 60);
     m_intervalSpinBox->setValue(m_slideshowController->intervalMs() / 1000);
     m_intervalSpinBox->setSuffix(tr(" s"));
@@ -580,6 +587,7 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_toggleSlideshowAction);
     toolbar->addWidget(m_intervalSpinBox);
     toolbar->addSeparator();
+    toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
 }
 
