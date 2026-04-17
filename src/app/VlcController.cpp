@@ -211,10 +211,8 @@ bool VlcController::startVlcProcess(const QString &videoPath)
 
     m_process = new QProcess(this);
 
-    connect(m_process, static_cast<void(QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
-            this, &VlcController::onProcessFinished);
-    connect(m_process, static_cast<void(QProcess::*)(QProcess::ProcessError)>(&QProcess::error),
-            this, &VlcController::onProcessError);
+    connect(m_process, &QProcess::finished, this, &VlcController::onProcessFinished);
+    connect(m_process, &QProcess::errorOccurred, this, &VlcController::onProcessError);
 
     const QString vlcPath = m_settings->vlcPath();
     QStringList args;
@@ -243,8 +241,7 @@ bool VlcController::connectToVlcSocket()
     m_socket = new QTcpSocket(this);
 
     connect(m_socket, &QTcpSocket::connected, this, &VlcController::onSocketConnected);
-    connect(m_socket, static_cast<void(QAbstractSocket::*)(QAbstractSocket::SocketError)>(&QAbstractSocket::error),
-            this, &VlcController::onSocketError);
+    connect(m_socket, &QAbstractSocket::errorOccurred, this, &VlcController::onSocketError);
 
     const int timeoutMs = m_settings->vlcTimeoutMs();
     m_socket->connectToHost("127.0.0.1", 4444);
