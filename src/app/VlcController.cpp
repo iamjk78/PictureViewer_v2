@@ -216,7 +216,6 @@ bool VlcController::startVlcProcess(const QString &videoPath)
     QStringList args;
     args << "--extraintf=rc"
          << "--rc-host=127.0.0.1:4444"
-         << "--volume=0"
          << videoPath;
 
     m_lastVlcPath = vlcPath;
