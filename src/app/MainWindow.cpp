@@ -23,6 +23,9 @@
 #ifdef Q_OS_MACOS
 #include <sys/xattr.h>
 #endif
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 #include <QFileDialog>
 #include <QIcon>
 #include <QKeySequence>
@@ -32,6 +35,7 @@
 #include <QMessageBox>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTimer>
 #include <QToolBar>
 #include <QWidget>
 #include <QThreadPool>
@@ -913,11 +917,18 @@ void MainWindow::onVlcStatusChanged(int vlcState)
         disableImageBrowsing();
         applyGrayscaleEffect(true);
         updateVideoMetadata(m_imagePaths.at(m_currentIndex));
+        if (!m_vlcKeyPollTimer) {
+            m_vlcKeyPollTimer = new QTimer(this);
+            connect(m_vlcKeyPollTimer, &QTimer::timeout, this, &MainWindow::pollVlcKeys);
+        }
+        m_vlcKeyPollTimer->start(80);
         break;
 
     case VlcState::Stopped:
     case VlcState::Error:
         m_vlcActive = false;
+        if (m_vlcKeyPollTimer)
+            m_vlcKeyPollTimer->stop();
         enableImageBrowsing();
         applyGrayscaleEffect(false);
         m_statusLabel->setText(tr("Vyber složku s obrázky."));
@@ -946,6 +957,29 @@ void MainWindow::onVlcProcessCrashed()
     m_vlcActive = false;
     enableImageBrowsing();
     applyGrayscaleEffect(false);
+}
+
+void MainWindow::pollVlcKeys()
+{
+#ifdef Q_OS_WIN
+    // Edge-detection: only fire on key-down transition, not while held
+    auto pressed = [](int vk) { return (GetAsyncKeyState(vk) & 0x8001) == 0x8001; };
+
+    if (pressed(VK_ESCAPE)) {
+        m_vlcController->stop();
+        return;
+    }
+    if (pressed(VK_SPACE))
+        m_vlcController->sendCommand("pause");
+    if (pressed(VK_LEFT))
+        m_vlcController->sendCommand("seek -10");
+    if (pressed(VK_RIGHT))
+        m_vlcController->sendCommand("seek +10");
+    if (pressed(VK_ADD) || pressed(0xBB))   // numpad + or regular +
+        m_vlcController->sendCommand("volup");
+    if (pressed(VK_SUBTRACT) || pressed(0xBD))  // numpad - or regular -
+        m_vlcController->sendCommand("voldown");
+#endif
 }
 
 void MainWindow::disableImageBrowsing()

@@ -59,6 +59,7 @@ private slots:
     void onVlcStatusChanged(int vlcState);
     void onVlcConnectionLost();
     void onVlcProcessCrashed();
+    void pollVlcKeys();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -87,7 +88,8 @@ private:
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
-    bool m_vlcActive = false;  // True when VLC is playing video
+    bool m_vlcActive = false;
+    QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     FolderScanWorker *m_folderScanWorker;
     ImageView *m_imageView;

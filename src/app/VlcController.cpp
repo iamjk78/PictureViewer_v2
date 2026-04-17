@@ -212,6 +212,12 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
 
     m_process = new QProcess(this);
 
+#ifdef Q_OS_WIN
+    m_process->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
+        args->flags |= CREATE_NO_WINDOW;
+    });
+#endif
+
     connect(m_process, &QProcess::finished, this, &VlcController::onProcessFinished);
     connect(m_process, &QProcess::errorOccurred, this, &VlcController::onProcessError);
 
