@@ -23,11 +23,18 @@ void PictureViewerApplication::setMainWindow(MainWindow *window)
 bool PictureViewerApplication::event(QEvent *event)
 {
     // Handle file open events from macOS Finder
-    // Instead of opening in the existing instance, spawn a new instance
+    // Only spawn a new instance if this instance wasn't launched with a file
     if (event->type() == QEvent::FileOpen) {
         auto fileEvent = dynamic_cast<QFileOpenEvent *>(event);
         if (fileEvent) {
             const QString filePath = fileEvent->file();
+
+            // If this instance was launched with a file, just open it here
+            if (m_launchedWithFile) {
+                qDebug() << "File open event ignored - instance launched with file:" << filePath;
+                return true;
+            }
+
             qDebug() << "File open event received - spawning new instance:" << filePath;
 
             // Spawn new instance with file path as command-line argument
@@ -66,6 +73,9 @@ int Application::run()
         const QString filePath = args.at(1);
         qDebug() << "Opening file from command line:" << filePath;
         m_mainWindow->openFile(filePath);
+        // Mark that this instance was launched with a file
+        // so it won't spawn a new instance on FileOpen events
+        m_qtApplication->setLaunchedWithFile(true);
     }
 
     m_mainWindow->show();
