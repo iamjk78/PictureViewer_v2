@@ -187,11 +187,19 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
         return false;
     }
 
-    // Connect to RC socket with timeout
-    if (!connectToVlcSocket()) {
-        outErrorMsg = "Nepodařilo se připojit k VLC RC rozhraní.";
+    // Give VLC 800ms to either start or exit immediately (catches bad-argument exits)
+    m_process->waitForFinished(800);
+    if (m_process->state() != QProcess::Running) {
+        const QString stdOut = QString::fromLocal8Bit(m_process->readAllStandardOutput());
+        const QString stdErr = QString::fromLocal8Bit(m_process->readAllStandardError());
+        writeDiagnosticLog(m_process->exitCode(), m_process->exitStatus(), stdOut, stdErr);
+        outErrorMsg = QString("VLC se ukončil hned po startu (exit %1).\nLog: %2")
+                          .arg(m_process->exitCode()).arg(m_lastLogPath);
+        // cleanup without blocking signals — process already dead
+        m_process->disconnect();
+        delete m_process;
+        m_process = nullptr;
         setStateAndEmit(VlcState::Error);
-        cleanup();
         return false;
     }
 
@@ -200,7 +208,10 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
         m_monitorTimer = new QTimer(this);
         connect(m_monitorTimer, &QTimer::timeout, this, &VlcController::onMonitorTimeout);
     }
-    m_monitorTimer->start(100);  // Check every 100ms
+    m_monitorTimer->start(500);
+
+    // Try to connect RC socket asynchronously (non-blocking)
+    connectToVlcSocket();
 
     setStateAndEmit(VlcState::Running);
     return true;
@@ -242,23 +253,16 @@ bool VlcController::startVlcProcess(const QString &videoPath)
 bool VlcController::connectToVlcSocket()
 {
     if (m_socket) {
+        m_socket->abort();
         delete m_socket;
     }
 
     m_socket = new QTcpSocket(this);
-
     connect(m_socket, &QTcpSocket::connected, this, &VlcController::onSocketConnected);
     connect(m_socket, &QAbstractSocket::errorOccurred, this, &VlcController::onSocketError);
 
-    const int timeoutMs = m_settings->vlcTimeoutMs();
+    // Non-blocking: just initiate connection, result delivered via onSocketConnected / onSocketError
     m_socket->connectToHost("127.0.0.1", 4444);
-
-    if (!m_socket->waitForConnected(timeoutMs)) {
-        qWarning() << "Failed to connect to VLC RC socket within" << timeoutMs << "ms";
-        return false;
-    }
-
-    qDebug() << "Connected to VLC RC socket";
     return true;
 }
 
@@ -278,20 +282,16 @@ void VlcController::sendCommand(const QString &command)
 
 void VlcController::stop()
 {
-    if (m_process && m_process->state() == QProcess::Running) {
-        // Send graceful quit command
-        sendCommand("quit");
-
-        // Wait for process to exit gracefully
-        if (!m_process->waitForFinished(2000)) {
-            qWarning() << "VLC did not exit gracefully, terminating";
-            m_process->terminate();
-            m_process->waitForFinished(1000);
-        }
-    }
-
-    if (m_monitorTimer) {
+    if (m_monitorTimer)
         m_monitorTimer->stop();
+
+    if (m_process && m_process->state() == QProcess::Running) {
+        sendCommand("quit");
+        // Terminate after short grace period without blocking
+        QTimer::singleShot(1500, this, [this]() {
+            if (m_process && m_process->state() == QProcess::Running)
+                m_process->terminate();
+        });
     }
 
     setStateAndEmit(VlcState::Stopped);
