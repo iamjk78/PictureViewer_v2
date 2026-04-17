@@ -2,9 +2,9 @@
 
 #include <QObject>
 #include <QString>
+#include <QProcess>
+#include <QTcpSocket>
 
-class QProcess;
-class QTcpSocket;
 class QTimer;
 class QWidget;
 

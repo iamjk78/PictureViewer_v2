@@ -243,7 +243,7 @@ bool VlcController::connectToVlcSocket()
     m_socket = new QTcpSocket(this);
 
     connect(m_socket, &QTcpSocket::connected, this, &VlcController::onSocketConnected);
-    connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
+    connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
             this, &VlcController::onSocketError);
 
     const int timeoutMs = m_settings->vlcTimeoutMs();
