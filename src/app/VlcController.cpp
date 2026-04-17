@@ -2,8 +2,10 @@
 #include "app/SettingsManager.hpp"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -11,6 +13,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTcpSocket>
+#include <QTextStream>
 #include <QTimer>
 
 #ifdef Q_OS_WIN
@@ -221,10 +224,14 @@ bool VlcController::startVlcProcess(const QString &videoPath)
          << "--volume=0"
          << videoPath;
 
+    m_lastVlcPath = vlcPath;
+    m_lastVlcArgs = args;
+
     m_process->start(vlcPath, args);
 
     if (!m_process->waitForStarted(2000)) {
         qWarning() << "Failed to start VLC process";
+        writeDiagnosticLog(-1, QProcess::CrashExit, QString(), "Process failed to start within 2000ms");
         return false;
     }
 
@@ -322,16 +329,40 @@ void VlcController::onProcessError(QProcess::ProcessError error)
 
 void VlcController::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
+    const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
     const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
+
     qDebug() << "VLC process finished, exit code:" << exitCode << "status:" << exitStatus;
-    if (!stdErr.isEmpty())
-        qWarning() << "VLC stderr:" << stdErr;
+
+    writeDiagnosticLog(exitCode, exitStatus, stdOut, stdErr);
 
     if (exitStatus == QProcess::CrashExit || exitCode != 0) {
         emit processCrashed();
     }
     setStateAndEmit(VlcState::Stopped);
     cleanup();
+}
+
+void VlcController::writeDiagnosticLog(int exitCode, QProcess::ExitStatus exitStatus,
+                                        const QString &stdOut, const QString &stdErr)
+{
+    const QString logPath = QCoreApplication::applicationDirPath() + "/vlc_debug.log";
+    QFile file(logPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return;
+
+    QTextStream out(&file);
+    out << "=== VLC Diagnostic Log ===\n";
+    out << "Time:      " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+    out << "VLC path:  " << m_lastVlcPath << "\n";
+    out << "Arguments: " << m_lastVlcArgs.join(" ") << "\n";
+    out << "Video:     " << m_videoPath << "\n";
+    out << "Exit code: " << exitCode << "\n";
+    out << "Exit status: " << (exitStatus == QProcess::CrashExit ? "CrashExit" : "NormalExit") << "\n";
+    if (!stdOut.isEmpty())
+        out << "\n--- stdout ---\n" << stdOut << "\n";
+    if (!stdErr.isEmpty())
+        out << "\n--- stderr ---\n" << stdErr << "\n";
 }
 
 void VlcController::onSocketConnected()

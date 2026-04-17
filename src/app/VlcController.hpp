@@ -88,6 +88,8 @@ private:
     bool connectToVlcSocket();
     void cleanup();
     void setStateAndEmit(VlcState newState);
+    void writeDiagnosticLog(int exitCode, QProcess::ExitStatus exitStatus,
+                            const QString &stdOut, const QString &stdErr);
 
     SettingsManager *m_settings;
     QProcess *m_process;
@@ -95,6 +97,8 @@ private:
     QTimer *m_monitorTimer;
 
     QString m_videoPath;
+    QString m_lastVlcPath;
+    QStringList m_lastVlcArgs;
     VlcState m_state;
     int m_vlcGeneration;  // For stale signal prevention
 };
