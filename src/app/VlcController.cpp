@@ -215,10 +215,18 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
     connect(m_process, &QProcess::finished, this, &VlcController::onProcessFinished);
     connect(m_process, &QProcess::errorOccurred, this, &VlcController::onProcessError);
 
+    // Qt stores NAS paths as //server/share/... which VLC on Windows misinterprets
+    // as a relative path and prepends the CWD. Convert to smb:// which VLC handles natively.
+    QString vlcVideoPath = videoPath;
+#ifdef Q_OS_WIN
+    if (vlcVideoPath.startsWith("//"))
+        vlcVideoPath = "smb:" + vlcVideoPath;  // //server/share → smb://server/share
+#endif
+
     QStringList args;
     args << "--extraintf=rc"
          << "--rc-host=127.0.0.1:4444"
-         << videoPath;
+         << vlcVideoPath;
 
     m_lastVlcPath = vlcPath;
     m_lastVlcArgs = args;
