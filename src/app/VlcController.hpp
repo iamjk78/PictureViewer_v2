@@ -87,7 +87,7 @@ private slots:
     void onSocketError(QAbstractSocket::SocketError error);
 
 private:
-    bool startVlcProcess(const QString &videoPath);
+    bool startVlcProcess(const QString &vlcPath, const QString &videoPath);
     bool connectToVlcSocket();
     void cleanup();
     void setStateAndEmit(VlcState newState);

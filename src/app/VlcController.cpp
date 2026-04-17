@@ -180,8 +180,11 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
         return false;
     }
 
+    // Save resolved path so it's available next launch without re-detection
+    m_settings->setVlcPath(vlcPath);
+
     // Start VLC process
-    if (!startVlcProcess(videoPath)) {
+    if (!startVlcProcess(vlcPath, videoPath)) {
         outErrorMsg = "Nepodařilo se spustit VLC.";
         setStateAndEmit(VlcState::Error);
         return false;
@@ -201,7 +204,7 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
     return true;
 }
 
-bool VlcController::startVlcProcess(const QString &videoPath)
+bool VlcController::startVlcProcess(const QString &vlcPath, const QString &videoPath)
 {
     if (m_process) {
         delete m_process;
@@ -212,7 +215,6 @@ bool VlcController::startVlcProcess(const QString &videoPath)
     connect(m_process, &QProcess::finished, this, &VlcController::onProcessFinished);
     connect(m_process, &QProcess::errorOccurred, this, &VlcController::onProcessError);
 
-    const QString vlcPath = m_settings->vlcPath();
     QStringList args;
     args << "--extraintf=rc"
          << "--rc-host=127.0.0.1:4444"
