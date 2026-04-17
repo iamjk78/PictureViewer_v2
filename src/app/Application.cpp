@@ -4,6 +4,7 @@
 #include <QEvent>
 #include <QFileOpenEvent>
 #include <QProcess>
+#include <QTimer>
 #include <QDebug>
 
 namespace pictureviewer {
@@ -27,17 +28,17 @@ bool PictureViewerApplication::event(QEvent *event)
         auto fileEvent = dynamic_cast<QFileOpenEvent *>(event);
         if (fileEvent) {
             const QString filePath = fileEvent->file();
-            qDebug() << "File open event received:" << filePath << "- window visible:" << m_mainWindow->isVisible();
+            qDebug() << "FileOpen event:" << filePath << "- starting:" << m_isStarting;
 
-            // If window is not visible (first run), open file in this instance
-            // If window is already visible (app running), spawn new instance
-            if (!m_mainWindow->isVisible()) {
-                qDebug() << "Opening file in startup instance:" << filePath;
+            // During startup (right after launch), open in this instance
+            if (m_isStarting) {
+                qDebug() << "Opening in startup instance";
                 m_mainWindow->openFile(filePath);
                 return true;
             }
 
-            qDebug() << "App already running - spawning new instance:" << filePath;
+            // App already running, spawn new instance
+            qDebug() << "App running - spawning new instance";
             QProcess::startDetached(qApp->applicationFilePath(), QStringList() << filePath);
             return true;
         }
@@ -73,6 +74,8 @@ int Application::run()
     }
 
     m_mainWindow->show();
+    // Mark that startup is complete - now FileOpen events should spawn new instances
+    QTimer::singleShot(100, [this]() { m_qtApplication->setStarting(false); });
     return m_qtApplication->exec();
 }
 
