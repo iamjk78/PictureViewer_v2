@@ -80,10 +80,10 @@ QString VlcUtils::selectVlcPathDialog(QWidget *parent, SettingsManager *settings
     QString selectedPath;
 
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
-        const QString filter = tr("VLC Media Player (vlc.exe vlc)");
+        const QString filter = "VLC Media Player (vlc.exe vlc)";
         selectedPath = QFileDialog::getOpenFileName(
             parent,
-            tr("Vyberte VLC Media Player"),
+            "Vyberte VLC Media Player",
             QString(),
             filter
         );
@@ -101,13 +101,13 @@ QString VlcUtils::selectVlcPathDialog(QWidget *parent, SettingsManager *settings
         }
 
         // Invalid path - show error and retry
-        const QString errorMsg = tr("Soubor VLC nebyl nalezen na:\n%1\n\nZkuste znova.").arg(selectedPath);
-        QMessageBox::warning(parent, tr("Neplatná cesta"), errorMsg);
+        const QString errorMsg = QString("Soubor VLC nebyl nalezen na:\n%1\n\nZkuste znova.").arg(selectedPath);
+        QMessageBox::warning(parent, "Neplatná cesta", errorMsg);
     }
 
     // Max retries reached
-    const QString finalError = tr("Dosáhli jste maximálního počtu pokusů.\nVLC nelze spustit.");
-    QMessageBox::critical(parent, tr("Chyba"), finalError);
+    const QString finalError = "Dosáhli jste maximálního počtu pokusů.\nVLC nelze spustit.";
+    QMessageBox::critical(parent, "Chyba", finalError);
 
     return QString();
 }
@@ -172,21 +172,21 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
     }
 
     if (vlcPath.isEmpty()) {
-        outErrorMsg = tr("VLC nebyl nalezen. Přihlaste se k instalaci VLC.");
+        outErrorMsg = "VLC nebyl nalezen. Přihlaste se k instalaci VLC.";
         setStateAndEmit(VlcState::Error);
         return false;
     }
 
     // Start VLC process
     if (!startVlcProcess(videoPath)) {
-        outErrorMsg = tr("Nepodařilo se spustit VLC.");
+        outErrorMsg = "Nepodařilo se spustit VLC.";
         setStateAndEmit(VlcState::Error);
         return false;
     }
 
     // Connect to RC socket with timeout
     if (!connectToVlcSocket()) {
-        outErrorMsg = tr("Nepodařilo se připojit k VLC RC rozhraní.");
+        outErrorMsg = "Nepodařilo se připojit k VLC RC rozhraní.";
         setStateAndEmit(VlcState::Error);
         cleanup();
         return false;
@@ -260,7 +260,7 @@ bool VlcController::connectToVlcSocket()
 
 void VlcController::sendCommand(const QString &command)
 {
-    if (!m_socket || !m_socket->isConnected()) {
+    if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState) {
         qWarning() << "VLC socket not connected, cannot send command:" << command;
         return;
     }
@@ -313,7 +313,7 @@ void VlcController::onProcessStarted()
     qDebug() << "VLC process started";
 }
 
-void VlcController::onProcessError()
+void VlcController::onProcessError(QProcess::ProcessError error)
 {
     qWarning() << "VLC process error:" << m_process->errorString();
     emit processCrashed();
@@ -333,7 +333,7 @@ void VlcController::onSocketConnected()
     qDebug() << "VLC RC socket connected";
 }
 
-void VlcController::onSocketError()
+void VlcController::onSocketError(QAbstractSocket::SocketError error)
 {
     qWarning() << "VLC socket error:" << m_socket->errorString();
     emit connectionLost();

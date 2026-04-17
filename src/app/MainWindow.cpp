@@ -89,8 +89,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
 
     // Connect VLC signals
-    connect(m_vlcController, QOverload<int>::of(&VlcController::statusChanged),
-            this, &MainWindow::onVlcStatusChanged);
+    connect(m_vlcController, &VlcController::statusChanged,
+            this, [this](VlcState state) { onVlcStatusChanged(static_cast<int>(state)); });
     connect(m_vlcController, &VlcController::connectionLost,
             this, &MainWindow::onVlcConnectionLost);
     connect(m_vlcController, &VlcController::processCrashed,

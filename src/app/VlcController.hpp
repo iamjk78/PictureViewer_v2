@@ -77,11 +77,11 @@ signals:
 
 private slots:
     void onProcessStarted();
-    void onProcessError();
+    void onProcessError(QProcess::ProcessError error);
     void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onMonitorTimeout();
     void onSocketConnected();
-    void onSocketError();
+    void onSocketError(QAbstractSocket::SocketError error);
 
 private:
     bool startVlcProcess(const QString &videoPath);
