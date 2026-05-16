@@ -45,6 +45,10 @@ public:
     int vlcTimeoutMs() const;
     void setVlcTimeoutMs(int ms);
 
+    // ── PDF Settings ─────────────────────────────────────────────────────────
+    bool enablePdfProcessing() const;
+    void setEnablePdfProcessing(bool enabled);
+
 private:
     QSettings *m_settings;
 };

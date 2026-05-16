@@ -34,6 +34,8 @@ constexpr auto kAskConfirmationDeleteKey = "FileHandling/ask_confirmation_delete
 constexpr auto kVlcPathKey               = "VLC/vlc_path";
 constexpr auto kVlcTimeoutMsKey          = "VLC/vlc_timeout_ms";
 
+constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
+
 constexpr int kDefaultUpdateDelayMinutes = 5;
 constexpr int kDefaultUpdateIntervalDays = 1;
 constexpr int kDefaultVlcTimeoutMs       = 5000;
@@ -181,6 +183,18 @@ int SettingsManager::vlcTimeoutMs() const
 void SettingsManager::setVlcTimeoutMs(int ms)
 {
     m_settings->setValue(kVlcTimeoutMsKey, ms);
+}
+
+// ── PDF Settings ─────────────────────────────────────────────────────────────
+
+bool SettingsManager::enablePdfProcessing() const
+{
+    return m_settings->value(kEnablePdfProcessingKey, true).toBool();
+}
+
+void SettingsManager::setEnablePdfProcessing(bool enabled)
+{
+    m_settings->setValue(kEnablePdfProcessingKey, enabled);
 }
 
 } // namespace pictureviewer
