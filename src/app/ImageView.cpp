@@ -49,6 +49,8 @@ ImageView::ImageView(QWidget *parent)
     fitToWindow();
 }
 
+ImageView::~ImageView() = default;
+
 void ImageView::clearImage()
 {
     m_pixmapItem->setPixmap(createPlaceholderPixmap());

@@ -21,6 +21,7 @@ class ImageView : public QGraphicsView
 
 public:
     explicit ImageView(QWidget *parent = nullptr);
+    ~ImageView();
 
     void clearImage();
     bool loadImage(const QString &path);

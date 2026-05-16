@@ -21,8 +21,9 @@ bool PdfHandler::load(const QString &filePath)
 
     m_document->load(filePath);
 
-    if (m_document->status() != QPdfDocument::Ready) {
-        qWarning() << "Failed to load PDF:" << filePath;
+    // Check if document loaded successfully - use pageCount() > 0 as indicator
+    if (m_document->pageCount() <= 0) {
+        qWarning() << "Failed to load PDF or PDF is empty:" << filePath;
         m_document->close();
         return false;
     }
@@ -33,7 +34,7 @@ bool PdfHandler::load(const QString &filePath)
 
 bool PdfHandler::isLoaded() const
 {
-    return m_document && m_document->status() == QPdfDocument::Ready;
+    return m_document && m_document->pageCount() > 0;
 }
 
 int PdfHandler::pageCount() const
@@ -50,8 +51,8 @@ QImage PdfHandler::renderPage(int pageIndex, const QSize &size)
         return QImage();
     }
 
-    QPdfPageRenderer renderer;
-    const QImage image = renderer.render(m_document.get(), pageIndex, size);
+    // Qt6 renderToImage is synchronous
+    const QImage image = m_document->render(pageIndex, size);
 
     if (image.isNull()) {
         qWarning() << "Failed to render PDF page" << pageIndex;
