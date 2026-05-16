@@ -9,9 +9,5 @@
 	<!-- Allow access to Downloads folder -->
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
-
-	<!-- Enable App Sandbox (required for the above entitlements to work) -->
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
 </dict>
 </plist>
