@@ -5,6 +5,7 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VlcController.hpp"
+#include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
 
 #include <QAction>
@@ -262,6 +263,26 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         showImage(m_imagePaths.size() - 1);
         event->accept();
         return;
+    case Qt::Key_PageDown:
+        // PDF page down
+        if (m_imageView->nextPage()) {
+            event->accept();
+            return;
+        }
+        // If not PDF or last page, go to next image
+        showNextImage();
+        event->accept();
+        return;
+    case Qt::Key_PageUp:
+        // PDF page up
+        if (m_imageView->previousPage()) {
+            event->accept();
+            return;
+        }
+        // If not PDF or first page, go to previous image
+        showPreviousImage();
+        event->accept();
+        return;
     default:
         // Handle 'g' and 'G' key for play video
         if (event->text() == 'g' || event->text() == 'G') {
@@ -278,6 +299,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         // Handle 'd' and 'D' key for delete
         if (event->text() == 'd' || event->text() == 'D') {
             deleteOrMoveCurrentImage();
+            event->accept();
+            return;
+        }
+        // Handle 'r' and 'R' key for rename
+        if (event->text() == 'r' || event->text() == 'R') {
+            renameCurrentImage();
             event->accept();
             return;
         }
@@ -526,15 +553,42 @@ void MainWindow::showImage(int index)
 #ifdef Q_OS_MACOS
     removeQuarantine(path);
 #endif
-    if (!m_imageView->loadImage(path)) {
+
+    // Check if it's a PDF file
+    const QString suffix = "." + QFileInfo(path).suffix();
+    const bool isPdf = isPdfFile(suffix);
+
+    bool success = false;
+    if (isPdf) {
+        success = m_imageView->loadPdf(path);
+    } else {
+        success = m_imageView->loadImage(path);
+    }
+
+    if (!success) {
         m_currentIndex = -1;
-        m_statusLabel->setText(tr("Nepodařilo se načíst obrázek: %1").arg(path));
+        m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
         return;
     }
 
     m_currentIndex = index;
     m_thumbnailPanel->setCurrentIndex(index);
     updateStatus(path);
+
+    // Disconnect old signal if present and connect new one for PDF
+    disconnect(m_imageView, nullptr, this, nullptr);
+    if (isPdf) {
+        connect(m_imageView, &ImageView::pdfPageChanged, this, [this, path](int page, int totalPages) {
+            m_statusLabel->setText(
+                tr("%1   |   Stránka %2 z %3   |   PDF   |   %4 / %5")
+                    .arg(QFileInfo(path).fileName())
+                    .arg(page)
+                    .arg(totalPages)
+                    .arg(m_currentIndex + 1)
+                    .arg(m_imagePaths.size())
+            );
+        });
+    }
 }
 
 void MainWindow::updateStatus(const QString &path)
