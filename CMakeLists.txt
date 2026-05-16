@@ -82,10 +82,4 @@ if(APPLE)
         COMMENT "Copying icon to macOS bundle"
     )
 
-    # Code sign the app with sandbox entitlements (allows file access from other apps)
-    add_custom_command(TARGET PictureViewer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Code signing PictureViewer with sandbox entitlements..."
-        COMMAND codesign -s - --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/cmake/entitlements.plist" -f --deep "$<TARGET_BUNDLE_DIR:PictureViewer>"
-        COMMENT "Code signing macOS bundle"
-    )
 endif()
