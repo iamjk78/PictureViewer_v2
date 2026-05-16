@@ -54,6 +54,7 @@ private slots:
     void deleteOrMoveCurrentImage();
     void deleteImageToTrash();
     void moveImageToDeleteFolder();
+    void renameCurrentImage();
     void onDeleteFolder();
     void onPlayVideo();
     void onVlcStatusChanged(int vlcState);
@@ -116,6 +117,7 @@ private:
     QAction *m_askConfirmationAction;
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
+    QAction *m_renameImageAction;
 };
 
 } // namespace pictureviewer

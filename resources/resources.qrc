@@ -3,5 +3,6 @@
         <file alias="icons/eye_icon.ico">icons/eye_icon.ico</file>
         <file alias="icons/delete_folder_icon.ico">icons/delete_folder_icon.ico</file>
         <file alias="icons/delete_picture_icon.ico">icons/delete_picture_icon.ico</file>
+        <file alias="icons/rename.ico">icons/rename.ico</file>
     </qresource>
 </RCC>

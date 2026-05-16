@@ -28,6 +28,7 @@
 #endif
 #include <QFileDialog>
 #include <QIcon>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
@@ -81,6 +82,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
     , m_deleteFolderAction(new QAction(this))
     , m_deletePictureAction(new QAction(this))
+    , m_renameImageAction(new QAction(this))
     , m_vlcController(new VlcController(m_settingsManager, this))
     , m_grayscaleEffect(nullptr)
 {
@@ -91,6 +93,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_deletePictureAction->setIcon(QIcon(":/icons/delete_picture_icon.ico"));
     m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
+
+    m_renameImageAction->setIcon(QIcon(":/icons/rename.ico"));
+    m_renameImageAction->setToolTip(tr("Přejmenování obrázku (R)"));
+    m_renameImageAction->setShortcut(QKeySequence("R"));
+    connect(m_renameImageAction, &QAction::triggered, this, &MainWindow::renameCurrentImage);
 
     // Connect VLC signals
     connect(m_vlcController, &VlcController::statusChanged,
@@ -650,6 +657,7 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_toggleSlideshowAction);
     toolbar->addWidget(m_intervalSpinBox);
     toolbar->addSeparator();
+    toolbar->addAction(m_renameImageAction);
     toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
 }
@@ -761,6 +769,55 @@ void MainWindow::moveImageToDeleteFolder()
         removeImageFromList(m_currentIndex);
     } else {
         m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete."));
+    }
+}
+
+void MainWindow::renameCurrentImage()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    QFileInfo fileInfo(currentPath);
+
+    const QString fileName = fileInfo.fileName();
+    const QString baseName = fileInfo.baseName();  // filename without extension
+    const QString suffix = fileInfo.suffix();      // extension
+
+    // Create rename dialog
+    bool ok = false;
+    QString newBaseName = QInputDialog::getText(
+        this,
+        tr("Přejmenování obrázku"),
+        tr("Nový název:"),
+        QLineEdit::Normal,
+        baseName,
+        &ok
+    );
+
+    if (!ok || newBaseName.isEmpty() || newBaseName == baseName) {
+        return;  // User cancelled or didn't change the name
+    }
+
+    // Construct the new path
+    const QString folderPath = fileInfo.absolutePath();
+    const QString newFileName = newBaseName + "." + suffix;
+    const QString newPath = folderPath + "/" + newFileName;
+
+    // Check if file with new name already exists
+    if (QFile::exists(newPath)) {
+        QMessageBox::warning(this, tr("Chyba"), tr("Soubor '%1' již existuje.").arg(newFileName));
+        return;
+    }
+
+    // Rename the file
+    if (QFile::rename(currentPath, newPath)) {
+        m_imagePaths[m_currentIndex] = newPath;
+        updateStatus(newPath);
+        m_statusLabel->setText(tr("Obrázek přejmenován na '%1'.").arg(newFileName));
+    } else {
+        m_statusLabel->setText(tr("Nepodařilo se přejmenovat obrázek."));
     }
 }
 
