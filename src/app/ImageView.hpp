@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QGraphicsView>
+#include <memory>
 
 class QGraphicsPixmapItem;
 class QGraphicsScene;
@@ -12,6 +13,8 @@ class QWheelEvent;
 
 namespace pictureviewer {
 
+class PdfHandler;
+
 class ImageView : public QGraphicsView
 {
     Q_OBJECT
@@ -21,10 +24,21 @@ public:
 
     void clearImage();
     bool loadImage(const QString &path);
+    bool loadPdf(const QString &path);
     void fitToWindow();
     void resetZoom();
     void zoomIn();
     void zoomOut();
+
+    // PDF navigation
+    bool nextPage();
+    bool previousPage();
+    bool isPdfLoaded() const;
+    int currentPdfPage() const;
+    int pdfPageCount() const;
+
+signals:
+    void pdfPageChanged(int page, int totalPages);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -34,11 +48,14 @@ protected:
 
 private:
     void applyZoom(double factor);
+    void renderPdfPage(int pageIndex);
 
     QGraphicsScene *m_scene;
     QGraphicsPixmapItem *m_pixmapItem;
     double m_zoomLevel;
     bool m_manuallyZoomed;
+    std::unique_ptr<PdfHandler> m_pdfHandler;
+    int m_currentPdfPage;
 };
 
 } // namespace pictureviewer

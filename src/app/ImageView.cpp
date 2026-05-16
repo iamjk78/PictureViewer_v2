@@ -1,5 +1,7 @@
 #include "app/ImageView.hpp"
 
+#include "core/PdfHandler.hpp"
+
 #include <QBrush>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
@@ -34,6 +36,8 @@ ImageView::ImageView(QWidget *parent)
     , m_pixmapItem(m_scene->addPixmap(createPlaceholderPixmap()))
     , m_zoomLevel(1.0)
     , m_manuallyZoomed(false)
+    , m_pdfHandler(std::make_unique<PdfHandler>())
+    , m_currentPdfPage(0)
 {
     setScene(m_scene);
     setDragMode(QGraphicsView::ScrollHandDrag);
@@ -169,6 +173,85 @@ void ImageView::applyZoom(double factor)
     scale(factor, factor);
     m_zoomLevel = nextZoom;
     m_manuallyZoomed = true;
+}
+
+bool ImageView::loadPdf(const QString &path)
+{
+    if (!m_pdfHandler->load(path)) {
+        return false;
+    }
+
+    m_currentPdfPage = 0;
+    renderPdfPage(0);
+    return true;
+}
+
+void ImageView::renderPdfPage(int pageIndex)
+{
+    if (!m_pdfHandler->isLoaded() || pageIndex < 0 || pageIndex >= m_pdfHandler->pageCount()) {
+        return;
+    }
+
+    // Render at a reasonable resolution - scale to fit the view
+    const QSize renderSize(1200, 1600);
+    const QImage image = m_pdfHandler->renderPage(pageIndex, renderSize);
+
+    if (image.isNull()) {
+        return;
+    }
+
+    m_pixmapItem->setPixmap(QPixmap::fromImage(image));
+    m_scene->setSceneRect(m_pixmapItem->boundingRect());
+    m_zoomLevel = 1.0;
+    m_manuallyZoomed = false;
+    setTransform(QTransform());
+    fitToWindow();
+
+    m_currentPdfPage = pageIndex;
+    emit pdfPageChanged(pageIndex + 1, m_pdfHandler->pageCount());
+}
+
+bool ImageView::nextPage()
+{
+    if (!isPdfLoaded()) {
+        return false;
+    }
+
+    if (m_currentPdfPage + 1 >= m_pdfHandler->pageCount()) {
+        return false;
+    }
+
+    renderPdfPage(m_currentPdfPage + 1);
+    return true;
+}
+
+bool ImageView::previousPage()
+{
+    if (!isPdfLoaded()) {
+        return false;
+    }
+
+    if (m_currentPdfPage == 0) {
+        return false;
+    }
+
+    renderPdfPage(m_currentPdfPage - 1);
+    return true;
+}
+
+bool ImageView::isPdfLoaded() const
+{
+    return m_pdfHandler && m_pdfHandler->isLoaded();
+}
+
+int ImageView::currentPdfPage() const
+{
+    return m_pdfHandler ? m_currentPdfPage : -1;
+}
+
+int ImageView::pdfPageCount() const
+{
+    return m_pdfHandler ? m_pdfHandler->pageCount() : 0;
 }
 
 } // namespace pictureviewer
