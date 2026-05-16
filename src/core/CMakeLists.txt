@@ -5,6 +5,8 @@ set(CORE_SOURCES
     ImageMetadataReader.cpp
     ImageCatalog.hpp
     ImageCatalog.cpp
+    PdfHandler.hpp
+    PdfHandler.cpp
 )
 
 add_library(picture_viewer_core STATIC ${CORE_SOURCES})
@@ -16,4 +18,5 @@ target_link_libraries(picture_viewer_core
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        Qt6::Pdf
 )
