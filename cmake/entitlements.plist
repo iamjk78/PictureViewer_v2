@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Allow reading and writing files selected by the user (e.g., from Finder, Mail, Outlook) -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Allow access to Downloads folder -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+
+	<!-- Enable App Sandbox (required for the above entitlements to work) -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+</dict>
+</plist>
