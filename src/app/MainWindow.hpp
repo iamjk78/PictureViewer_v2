@@ -44,6 +44,7 @@ private slots:
     void onEnableDeleteImageToggled(bool checked);
     void onEnableMoveToDeleteToggled(bool checked);
     void onAskConfirmationToggled(bool checked);
+    void onEnablePdfProcessingToggled(bool checked);
     void onScanComplete(int generation, const QStringList &paths);
     void onScanError(int generation, const QString &error);
     void onScanFinished(int generation);
@@ -115,6 +116,7 @@ private:
     QAction *m_enableDeleteImageAction;
     QAction *m_enableMoveToDeleteAction;
     QAction *m_askConfirmationAction;
+    QAction *m_enablePdfProcessingAction;
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
     QAction *m_renameImageAction;

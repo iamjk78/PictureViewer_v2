@@ -81,6 +81,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_enableDeleteImageAction(new QAction(tr("Odstranění obrázku"), this))
     , m_enableMoveToDeleteAction(new QAction(tr("Přesunutí obrázku do složky Delete"), this))
     , m_askConfirmationAction(new QAction(tr("Ptát se na potvrzení"), this))
+    , m_enablePdfProcessingAction(new QAction(tr("Zpracovávat PDF soubory"), this))
     , m_deleteFolderAction(new QAction(this))
     , m_deletePictureAction(new QAction(this))
     , m_renameImageAction(new QAction(this))
@@ -664,6 +665,13 @@ void MainWindow::setupMenu()
     connect(m_askConfirmationAction, &QAction::toggled, this, &MainWindow::onAskConfirmationToggled);
     settingsMenu->addAction(m_askConfirmationAction);
 
+    settingsMenu->addSeparator();
+
+    m_enablePdfProcessingAction->setCheckable(true);
+    m_enablePdfProcessingAction->setChecked(m_settingsManager->enablePdfProcessing());
+    connect(m_enablePdfProcessingAction, &QAction::toggled, this, &MainWindow::onEnablePdfProcessingToggled);
+    settingsMenu->addAction(m_enablePdfProcessingAction);
+
     updateConfirmationActionState();
 
     // ── Nápověda ──────────────────────────────────────────────────────────────
@@ -749,6 +757,17 @@ void MainWindow::onEnableMoveToDeleteToggled(bool checked)
 void MainWindow::onAskConfirmationToggled(bool checked)
 {
     m_settingsManager->setAskConfirmationDelete(checked);
+}
+
+void MainWindow::onEnablePdfProcessingToggled(bool checked)
+{
+    m_settingsManager->setEnablePdfProcessing(checked);
+
+    // Reload current folder to show/hide PDF files based on the new setting
+    if (!m_imagePaths.isEmpty()) {
+        const QString currentFolder = m_imagePaths.first().section('/', 0, -2);
+        loadFolder(currentFolder);
+    }
 }
 
 void MainWindow::updateConfirmationActionState()
