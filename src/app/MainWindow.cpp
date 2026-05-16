@@ -464,7 +464,7 @@ void MainWindow::loadFolder(const QString &folderPath)
 
     // Parent must be nullptr — memory is managed by the deleteLater connection
     // below. A Qt parent would create a second deletion path → double-free.
-    auto *worker = new FolderScanWorker(folderPath, m_scanGeneration, nullptr);
+    auto *worker = new FolderScanWorker(m_settingsManager, folderPath, m_scanGeneration, nullptr);
     connect(worker, &FolderScanWorker::scanComplete, this, &MainWindow::onScanComplete);
     connect(worker, &FolderScanWorker::scanError, this, &MainWindow::onScanError);
     connect(worker, &FolderScanWorker::finished, this, &MainWindow::onScanFinished);

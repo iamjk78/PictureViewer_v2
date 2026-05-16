@@ -8,12 +8,14 @@
 
 namespace pictureviewer {
 
+class SettingsManager;
+
 class FolderScanWorker : public QObject, public QRunnable
 {
     Q_OBJECT
 
 public:
-    FolderScanWorker(QString folderPath, int generation, QObject *parent = nullptr);
+    FolderScanWorker(const SettingsManager *settings, QString folderPath, int generation, QObject *parent = nullptr);
 
     void cancel();
     void run() override;
@@ -24,6 +26,7 @@ signals:
     void finished(int generation);
 
 private:
+    const SettingsManager *m_settings;
     QString m_folderPath;
     int m_generation;
     std::atomic_bool m_cancelled;

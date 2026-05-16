@@ -1,13 +1,15 @@
 #include "workers/FolderScanWorker.hpp"
 
+#include "app/SettingsManager.hpp"
 #include "core/ImageCatalog.hpp"
 
 #include <exception>
 
 namespace pictureviewer {
 
-FolderScanWorker::FolderScanWorker(QString folderPath, int generation, QObject *parent)
+FolderScanWorker::FolderScanWorker(const SettingsManager *settings, QString folderPath, int generation, QObject *parent)
     : QObject(parent)
+    , m_settings(settings)
     , m_folderPath(std::move(folderPath))
     , m_generation(generation)
     , m_cancelled(false)
@@ -29,7 +31,8 @@ void FolderScanWorker::run()
 
     try {
         ImageCatalog catalog;
-        const QStringList paths = catalog.loadFolder(m_folderPath);
+        const bool includePdf = m_settings ? m_settings->enablePdfProcessing() : true;
+        const QStringList paths = catalog.loadFolder(m_folderPath, includePdf);
         if (!m_cancelled.load()) {
             emit scanComplete(m_generation, paths);
         }

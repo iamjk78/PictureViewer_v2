@@ -9,8 +9,9 @@ namespace pictureviewer {
 class ImageCatalog
 {
 public:
-    QStringList loadFolder(const QString &folderPath) const;
-    bool isSupported(const QFileInfo &fileInfo) const;
+    // loadFolder: if includePdf=true, both images and PDFs are included
+    QStringList loadFolder(const QString &folderPath, bool includePdf = true) const;
+    bool isSupported(const QFileInfo &fileInfo, bool includePdf = true) const;
 };
 
 } // namespace pictureviewer

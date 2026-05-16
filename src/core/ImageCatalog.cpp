@@ -10,7 +10,7 @@
 
 namespace pictureviewer {
 
-QStringList ImageCatalog::loadFolder(const QString &folderPath) const
+QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf) const
 {
     const QDir directory(folderPath);
     if (!directory.exists()) {
@@ -22,21 +22,35 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath) const
         QDir::Name | QDir::IgnoreCase
     );
 
-    QStringList images;
-    images.reserve(entries.size());
+    QStringList files;
+    files.reserve(entries.size());
 
     for (const QFileInfo &entry : entries) {
-        if (isSupported(entry)) {
-            images.append(entry.absoluteFilePath());
+        if (isSupported(entry, includePdf)) {
+            files.append(entry.absoluteFilePath());
         }
     }
 
-    return images;
+    return files;
 }
 
-bool ImageCatalog::isSupported(const QFileInfo &fileInfo) const
+bool ImageCatalog::isSupported(const QFileInfo &fileInfo, bool includePdf) const
 {
-    return fileInfo.isFile() && isSupportedImageExtension(QStringLiteral(".") + fileInfo.suffix());
+    if (!fileInfo.isFile()) {
+        return false;
+    }
+
+    const QString suffix = QStringLiteral(".") + fileInfo.suffix();
+
+    if (isSupportedImageExtension(suffix)) {
+        return true;
+    }
+
+    if (includePdf && isSupportedDocumentExtension(suffix)) {
+        return true;
+    }
+
+    return false;
 }
 
 } // namespace pictureviewer
