@@ -2,10 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Explicitly disable sandbox to allow unrestricted file access -->
-	<key>com.apple.security.app-sandbox</key>
-	<false/>
-
 	<!-- Allow reading and writing files selected by the user -->
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
@@ -13,5 +9,21 @@
 	<!-- Allow access to Downloads folder -->
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
+
+	<!-- Allow access to temporary folders where Outlook stores attachments -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+	<array>
+		<string>/Library/Containers/com.microsoft.Outlook/Data</string>
+		<string>/var/folders</string>
+	</array>
+
+	<!-- Allow access to absolute paths (temp folders) -->
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+	<array>
+		<string>/var</string>
+		<string>/tmp</string>
+		<string>/private/tmp</string>
+		<string>/private/var</string>
+	</array>
 </dict>
 </plist>
