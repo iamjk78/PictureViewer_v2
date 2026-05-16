@@ -47,6 +47,23 @@
 	<!-- File associations: Picture types this app can open -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
+		<!-- PDF documents -->
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>pdf</string>
+				<string>PDF</string>
+			</array>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>application/pdf</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleTypeName</key>
+			<string>PDF Document</string>
+		</dict>
+
 		<!-- JPEG/JPG images -->
 		<dict>
 			<key>CFBundleTypeExtensions</key>
