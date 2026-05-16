@@ -209,6 +209,14 @@
 	<key>LSHandlerRank</key>
 	<string>Owner</string>
 
+	<!-- Support opening documents in place (e.g., from Mail/Outlook attachments) -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+
+	<!-- Don't copy document to app container -->
+	<key>LSOpenInPlace</key>
+	<true/>
+
 	<!-- App presentation name -->
 	<key>NSHumanReadableCopyright</key>
 	<string>PictureViewer © 2026</string>
