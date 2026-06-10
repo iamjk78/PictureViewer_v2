@@ -54,12 +54,16 @@ Aktualizováno po code review a bug fixech (verze 0.6).
 - [x] MainWindow prefetchNeighbors() modulo bug
 - [x] ThumbnailWorker PDF error handling
 
-**Zbývá (nižší priorita):**
-- [ ] SlideshowController thread-safety (setInterval/toggle)
-- [ ] ImageView PDF render duplication (extrahovat helper)
-- [ ] MainWindow keyPressEvent() VLC blocking guard
-- [ ] MainWindow onScanComplete() orphaned m_requestedFile
-- [ ] VlcController cleanup() verbose null checks
+**Druhé kolo – vyřešeno:**
+- [x] MainWindow onScanComplete() – m_requestedFile se nyní čistí i u prázdné složky
+- [x] HelpDialog – přidán changelog verze 0.6
+
+**Zamítnuto po revizi (falešné poplachy / kosmetika):**
+- SlideshowController „thread-safety" – objekt žije jen v GUI vlákně, žádný race
+- keyPressEvent VLC guard – event loop během init blokuje synchronně, guard zbytečný
+- ImageView PDF duplikace – metody se liší, sdílená logika je jeden řádek
+- VlcController cleanup() – už chráněný null checky, bezpečný
+- ImageCatalog throw – toStdString() konverze je správná
 
 ## Nové funkce
 
