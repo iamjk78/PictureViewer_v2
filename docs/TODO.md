@@ -22,11 +22,11 @@ Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 
 ## Opravy chyb v logice
 
-- [ ] **Přirozené řazení souborů** – `ImageCatalog` řadí lexikograficky (`img10` před `img2`). Použít `QCollator` s `numericMode`.
-- [ ] **Závod náhledů s mazáním** – `ThumbnailWorker` doručuje náhledy podle indexu; smazání obrázku během načítání posune indexy a náhledy se přiřadí špatným položkám. Párovat podle cesty.
-- [ ] **Přejmenování neaktualizuje panel náhledů** – položka drží starou cestu v `Qt::UserRole` a starý tooltip.
-- [ ] **Status bar u PDF po otevření** – `pdfPageChanged` se emituje dřív, než se připojí handler; číslo stránky se ukáže až po listování.
-- [ ] **Slideshow běží při přehrávání videa** – akce se jen zakáže, ale `QTimer` běží dál a přepíná obrázky pod videem. Zastavit slideshow při startu VLC.
+- [x] **Přirozené řazení souborů** – `ImageCatalog` řadí lexikograficky (`img10` před `img2`). Použít `QCollator` s `numericMode`. *(2026-06-10)*
+- [x] **Závod náhledů s mazáním** – `ThumbnailWorker` doručuje náhledy podle indexu; smazání obrázku během načítání posune indexy a náhledy se přiřadí špatným položkám. Párovat podle cesty. *(2026-06-10)*
+- [x] **Přejmenování neaktualizuje panel náhledů** – položka drží starou cestu v `Qt::UserRole` a starý tooltip. *(2026-06-10)*
+- [x] **Status bar u PDF po otevření** – `pdfPageChanged` se emituje dřív, než se připojí handler; číslo stránky se ukáže až po listování. *(2026-06-10)*
+- [x] **Slideshow běží při přehrávání videa** – akce se jen zakáže, ale `QTimer` běží dál a přepíná obrázky pod videem. Zastavit slideshow při startu VLC. *(2026-06-10)*
 - [ ] **Esc zavírá celou aplikaci** – nečekané; zvážit potvrzení nebo Esc pouze pro fullscreen/galerii.
 
 ## Výkon
@@ -34,6 +34,10 @@ Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 - [ ] **`QFileSystemWatcher`** – automatická reakce na změny složky na disku.
 - [ ] **Úklid diskové cache náhledů** – strop velikosti (např. 500 MB) + mazání nejstarších záznamů podle času přístupu.
 - [ ] **Směrový prefetch** – při listování vpřed přednačítat N+1 a N+2 místo N−1.
+
+## UI/UX vylepšení
+
+- [x] **Miniatury vycentrované v buňkách** – custom `CenteredIconDelegate` s zachováním aspect ratio. *(2026-06-10)*
 
 ## Nové funkce
 
