@@ -28,7 +28,7 @@ jobs:
         run: |
           cd C:\vcpkg
           .\vcpkg.exe integrate install
-          .\vcpkg.exe install qt6[pdf]:x64-windows --recurse-dependencies
+          .\vcpkg.exe install qt6[pdf]:x64-windows --recurse
 
       # ── 3. CMake konfigurace s vcpkg toolchain ─────────────────────────────
       - name: Configure CMake with vcpkg
