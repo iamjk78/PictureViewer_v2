@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileInfoList>
+#include <QString>
+#include <algorithm>
 
 #include <stdexcept>
 
@@ -17,9 +19,9 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf)
         throw std::runtime_error(QString("Cesta není složka: %1").arg(folderPath).toStdString());
     }
 
+    // Bez řazení — budeme ručně třídit přirozeným řazením
     const QFileInfoList entries = directory.entryInfoList(
-        QDir::Files | QDir::NoDotAndDotDot,
-        QDir::Name | QDir::IgnoreCase
+        QDir::Files | QDir::NoDotAndDotDot
     );
 
     QStringList files;
@@ -30,6 +32,11 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf)
             files.append(entry.absoluteFilePath());
         }
     }
+
+    // Přirozené řazení: img2 < img10 (ne img10 < img2)
+    std::sort(files.begin(), files.end(), [](const QString &a, const QString &b) {
+        return QString::localeAwareCompare(a, b) < 0;
+    });
 
     return files;
 }

@@ -661,6 +661,8 @@ void MainWindow::showImage(int index)
                     .arg(m_imagePaths.size())
             );
         });
+        // Emitovat signal s aktuální stránkou (v případě že byl emitován dříve než se handler připojil)
+        m_imageView->emitCurrentPdfPageInfo();
     }
 
     // V režimu Galerie přepnout z mřížky na zobrazení obrázku
@@ -1298,6 +1300,7 @@ void MainWindow::renameCurrentImage()
     // Rename the file
     if (QFile::rename(currentPath, newPath)) {
         m_imagePaths[m_currentIndex] = newPath;
+        m_thumbnailPanel->updateImagePath(currentPath, newPath);
         updateStatus(newPath);
         m_statusLabel->setText(tr("Obrázek přejmenován na '%1'.").arg(newFileName));
     } else {
@@ -1537,6 +1540,8 @@ void MainWindow::disableImageBrowsing()
     m_enableMoveToDeleteAction->setEnabled(false);
     m_deletePictureAction->setEnabled(false);
     m_deleteFolderAction->setEnabled(false);
+
+    m_slideshowController->stop();
 
     if (m_thumbnailDock) {
         m_thumbnailDock->setEnabled(false);

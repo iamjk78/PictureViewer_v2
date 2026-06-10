@@ -5,13 +5,55 @@
 #include <QIcon>
 #include <QImage>
 #include <QListWidgetItem>
+#include <QPainter>
 #include <QPixmap>
 #include <QSize>
+#include <QStyledItemDelegate>
 #include <QThreadPool>
 
 namespace {
 
 constexpr int kThumbnailSize = 96;
+
+class CenteredIconDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        QVariant data = index.data(Qt::DecorationRole);
+        if (data.isNull()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QIcon icon = qvariant_cast<QIcon>(data);
+        QPixmap pixmap = icon.pixmap(option.decorationSize);
+
+        if (pixmap.isNull()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        painter->fillRect(option.rect, option.palette.base());
+        if (option.state & QStyle::State_Selected) {
+            painter->fillRect(option.rect, option.palette.highlight());
+        }
+
+        // Škálovat pixmapu s zachováním poměru stran (max 96x96)
+        QSize scaledSize = pixmap.size();
+        scaledSize.scale(option.decorationSize, Qt::KeepAspectRatio);
+        if (scaledSize != pixmap.size()) {
+            pixmap = pixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+
+        // Vycentrovat pixmapu v buňce
+        QRect iconRect(QPoint(0, 0), pixmap.size());
+        iconRect.moveCenter(option.rect.center());
+        painter->drawPixmap(iconRect, pixmap);
+    }
+};
 
 } // namespace
 
@@ -25,6 +67,8 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     setIconSize(QSize(kThumbnailSize, kThumbnailSize));
     setSortingEnabled(false);
     setMovement(QListWidget::Static);
+    setUniformItemSizes(true);
+    setItemDelegate(new CenteredIconDelegate(this));
     setStyleSheet(
         "QListWidget { background-color: #2b2b2b; border: none; }"
         "QListWidget::item:selected { background-color: #0d6efd; }"
@@ -53,7 +97,7 @@ void ThumbnailPanel::setDisplayMode(DisplayMode mode)
         setFlow(QListWidget::TopToBottom);
         setWrapping(false);
         setResizeMode(QListWidget::Adjust);
-        setSpacing(4);
+        setSpacing(8);
         setFixedWidth(kThumbnailSize + 24);
         break;
     case DisplayMode::Horizontal:
@@ -61,7 +105,7 @@ void ThumbnailPanel::setDisplayMode(DisplayMode mode)
         setFlow(QListWidget::LeftToRight);
         setWrapping(false);
         setResizeMode(QListWidget::Adjust);
-        setSpacing(4);
+        setSpacing(8);
         setFixedHeight(kThumbnailSize + 24);
         break;
     case DisplayMode::Grid:
@@ -117,6 +161,7 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         auto *item = new QListWidgetItem();
         item->setToolTip(path.section('/', -1));
         item->setData(Qt::UserRole, path);
+        item->setTextAlignment(Qt::AlignCenter);
         addItem(item);
     }
 
@@ -146,19 +191,33 @@ void ThumbnailPanel::removeImage(int index)
     }
 }
 
+void ThumbnailPanel::updateImagePath(const QString &oldPath, const QString &newPath)
+{
+    for (int i = 0; i < count(); ++i) {
+        if (item(i)->data(Qt::UserRole).toString() == oldPath) {
+            item(i)->setData(Qt::UserRole, newPath);
+            item(i)->setToolTip(newPath.section('/', -1));
+            return;
+        }
+    }
+}
+
 void ThumbnailPanel::onItemClicked(QListWidgetItem *item)
 {
     emit imageSelected(row(item));
 }
 
-void ThumbnailPanel::onThumbnailReady(int generation, int index, const QImage &image)
+void ThumbnailPanel::onThumbnailReady(int generation, const QString &path, const QImage &image)
 {
-    if (generation != m_generation || index < 0 || index >= count()) {
+    if (generation != m_generation || path.isEmpty() || image.isNull()) {
         return;
     }
 
-    if (!image.isNull()) {
-        item(index)->setIcon(QIcon(QPixmap::fromImage(image)));
+    for (int i = 0; i < count(); ++i) {
+        if (item(i)->data(Qt::UserRole).toString() == path) {
+            item(i)->setIcon(QIcon(QPixmap::fromImage(image)));
+            return;
+        }
     }
 }
 

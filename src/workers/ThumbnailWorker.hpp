@@ -28,7 +28,7 @@ public:
     void run() override;
 
 signals:
-    void thumbnailReady(int generation, int index, const QImage &image);
+    void thumbnailReady(int generation, const QString &path, const QImage &image);
     void workerFinished(int generation);
     void workerError(int generation, const QString &error);
 

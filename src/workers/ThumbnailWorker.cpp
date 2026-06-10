@@ -46,7 +46,8 @@ void ThumbnailWorker::run()
                 return;
             }
 
-            emit thumbnailReady(m_generation, index, loadThumbnail(m_paths.at(index)));
+            const QString &path = m_paths.at(index);
+            emit thumbnailReady(m_generation, path, loadThumbnail(path));
         }
 
         QThread::yieldCurrentThread();

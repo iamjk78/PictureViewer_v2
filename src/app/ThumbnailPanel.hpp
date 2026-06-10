@@ -32,6 +32,7 @@ public:
     void loadImages(const QStringList &paths);
     void setCurrentIndex(int index);
     void removeImage(int index);
+    void updateImagePath(const QString &oldPath, const QString &newPath);
     QIcon iconAt(int index) const;   // náhled pro placeholder při async načítání
 
     // Cancel the running worker and disconnect all its signals.
@@ -44,7 +45,7 @@ signals:
 
 private slots:
     void onItemClicked(QListWidgetItem *item);
-    void onThumbnailReady(int generation, int index, const QImage &image);
+    void onThumbnailReady(int generation, const QString &path, const QImage &image);
     void onThumbnailsFinished(int generation);
 
 private:

@@ -342,4 +342,11 @@ int ImageView::pdfPageCount() const
     return m_pdfHandler ? m_pdfHandler->pageCount() : 0;
 }
 
+void ImageView::emitCurrentPdfPageInfo()
+{
+    if (isPdfLoaded()) {
+        emit pdfPageChanged(m_currentPdfPage + 1, m_pdfHandler->pageCount());
+    }
+}
+
 } // namespace pictureviewer

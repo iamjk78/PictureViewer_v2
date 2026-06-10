@@ -39,6 +39,7 @@ public:
     bool isPdfLoaded() const;
     int currentPdfPage() const;
     int pdfPageCount() const;
+    void emitCurrentPdfPageInfo();   // re-emit current page info (for handlers connecting late)
 
 signals:
     void pdfPageChanged(int page, int totalPages);
