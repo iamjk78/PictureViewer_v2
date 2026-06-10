@@ -1,14 +1,10 @@
 name: Windows Build
 
 # Triggers:
-#   push na main     → build + artifact (ZIP s názvem PictureViewer-dev-windows.zip)
-#   push tagu v*.*   → build + artifact + GitHub Release
+#   workflow_dispatch (ruční spuštění z GitHub UI Actions) → build + artifact
+#   Automatické triggery VYPNUTY — build se vytváří jen když si ho vyžádáš
 on:
-  push:
-    branches: [ main ]
-    tags:
-      - 'v*'
-  workflow_dispatch:   # umožní spustit workflow ručně z GitHub UI
+  workflow_dispatch:
 
 # Nutné pro krok "Create GitHub Release"
 permissions:
@@ -32,12 +28,12 @@ jobs:
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.6.3'
+          version: '6.5.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2022_64'
+          arch: 'win64_msvc2019_64'
           cache: true
-          cache-key-prefix: 'qt6-windows-6.6.3-msvc2022'
+          cache-key-prefix: 'qt6-windows-6.5.3-msvc2019'
 
       # ── 3. MSVC prostředí + CMake konfigurace (Ninja, x64) ────────────────
       # Ninja je nezávislý na verzi Visual Studia na runneru — generátor
