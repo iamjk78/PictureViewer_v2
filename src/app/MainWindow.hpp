@@ -10,6 +10,8 @@
 class QAction;
 class QActionGroup;
 class QDockWidget;
+class QDragEnterEvent;
+class QDropEvent;
 class QGraphicsColorizeEffect;
 class QLabel;
 class QSpinBox;
@@ -46,6 +48,8 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private slots:
     void openFolderDialog();
@@ -73,6 +77,7 @@ private slots:
     void onVlcConnectionLost();
     void onVlcProcessCrashed();
     void pollVlcKeys();
+    void showImageContextMenu(const QPoint &globalPos);
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -152,6 +157,8 @@ private:
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
     QAction *m_renameImageAction;
+    QAction *m_rotateLeftAction = nullptr;
+    QAction *m_rotateRightAction = nullptr;
 };
 
 } // namespace pictureviewer

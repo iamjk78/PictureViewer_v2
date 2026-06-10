@@ -2,6 +2,7 @@
 
 #include "core/ImageFormats.hpp"
 
+#include <QCollator>
 #include <QDir>
 #include <QFileInfo>
 #include <QFileInfoList>
@@ -33,9 +34,14 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf)
         }
     }
 
-    // Přirozené řazení: img2 < img10 (ne img10 < img2)
-    std::sort(files.begin(), files.end(), [](const QString &a, const QString &b) {
-        return QString::localeAwareCompare(a, b) < 0;
+    // Přirozené řazení: img2 < img10 (ne img10 < img2). QCollator s numericMode
+    // řadí číselné úseky podle hodnoty, ne lexikograficky. Porovnáváme jen názvy
+    // souborů (všechny jsou ze stejné složky — bez rekurze).
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::sort(files.begin(), files.end(), [&collator](const QString &a, const QString &b) {
+        return collator.compare(QFileInfo(a).fileName(), QFileInfo(b).fileName()) < 0;
     });
 
     return files;

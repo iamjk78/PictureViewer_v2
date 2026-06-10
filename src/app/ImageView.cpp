@@ -3,6 +3,7 @@
 #include "core/PdfHandler.hpp"
 
 #include <QBrush>
+#include <QContextMenuEvent>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
 #include <QImageReader>
@@ -152,6 +153,51 @@ void ImageView::zoomIn()
 void ImageView::zoomOut()
 {
     applyZoom(1.0 / kZoomStep);
+}
+
+void ImageView::rotateBy(int degrees)
+{
+    // Otáčíme jen obrázky. U PDF by rotaci stejně přepsal re-render při zoomu,
+    // proto ji tam neumožňujeme. Rotace je čistě vizuální (neukládá se na disk).
+    if (!m_hasContent || isPdfLoaded()) {
+        return;
+    }
+    const QPixmap current = m_pixmapItem->pixmap();
+    if (current.isNull()) {
+        return;
+    }
+
+    QTransform rotation;
+    rotation.rotate(degrees);
+    m_pixmapItem->setPixmap(current.transformed(rotation, Qt::SmoothTransformation));
+    m_scene->setSceneRect(m_pixmapItem->boundingRect());
+    setTransform(QTransform());
+    fitToWindow();
+}
+
+void ImageView::rotateLeft()
+{
+    rotateBy(-90);
+}
+
+void ImageView::rotateRight()
+{
+    rotateBy(90);
+}
+
+QImage ImageView::displayedImage() const
+{
+    if (!m_hasContent && !isPdfLoaded()) {
+        return {};
+    }
+    const QPixmap pixmap = m_pixmapItem->pixmap();
+    return pixmap.isNull() ? QImage() : pixmap.toImage();
+}
+
+void ImageView::contextMenuEvent(QContextMenuEvent *event)
+{
+    emit contextMenuRequested(event->globalPos());
+    event->accept();
 }
 
 void ImageView::keyPressEvent(QKeyEvent *event)

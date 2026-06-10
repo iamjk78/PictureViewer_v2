@@ -31,8 +31,14 @@
 #include <windows.h>
 #endif
 #include <QActionGroup>
+#include <QClipboard>
+#include <QDesktopServices>
 #include <QDirIterator>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QEvent>
+#include <QMimeData>
+#include <QProcess>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -143,6 +149,7 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
+    setAcceptDrops(true);   // přetažení složky/souboru do okna
 
     // Centrální stack: index 0 = ImageView; v režimu Galerie se sem dočasně
     // přesouvá ThumbnailPanel jako mřížka přes celé okno.
@@ -152,6 +159,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_imageLoader = new ImageLoader(this);
     connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
+    connect(m_imageView, &ImageView::contextMenuRequested, this, &MainWindow::showImageContextMenu);
 
     m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
                                    m_settingsManager->effectiveThumbnailCacheDir());
@@ -382,6 +390,8 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             event->accept();
             return;
         }
+        // Otočení obrázku řeší QAction zkratky ([ / ] / L) v setupToolbar() —
+        // fungují window-wide bez ohledu na to, co má zrovna focus.
         QMainWindow::keyPressEvent(event);
         return;
     }
@@ -433,6 +443,93 @@ void MainWindow::openFile(const QString &filePath)
     const QString folderPath = cleanPath.section('/', 0, -2);
     qDebug() << "Extracted folder path:" << folderPath;
     loadFolder(folderPath);
+}
+
+// ── Drag & drop ──────────────────────────────────────────────────────────────
+// Přijmeme přetažení, pokud aspoň jeden lokální URL je složka nebo podporovaný
+// soubor. Drop pak otevře první takový — složku přes loadFolder(), soubor přes
+// openFile() (ten dohledá složku a vybere přesně tento soubor).
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (!event->mimeData()->hasUrls()) {
+        return;
+    }
+    for (const QUrl &url : event->mimeData()->urls()) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+        const QFileInfo info(url.toLocalFile());
+        if (info.isDir() || isSupportedFileExtension("." + info.suffix())) {
+            event->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasUrls()) {
+        return;
+    }
+    for (const QUrl &url : event->mimeData()->urls()) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+        const QString localPath = url.toLocalFile();
+        const QFileInfo info(localPath);
+        if (info.isDir()) {
+            m_requestedFile.clear();
+            loadFolder(localPath);
+            event->acceptProposedAction();
+            return;
+        }
+        if (isSupportedFileExtension("." + info.suffix())) {
+            openFile(localPath);
+            event->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+// ── Kontextové menu nad obrázkem ─────────────────────────────────────────────
+
+void MainWindow::showImageContextMenu(const QPoint &globalPos)
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0
+        || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+
+    QMenu menu(this);
+
+    QAction *revealAction = menu.addAction(tr("Zobrazit ve Finderu"));
+    connect(revealAction, &QAction::triggered, this, [currentPath] {
+#if defined(Q_OS_MACOS)
+        QProcess::startDetached("open", {"-R", currentPath});
+#elif defined(Q_OS_WIN)
+        QProcess::startDetached("explorer", {"/select,", QDir::toNativeSeparators(currentPath)});
+#else
+        // Linux/ostatní: otevřít obsahující složku
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(currentPath).absolutePath()));
+#endif
+    });
+
+    QAction *copyImageAction = menu.addAction(tr("Kopírovat obrázek"));
+    connect(copyImageAction, &QAction::triggered, this, [this] {
+        const QImage image = m_imageView->displayedImage();
+        if (!image.isNull()) {
+            QApplication::clipboard()->setImage(image);
+        }
+    });
+
+    QAction *copyPathAction = menu.addAction(tr("Kopírovat cestu k souboru"));
+    connect(copyPathAction, &QAction::triggered, this, [currentPath] {
+        QApplication::clipboard()->setText(QDir::toNativeSeparators(currentPath));
+    });
+
+    menu.exec(globalPos);
 }
 
 void MainWindow::onRememberLastFolderToggled(bool checked)
@@ -1020,7 +1117,24 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_toggleSlideshowAction);
     toolbar->addWidget(m_intervalSpinBox);
     toolbar->addSeparator();
+    // Otočení obrázku — zkratky fungují v celém okně (na rozdíl od keyPressEvent,
+    // který by klávesy nedostal, když má focus panel náhledů). Doleva: '['/'L',
+    // doprava: ']'. ('R' je obsazené Přejmenováním.)
+    m_rotateLeftAction = new QAction(QStringLiteral("⟲"), this);
+    m_rotateLeftAction->setToolTip(tr("Otočit doleva ([ nebo L)"));
+    m_rotateLeftAction->setShortcuts({QKeySequence(Qt::Key_BracketLeft), QKeySequence(Qt::Key_L)});
+    connect(m_rotateLeftAction, &QAction::triggered, m_imageView, &ImageView::rotateLeft);
+
+    m_rotateRightAction = new QAction(QStringLiteral("⟳"), this);
+    m_rotateRightAction->setToolTip(tr("Otočit doprava (])"));
+    m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
+    connect(m_rotateRightAction, &QAction::triggered, m_imageView, &ImageView::rotateRight);
+
     toolbar->addAction(m_renameImageAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_rotateLeftAction);
+    toolbar->addAction(m_rotateRightAction);
+    toolbar->addSeparator();
     toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
 }

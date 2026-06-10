@@ -10,8 +10,9 @@ namespace pictureviewer {
 
 // Asynchronní dekodér obrázků s RAM cache (LRU) a prefetchem.
 //
-// Cache klíč je (cesta + mtime), takže externí změna souboru přirozeně
-// zneplatní starý záznam. Cost je v kB dekódovaných dat; výchozí limit
+// Cache klíč je (cesta + mtime + velikost), takže externí změna souboru
+// přirozeně zneplatní starý záznam (i když mtime kolize ve stejné sekundě —
+// liší se velikost). Cost je v kB dekódovaných dat; výchozí limit
 // 256 MB ≈ 5 fotek z mobilu v plném rozlišení.
 //
 // Použití: zavolat cachedImage() — při hitu zobrazit hned; při missu
@@ -39,11 +40,13 @@ public:
     // Zastaví doručování výsledků; běžící dekódování doběhne naprázdno.
     void shutdown();
 
+    // Klíč do cache: cesta + mtime + velikost souboru. Veřejné kvůli testům.
+    static QString cacheKey(const QString &path);
+
 signals:
     void imageReady(const QString &path, const QImage &image);
 
 private:
-    static QString cacheKey(const QString &path);
     void startDecode(const QString &path);
 
     mutable QCache<QString, QImage> m_cache;

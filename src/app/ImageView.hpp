@@ -6,6 +6,7 @@
 class QGraphicsPixmapItem;
 class QGraphicsScene;
 class QImage;
+class QContextMenuEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QSize;
@@ -34,6 +35,8 @@ public:
     void resetZoom();
     void zoomIn();
     void zoomOut();
+    void rotateLeft();    // otočit zobrazený obrázek o 90° proti směru hodin
+    void rotateRight();   // otočit zobrazený obrázek o 90° po směru hodin
 
     // PDF navigation
     bool nextPage();
@@ -43,8 +46,13 @@ public:
     int pdfPageCount() const;
     void emitCurrentPdfPageInfo();   // re-emit current page info (for handlers connecting late)
 
+    // Aktuálně zobrazený obrázek (full-res u obrázku, vyrenderovaná stránka u
+    // PDF). Prázdný QImage, pokud není co zobrazit. Pro kopírování do schránky.
+    QImage displayedImage() const;
+
 signals:
     void pdfPageChanged(int page, int totalPages);
+    void contextMenuRequested(const QPoint &globalPos);   // pravý klik nad pohledem
     // Procento zvětšení obrázku (100.0 = 1:1). Záporná hodnota = skrýt
     // indikátor (PDF nebo prázdný pohled — tam zoom % nedává smysl).
     void zoomChanged(double percent);
@@ -54,9 +62,11 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     void applyZoom(double factor);
+    void rotateBy(int degrees);
     void emitZoomChanged();   // odešle aktuální zoom % (nebo -1 pro skrytí)
     void renderPdfPage(int pageIndex);
     void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)

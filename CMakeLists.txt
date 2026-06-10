@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PictureViewer VERSION 0.6 LANGUAGES CXX)
+project(PictureViewer VERSION 0.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,13 @@ find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Widgets Network Pdf)
 
 # Build subdirectories for core, app, and workers
 add_subdirectory(src)
+
+# Jednotkové testy (volitelné — zapni -DBUILD_TESTING=ON, výchozí ON).
+option(BUILD_TESTING "Build unit tests" ON)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # Main executable combining all modules
 set(_app_icon_sources)

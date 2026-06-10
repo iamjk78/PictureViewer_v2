@@ -65,18 +65,28 @@ Aktualizováno po code review a bug fixech (verze 0.6).
 - VlcController cleanup() – už chráněný null checky, bezpečný
 - ImageCatalog throw – toStdString() konverze je správná
 
-## Nové funkce
+## Verze 0.7 – nové funkce
 
-- [ ] Otočení obrázku o 90° (klávesy L/R), volitelně uložit do souboru
-- [ ] Drag & drop složky/souboru do okna
+- [x] **Indikátor úrovně zoomu** ve status baru – jen pro obrázky (1:1 = 100 %),
+      u PDF skrytý (rozlišení renderu se přizpůsobuje zoomu). *(2026-06-10)*
+- [x] **Otočení obrázku o 90°** – toolbar ⟲/⟳ + zkratky `[`/`L` doleva, `]` doprava.
+      Vizuální (neukládá se na disk); u PDF neaktivní. *(2026-06-10)*
+- [x] **Drag & drop** složky/souboru do okna. *(2026-06-10)*
+- [x] **Dynamický seznam formátů** z `QImageReader::supportedImageFormats()`
+      (HEIC, HEIF, SVG, JP2…); dokumentové přípony (pdf) vyřazeny, aby šly
+      přes PDF render, ne obrázkový dekodér. *(2026-06-10)*
+- [x] **Kontextové menu** (pravý klik) – Zobrazit ve Finderu, kopírovat obrázek,
+      kopírovat cestu. *(2026-06-10)*
+- [x] **Jednotkové testy** jádra (Qt Test) – řazení, formáty, cacheKey, velikost
+      cache; zachytily regresi s `pdf` v image formátech. *(2026-06-10)*
+
+## Nové funkce – zbývá
+
+- [ ] Otočení – volitelně uložit otočení do souboru (zatím jen vizuální)
 - [ ] Animované GIFy přes `QMovie`
-- [ ] Dynamický seznam formátů z `QImageReader::supportedImageFormats()` (HEIC, AVIF, SVG, …)
 - [ ] Volba řazení (název / datum / velikost, vzestupně / sestupně)
 - [ ] Náhodné pořadí slideshow
-- [ ] „Zobrazit ve Finderu/Exploreru" + kopírovat obrázek do schránky
 - [ ] Vícenásobný výběr v režimu Galerie (hromadné mazání/přesun)
 - [ ] Rekurzivní sken podsložek (volitelně)
-- [x] Indikátor úrovně zoomu ve status baru – jen pro obrázky (1:1 = 100 %),
-      u PDF skrytý (rozlišení renderu se přizpůsobuje zoomu). *(2026-06-10)*
 - [ ] EXIF data (clona, ISO, expozice) v Pro panelu metadat
 - [ ] Aktualizace HelpDialog o nové režimy vzhledu a cache

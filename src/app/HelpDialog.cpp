@@ -120,7 +120,11 @@ void HelpDialog::showFormats(QWidget *parent)
         "    <td>Přenosný formát dokumentů (lze vypnout v nastavení)</td></tr>"
         "</table>"
         "<p class='note'>Filtr souborů ignoruje velikost písmen&nbsp;—"
-        " <kbd>.JPG</kbd> i <kbd>.jpg</kbd> jsou rozpoznány shodně.</p>";
+        " <kbd>.JPG</kbd> i <kbd>.jpg</kbd> jsou rozpoznány shodně.</p>"
+        "<p class='note'>Seznam obrázkových formátů se odvozuje z Qt pluginů"
+        " nainstalovaných v systému, takže podle prostředí mohou být dostupné"
+        " i&nbsp;<kbd>.heic</kbd>, <kbd>.heif</kbd>, <kbd>.svg</kbd>,"
+        " <kbd>.jp2</kbd> a&nbsp;další.</p>";
 
     auto *dlg = new HelpDialog(tr("Podporované formáty"), html, parent);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
@@ -170,6 +174,8 @@ void HelpDialog::showShortcuts(QWidget *parent)
         "<tr><th>Akce</th><th>Zkratka</th></tr>"
         "<tr><td>Přejmenovat obrázek</td>"
         "    <td><kbd>R</kbd></td></tr>"
+        "<tr><td>Otočit doleva / doprava</td>"
+        "    <td><kbd>[</kbd> nebo <kbd>L</kbd> / <kbd>]</kbd></td></tr>"
         "<tr><td>Odstranit / přesunout obrázek</td>"
         "    <td><kbd>Delete</kbd>, <kbd>d</kbd>, <kbd>D</kbd></td></tr>"
         "<tr><td>Plná obrazovka</td>"
@@ -191,6 +197,19 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.7</h3>"
+        "<ul>"
+        "<li><b>Indikátor zoomu</b> — aktuální zvětšení (%) vpravo ve status baru"
+        " (u obrázků; 100&nbsp;% = originální velikost)</li>"
+        "<li><b>Otočení obrázku</b> — klávesy <kbd>[</kbd>/<kbd>L</kbd> doleva,"
+        " <kbd>]</kbd> doprava</li>"
+        "<li><b>Drag &amp; drop</b> — přetažení složky nebo souboru přímo do okna</li>"
+        "<li><b>Kontextové menu</b> — pravým tlačítkem: Zobrazit ve Finderu,"
+        " kopírovat obrázek nebo cestu</li>"
+        "<li><b>Více formátů</b> — seznam podporovaných obrázků se odvozuje"
+        " z nainstalovaných Qt pluginů (HEIC, HEIF, SVG, JP2…)</li>"
+        "<li>Jednotkové testy jádra (řazení, formáty, cache) proti regresím</li>"
+        "</ul>"
         "<h3>Verze 0.6</h3>"
         "<ul>"
         "<li><b>Přepínatelná rozložení UI</b> — Klasický, Filmový pás, Imerzivní, "
