@@ -29,7 +29,9 @@ public:
         }
 
         QIcon icon = qvariant_cast<QIcon>(data);
-        QPixmap pixmap = icon.pixmap(option.decorationSize);
+        // Požádat o pixmapu v menší velikosti (72px) a pak ji sami škálujeme
+        // Tím zabráníme Qt v deformaci aspect ratio
+        QPixmap pixmap = icon.pixmap(72);
 
         if (pixmap.isNull()) {
             QStyledItemDelegate::paint(painter, option, index);
@@ -41,13 +43,13 @@ public:
             painter->fillRect(option.rect, option.palette.highlight());
         }
 
-        // Škálovat pixmapu aby se vešla do buňky (max 96x96) a zachovala aspect ratio
-        // Např. portrait (96x144) → (64x96); landscape (144x96) → (96x64)
-        QSize maxSize(kThumbnailSize, kThumbnailSize);
-        QSize scaledSize = pixmap.size();
-        scaledSize.scale(maxSize, Qt::KeepAspectRatio);
-        if (scaledSize != pixmap.size()) {
-            pixmap = pixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        // Pokud je pixmap větší než 96, škálovat na max 96x96 s aspect ratio
+        // Tímto si jistíme, že se vejde do buňky
+        if (pixmap.width() > kThumbnailSize || pixmap.height() > kThumbnailSize) {
+            pixmap = pixmap.scaledToWidth(kThumbnailSize, Qt::SmoothTransformation);
+            if (pixmap.height() > kThumbnailSize) {
+                pixmap = pixmap.scaledToHeight(kThumbnailSize, Qt::SmoothTransformation);
+            }
         }
 
         // Vycentrovat pixmapu v buňce
@@ -69,7 +71,7 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     setIconSize(QSize(kThumbnailSize, kThumbnailSize));
     setSortingEnabled(false);
     setMovement(QListWidget::Static);
-    setUniformItemSizes(true);
+    setUniformItemSizes(true);  // Zpět povoleno - size hint zabraňuje přesahu
     setItemDelegate(new CenteredIconDelegate(this));
     setStyleSheet(
         "QListWidget { background-color: #2b2b2b; border: none; }"
@@ -164,6 +166,8 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         item->setToolTip(path.section('/', -1));
         item->setData(Qt::UserRole, path);
         item->setTextAlignment(Qt::AlignCenter);
+        // Nastavit fixní velikost položky - zabraňuje přesahu portrait obrázků
+        item->setSizeHint(QSize(96, 96));
         addItem(item);
     }
 
