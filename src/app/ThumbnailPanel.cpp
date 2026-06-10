@@ -41,9 +41,11 @@ public:
             painter->fillRect(option.rect, option.palette.highlight());
         }
 
-        // Škálovat pixmapu s zachováním poměru stran (max 96x96)
+        // Škálovat pixmapu aby se vešla do buňky (max 96x96) a zachovala aspect ratio
+        // Např. portrait (96x144) → (64x96); landscape (144x96) → (96x64)
+        QSize maxSize(kThumbnailSize, kThumbnailSize);
         QSize scaledSize = pixmap.size();
-        scaledSize.scale(option.decorationSize, Qt::KeepAspectRatio);
+        scaledSize.scale(maxSize, Qt::KeepAspectRatio);
         if (scaledSize != pixmap.size()) {
             pixmap = pixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         }
