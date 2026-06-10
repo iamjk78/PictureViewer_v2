@@ -1,11 +1,29 @@
 #include "app/ThumbnailCacheManager.hpp"
 
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
 #include <algorithm>
 
 namespace pictureviewer {
+
+qint64 ThumbnailCacheManager::calculateCacheSize(const QString &cacheDir)
+{
+    QDir dir(cacheDir);
+    if (!dir.exists()) {
+        return 0;
+    }
+
+    qint64 totalSize = 0;
+    QDirIterator it(cacheDir, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        totalSize += it.fileInfo().size();
+    }
+
+    return totalSize;
+}
 
 void ThumbnailCacheManager::cleanupIfNeeded(const QString &cacheDir)
 {
@@ -14,36 +32,48 @@ void ThumbnailCacheManager::cleanupIfNeeded(const QString &cacheDir)
         return;
     }
 
+    // Spočítat aktuální velikost cache
+    qint64 totalSize = calculateCacheSize(cacheDir);
+
+    // Jenom mazat pokud cache >= 500 MB
+    if (totalSize < CacheLimitBytes) {
+        return;
+    }
+
     // Sbírat všechny cache soubory s jejich metadata
     struct CacheFile {
         QString path;
         qint64 size;
-        qint64 lastAccessTime;
+        qint64 lastModifiedTime;
     };
 
     QList<CacheFile> files;
-    qint64 totalSize = 0;
+    const qint64 thirtyDaysAgo = QDateTime::currentSecsSinceEpoch() - (DeleteOlderThanDays * 86400);
 
     QDirIterator it(cacheDir, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         it.next();
         QFileInfo fileInfo(it.fileInfo());
-        CacheFile f;
-        f.path = fileInfo.absoluteFilePath();
-        f.size = fileInfo.size();
-        f.lastAccessTime = fileInfo.lastModified().toSecsSinceEpoch();
-        files.append(f);
-        totalSize += f.size;
+        qint64 lastModified = fileInfo.lastModified().toSecsSinceEpoch();
+
+        // Jenom zahrnout soubory starší než 30 dní
+        if (lastModified < thirtyDaysAgo) {
+            CacheFile f;
+            f.path = fileInfo.absoluteFilePath();
+            f.size = fileInfo.size();
+            f.lastModifiedTime = lastModified;
+            files.append(f);
+        }
     }
 
-    // Pokud jsme pod limitem, nic nedělej
-    if (totalSize <= CacheLimitBytes) {
+    // Pokud nemáme žádné soubory ke smazání, skončit
+    if (files.isEmpty()) {
         return;
     }
 
     // Setřídit podle času přístupu (nejstarší na začátku)
     std::sort(files.begin(), files.end(), [](const CacheFile &a, const CacheFile &b) {
-        return a.lastAccessTime < b.lastAccessTime;
+        return a.lastModifiedTime < b.lastModifiedTime;
     });
 
     // Smazat nejstarší soubory, dokud se nedostaneme pod limit

@@ -901,6 +901,19 @@ void MainWindow::setupMenu()
     // ── Cache náhledů ─────────────────────────────────────────────────────────
     QMenu *cacheMenu = settingsMenu->addMenu(tr("Cache náhledů"));
 
+    // Zobrazit velikost cache
+    QAction *cacheSizeAction = cacheMenu->addAction(tr("Aktuální velikost cache: …"));
+    cacheSizeAction->setEnabled(false);
+    connect(cacheMenu, &QMenu::aboutToShow, this, [this, cacheSizeAction] {
+        const QString cacheDir = m_settingsManager->effectiveThumbnailCacheDir();
+        qint64 sizeBytes = ThumbnailCacheManager::calculateCacheSize(cacheDir);
+        double sizeMB = sizeBytes / (1024.0 * 1024.0);
+        cacheSizeAction->setText(tr("Aktuální velikost cache: %1 MB")
+                                     .arg(QString::number(sizeMB, 'f', 1)));
+    });
+
+    cacheMenu->addSeparator();
+
     QAction *cacheEnabledAction = cacheMenu->addAction(tr("Používat diskovou cache"));
     cacheEnabledAction->setCheckable(true);
     cacheEnabledAction->setChecked(m_settingsManager->thumbnailCacheEnabled());
@@ -933,13 +946,12 @@ void MainWindow::setupMenu()
             return;
         }
 
-        // Spočítat velikost pro informovaný souhlas uživatele
-        qint64 totalBytes = 0;
+        // Spočítat velikost a počet souborů
+        qint64 totalBytes = ThumbnailCacheManager::calculateCacheSize(cacheDir);
         int fileCount = 0;
         QDirIterator it(cacheDir, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             it.next();
-            totalBytes += it.fileInfo().size();
             ++fileCount;
         }
 
