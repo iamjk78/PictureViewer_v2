@@ -20,7 +20,6 @@
 #include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
-#include <QFileSystemWatcher>
 #include <QGraphicsColorizeEffect>
 #include <QMessageBox>
 #include <QUrl>
@@ -214,12 +213,6 @@ void MainWindow::cancelAllWorkers()
         m_imageLoader->shutdown();
     }
 
-    // Zrušit sledování složky
-    if (m_folderWatcher != nullptr) {
-        disconnect(m_folderWatcher, nullptr, this, nullptr);
-        m_folderWatcher->deleteLater();
-        m_folderWatcher = nullptr;
-    }
 }
 
 // ── closeEvent ────────────────────────────────────────────────────────────────
@@ -516,14 +509,6 @@ void MainWindow::onScanFinished(int generation)
     m_folderScanWorker = nullptr;
 }
 
-void MainWindow::onFolderChanged()
-{
-    // Složka se změnila na disku (přidán/smazán/změněn soubor)
-    // Znovu spustit sken, aby se katalog aktualizoval
-    if (!m_currentFolderPath.isEmpty()) {
-        loadFolder(m_currentFolderPath);
-    }
-}
 
 void MainWindow::showPreviousImage()
 {
@@ -575,17 +560,6 @@ void MainWindow::loadFolder(const QString &folderPath)
         m_folderScanWorker->cancel();
         m_folderScanWorker = nullptr;
     }
-
-    // Sledovat změny v otevřené složce (nové/smazané soubory)
-    if (m_folderWatcher != nullptr) {
-        disconnect(m_folderWatcher, nullptr, this, nullptr);
-        m_folderWatcher->deleteLater();
-    }
-    m_currentFolderPath = folderPath;
-    m_folderWatcher = new QFileSystemWatcher(this);
-    m_folderWatcher->addPath(folderPath);
-    connect(m_folderWatcher, &QFileSystemWatcher::directoryChanged,
-            this, &MainWindow::onFolderChanged);
 
     // Parent must be nullptr — memory is managed by the deleteLater connection
     // below. A Qt parent would create a second deletion path → double-free.

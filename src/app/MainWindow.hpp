@@ -10,7 +10,6 @@
 class QAction;
 class QActionGroup;
 class QDockWidget;
-class QFileSystemWatcher;
 class QGraphicsColorizeEffect;
 class QLabel;
 class QSpinBox;
@@ -74,7 +73,6 @@ private slots:
     void onVlcConnectionLost();
     void onVlcProcessCrashed();
     void pollVlcKeys();
-    void onFolderChanged();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -133,8 +131,6 @@ private:
     MetadataPanel *m_metadataPanel = nullptr;
     QWidget *m_overlayToolbar = nullptr;
     QTimer *m_overlayHideTimer = nullptr;
-    QFileSystemWatcher *m_folderWatcher = nullptr;
-    QString m_currentFolderPath;
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QSpinBox *m_intervalSpinBox;
