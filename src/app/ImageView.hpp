@@ -9,6 +9,7 @@ class QKeyEvent;
 class QMouseEvent;
 class QString;
 class QResizeEvent;
+class QTimer;
 class QWheelEvent;
 
 namespace pictureviewer {
@@ -25,6 +26,7 @@ public:
 
     void clearImage();
     bool loadImage(const QString &path);
+    bool setImage(const QImage &image);   // zobrazí už dekódovaný obrázek (cache/worker)
     bool loadPdf(const QString &path);
     void fitToWindow();
     void resetZoom();
@@ -50,6 +52,7 @@ protected:
 private:
     void applyZoom(double factor);
     void renderPdfPage(int pageIndex);
+    void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)
 
     QGraphicsScene *m_scene;
     QGraphicsPixmapItem *m_pixmapItem;
@@ -57,6 +60,7 @@ private:
     bool m_manuallyZoomed;
     std::unique_ptr<PdfHandler> m_pdfHandler;
     int m_currentPdfPage;
+    QTimer *m_pdfRerenderTimer = nullptr;
 };
 
 } // namespace pictureviewer

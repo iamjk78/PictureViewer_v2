@@ -23,18 +23,55 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     , m_generation(0)
 {
     setIconSize(QSize(kThumbnailSize, kThumbnailSize));
-    setFixedWidth(kThumbnailSize + 24);
-    setSpacing(4);
-    setViewMode(QListWidget::ListMode);
-    setFlow(QListWidget::TopToBottom);
-    setResizeMode(QListWidget::Adjust);
     setSortingEnabled(false);
     setMovement(QListWidget::Static);
     setStyleSheet(
         "QListWidget { background-color: #2b2b2b; border: none; }"
         "QListWidget::item:selected { background-color: #0d6efd; }"
     );
+    setDisplayMode(DisplayMode::Vertical);
     connect(this, &QListWidget::itemClicked, this, &ThumbnailPanel::onItemClicked);
+}
+
+void ThumbnailPanel::setDiskCache(bool enabled, const QString &cacheDir)
+{
+    m_diskCacheEnabled = enabled;
+    m_diskCacheDir = cacheDir;
+}
+
+void ThumbnailPanel::setDisplayMode(DisplayMode mode)
+{
+    m_displayMode = mode;
+
+    // Zrušit případné pevné rozměry z předchozího režimu
+    setMinimumSize(0, 0);
+    setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+
+    switch (mode) {
+    case DisplayMode::Vertical:
+        setViewMode(QListWidget::ListMode);
+        setFlow(QListWidget::TopToBottom);
+        setWrapping(false);
+        setResizeMode(QListWidget::Adjust);
+        setSpacing(4);
+        setFixedWidth(kThumbnailSize + 24);
+        break;
+    case DisplayMode::Horizontal:
+        setViewMode(QListWidget::ListMode);
+        setFlow(QListWidget::LeftToRight);
+        setWrapping(false);
+        setResizeMode(QListWidget::Adjust);
+        setSpacing(4);
+        setFixedHeight(kThumbnailSize + 24);
+        break;
+    case DisplayMode::Grid:
+        setViewMode(QListWidget::IconMode);
+        setFlow(QListWidget::LeftToRight);
+        setWrapping(true);
+        setResizeMode(QListWidget::Adjust);
+        setSpacing(12);
+        break;
+    }
 }
 
 ThumbnailPanel::~ThumbnailPanel()
@@ -94,6 +131,14 @@ void ThumbnailPanel::setCurrentIndex(int index)
     }
 }
 
+QIcon ThumbnailPanel::iconAt(int index) const
+{
+    if (index >= 0 && index < count()) {
+        return item(index)->icon();
+    }
+    return {};
+}
+
 void ThumbnailPanel::removeImage(int index)
 {
     if (index >= 0 && index < count()) {
@@ -135,7 +180,8 @@ void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)
     // Parent must be nullptr — this object is managed by the thread pool
     // (deleted via deleteLater on workerFinished). A Qt parent would create a
     // second deletion path and cause a double-free crash.
-    auto *worker = new ThumbnailWorker(paths, m_generation, nullptr);
+    auto *worker = new ThumbnailWorker(paths, m_generation,
+                                       m_diskCacheEnabled, m_diskCacheDir, nullptr);
     connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
     connect(worker, &ThumbnailWorker::workerFinished, this, &ThumbnailPanel::onThumbnailsFinished);
     connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);

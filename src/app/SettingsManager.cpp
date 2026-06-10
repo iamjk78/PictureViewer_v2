@@ -36,6 +36,11 @@ constexpr auto kVlcTimeoutMsKey          = "VLC/vlc_timeout_ms";
 
 constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
 
+constexpr auto kUiLayoutKey              = "UI/layout";
+
+constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
+constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
+
 constexpr int kDefaultUpdateDelayMinutes = 5;
 constexpr int kDefaultUpdateIntervalDays = 1;
 constexpr int kDefaultVlcTimeoutMs       = 5000;
@@ -195,6 +200,49 @@ bool SettingsManager::enablePdfProcessing() const
 void SettingsManager::setEnablePdfProcessing(bool enabled)
 {
     m_settings->setValue(kEnablePdfProcessingKey, enabled);
+}
+
+// ── UI Settings ──────────────────────────────────────────────────────────────
+
+QString SettingsManager::uiLayout() const
+{
+    return m_settings->value(kUiLayoutKey, QStringLiteral("classic")).toString();
+}
+
+void SettingsManager::setUiLayout(const QString &layout)
+{
+    m_settings->setValue(kUiLayoutKey, layout);
+}
+
+// ── Thumbnail Cache ──────────────────────────────────────────────────────────
+
+bool SettingsManager::thumbnailCacheEnabled() const
+{
+    return m_settings->value(kThumbCacheEnabledKey, true).toBool();
+}
+
+void SettingsManager::setThumbnailCacheEnabled(bool enabled)
+{
+    m_settings->setValue(kThumbCacheEnabledKey, enabled);
+}
+
+QString SettingsManager::thumbnailCacheRoot() const
+{
+    return m_settings->value(kThumbCacheRootKey, QString()).toString();
+}
+
+void SettingsManager::setThumbnailCacheRoot(const QString &path)
+{
+    m_settings->setValue(kThumbCacheRootKey, path);
+}
+
+QString SettingsManager::effectiveThumbnailCacheDir() const
+{
+    QString root = thumbnailCacheRoot();
+    if (root.isEmpty()) {
+        root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    }
+    return root + QStringLiteral("/PictureViewerThumbs");
 }
 
 } // namespace pictureviewer

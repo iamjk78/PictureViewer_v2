@@ -8,15 +8,20 @@
 #include <QStringList>
 
 class QAction;
+class QActionGroup;
 class QDockWidget;
 class QGraphicsColorizeEffect;
 class QLabel;
 class QSpinBox;
+class QStackedWidget;
+class QToolBar;
 
 namespace pictureviewer {
 
+class ImageLoader;
 class ImageView;
 class FolderScanWorker;
+class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
 class ThumbnailPanel;
@@ -27,6 +32,9 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    // Přepínatelná rozložení UI (Nastavení → Vzhled aplikace)
+    enum class UiLayout { Classic, Filmstrip, Immersive, Gallery, Pro };
+
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
@@ -36,6 +44,8 @@ public:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void openFolderDialog();
@@ -57,6 +67,7 @@ private slots:
     void moveImageToDeleteFolder();
     void renameCurrentImage();
     void onDeleteFolder();
+    void onImageDecoded(const QString &path, const QImage &image);
     void onPlayVideo();
     void onVlcStatusChanged(int vlcState);
     void onVlcConnectionLost();
@@ -66,6 +77,15 @@ private slots:
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
     void loadFolder(const QString &folderPath);
+    void applyUiLayout(UiLayout layout);
+    void displayPathEarly(const QString &path);   // zobrazení souboru před koncem skenu
+    void prefetchNeighbors();
+    void enterGalleryGrid();
+    void leaveGalleryGrid();
+    void showGalleryGrid();
+    void setupOverlayToolbar();
+    void positionOverlayToolbar();
+    void showOverlayToolbar();
     void enterFullscreen();
     void exitFullscreen();
     void restoreLastFolder();
@@ -94,12 +114,23 @@ private:
     QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     FolderScanWorker *m_folderScanWorker;
+    ImageLoader *m_imageLoader = nullptr;
+    QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;
     VlcController *m_vlcController;
     QGraphicsColorizeEffect *m_grayscaleEffect;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;
+    UiLayout m_uiLayout = UiLayout::Classic;
+    bool m_galleryGridActive = false;        // panel je v centrálním stacku (režim Galerie)
+    QStackedWidget *m_centralStack = nullptr;
+    QToolBar *m_mainToolbar = nullptr;
+    QDockWidget *m_metadataDock = nullptr;
+    MetadataPanel *m_metadataPanel = nullptr;
+    QWidget *m_overlayToolbar = nullptr;
+    QTimer *m_overlayHideTimer = nullptr;
+    QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QSpinBox *m_intervalSpinBox;
     SlideshowController *m_slideshowController;

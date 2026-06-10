@@ -3,8 +3,12 @@ set(APP_SOURCES
     Application.cpp
     HelpDialog.hpp
     HelpDialog.cpp
+    ImageLoader.hpp
+    ImageLoader.cpp
     MainWindow.hpp
     MainWindow.cpp
+    MetadataPanel.hpp
+    MetadataPanel.cpp
     ImageView.hpp
     ImageView.cpp
     ThumbnailPanel.hpp
@@ -27,6 +31,7 @@ target_include_directories(picture_viewer_app
 target_link_libraries(picture_viewer_app
     PUBLIC
         Qt6::Core
+        Qt6::Concurrent
         Qt6::Gui
         Qt6::Widgets
         Qt6::Network

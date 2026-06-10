@@ -16,4 +16,5 @@ target_link_libraries(picture_viewer_workers
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        Qt6::Pdf
 )

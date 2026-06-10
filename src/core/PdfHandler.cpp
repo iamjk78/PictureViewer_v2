@@ -3,6 +3,7 @@
 #include <QPdfDocument>
 #include <QPdfPageRenderer>
 #include <QDebug>
+#include <QPainter>
 
 namespace pictureviewer {
 
@@ -51,14 +52,19 @@ QImage PdfHandler::renderPage(int pageIndex, const QSize &size)
         return QImage();
     }
 
-    // Qt6 renderToImage is synchronous
-    const QImage image = m_document->render(pageIndex, size);
+    // Qt6 renderToImage is synchronous; result has transparent background (ARGB32).
+    // Composite onto white so the page looks correct against any viewer background.
+    const QImage rendered = m_document->render(pageIndex, size);
 
-    if (image.isNull()) {
+    if (rendered.isNull()) {
         qWarning() << "Failed to render PDF page" << pageIndex;
         return QImage();
     }
 
+    QImage image(rendered.size(), QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    painter.drawImage(0, 0, rendered);
     return image;
 }
 

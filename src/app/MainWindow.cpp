@@ -1,6 +1,8 @@
 #include "app/HelpDialog.hpp"
+#include "app/ImageLoader.hpp"
 #include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
+#include "app/MetadataPanel.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
@@ -27,9 +29,15 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
+#include <QActionGroup>
+#include <QDirIterator>
+#include <QEvent>
 #include <QFileDialog>
+#include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
+#include <QStackedWidget>
+#include <QToolButton>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
@@ -53,6 +61,29 @@ void removeQuarantine(const QString &path)
     removexattr(p.constData(), "com.apple.quarantine", 0);
 }
 #endif
+
+QString uiLayoutToString(pictureviewer::MainWindow::UiLayout layout)
+{
+    using UiLayout = pictureviewer::MainWindow::UiLayout;
+    switch (layout) {
+    case UiLayout::Filmstrip: return QStringLiteral("filmstrip");
+    case UiLayout::Immersive: return QStringLiteral("immersive");
+    case UiLayout::Gallery:   return QStringLiteral("gallery");
+    case UiLayout::Pro:       return QStringLiteral("pro");
+    case UiLayout::Classic:   break;
+    }
+    return QStringLiteral("classic");
+}
+
+pictureviewer::MainWindow::UiLayout uiLayoutFromString(const QString &name)
+{
+    using UiLayout = pictureviewer::MainWindow::UiLayout;
+    if (name == QLatin1String("filmstrip")) return UiLayout::Filmstrip;
+    if (name == QLatin1String("immersive")) return UiLayout::Immersive;
+    if (name == QLatin1String("gallery"))   return UiLayout::Gallery;
+    if (name == QLatin1String("pro"))       return UiLayout::Pro;
+    return UiLayout::Classic;
+}
 
 } // anonymous namespace
 
@@ -112,13 +143,32 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
-    setCentralWidget(m_imageView);
+
+    // Centrální stack: index 0 = ImageView; v režimu Galerie se sem dočasně
+    // přesouvá ThumbnailPanel jako mřížka přes celé okno.
+    m_centralStack = new QStackedWidget(this);
+    m_centralStack->addWidget(m_imageView);
+    setCentralWidget(m_centralStack);
+
+    m_imageLoader = new ImageLoader(this);
+    connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
+
+    m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
+                                   m_settingsManager->effectiveThumbnailCacheDir());
+
     connect(m_thumbnailPanel, &ThumbnailPanel::imageSelected, this, &MainWindow::showImage);
     connect(m_slideshowController, &SlideshowController::nextImageRequested, this, &MainWindow::showNextImage);
     setupDock();
     setupMenu();
     setupToolbar();
     setupStatusBar();
+    setupOverlayToolbar();
+
+    // Sledování myši pro imerzivní režim (zobrazení plovoucího ovládání)
+    m_imageView->viewport()->setMouseTracking(true);
+    m_imageView->viewport()->installEventFilter(this);
+
+    applyUiLayout(uiLayoutFromString(m_settingsManager->uiLayout()));
 
     // Only restore last folder if no image file is being opened
     // This prevents race condition when opening image from Finder
@@ -153,6 +203,11 @@ void MainWindow::cancelAllWorkers()
 
     // Cancel + disconnect every signal from ThumbnailWorker to ThumbnailPanel.
     m_thumbnailPanel->shutdown();
+
+    // Stop delivering decoded images; running decodes finish into the void.
+    if (m_imageLoader != nullptr) {
+        m_imageLoader->shutdown();
+    }
 }
 
 // ── closeEvent ────────────────────────────────────────────────────────────────
@@ -251,6 +306,10 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Escape:
         if (m_isFullscreen) {
             exitFullscreen();
+        } else if (m_galleryGridActive
+                   && m_centralStack->currentWidget() == m_imageView) {
+            // V režimu Galerie se Esc vrací z obrázku zpět do mřížky
+            showGalleryGrid();
         } else {
             close();
         }
@@ -485,6 +544,12 @@ void MainWindow::loadFolder(const QString &folderPath)
     ++m_scanGeneration;
     m_statusLabel->setText(tr("Načítám složku…"));
 
+    // Když uživatel otvírá konkrétní soubor, zobrazit ho hned — nečekat,
+    // až doběhne sken celé složky (na síťovém disku i několik sekund).
+    if (!m_requestedFile.isEmpty()) {
+        displayPathEarly(m_requestedFile);
+    }
+
     if (m_folderScanWorker != nullptr) {
         m_folderScanWorker->cancel();
         m_folderScanWorker = nullptr;
@@ -523,13 +588,9 @@ void MainWindow::exitFullscreen()
     m_isFullscreen = false;
     showNormal();
     menuBar()->show();
-    for (QToolBar *toolbar : findChildren<QToolBar *>()) {
-        toolbar->show();
-    }
-    if (m_thumbnailDock != nullptr && m_thumbnailDockWasVisible) {
-        m_thumbnailDock->show();
-    }
-    statusBar()->show();
+    // Viditelnost toolbaru, docků a status baru řídí aktuální rozložení —
+    // bezpodmínečné show() by např. v imerzivním režimu vrátilo chrome zpět.
+    applyUiLayout(m_uiLayout);
 }
 
 void MainWindow::restoreLastFolder()
@@ -559,17 +620,28 @@ void MainWindow::showImage(int index)
     const QString suffix = "." + QFileInfo(path).suffix();
     const bool isPdf = isPdfFile(suffix);
 
-    bool success = false;
     if (isPdf) {
-        success = m_imageView->loadPdf(path);
+        m_pendingDisplayPath.clear();
+        if (!m_imageView->loadPdf(path)) {
+            m_currentIndex = -1;
+            m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
+            return;
+        }
     } else {
-        success = m_imageView->loadImage(path);
-    }
-
-    if (!success) {
-        m_currentIndex = -1;
-        m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
-        return;
+        // Asynchronní cesta: cache hit → okamžité zobrazení; miss → rozmazaný
+        // placeholder z náhledu a dekódování na pozadí (UI neblokuje).
+        const QImage cached = m_imageLoader->cachedImage(path);
+        if (!cached.isNull()) {
+            m_pendingDisplayPath.clear();
+            m_imageView->setImage(cached);
+        } else {
+            m_pendingDisplayPath = path;
+            const QIcon placeholder = m_thumbnailPanel->iconAt(index);
+            if (!placeholder.isNull()) {
+                m_imageView->setImage(placeholder.pixmap(QSize(192, 192)).toImage());
+            }
+            m_imageLoader->request(path);
+        }
     }
 
     m_currentIndex = index;
@@ -577,7 +649,7 @@ void MainWindow::showImage(int index)
     updateStatus(path);
 
     // Disconnect old signal if present and connect new one for PDF
-    disconnect(m_imageView, nullptr, this, nullptr);
+    disconnect(m_imageView, &ImageView::pdfPageChanged, this, nullptr);
     if (isPdf) {
         connect(m_imageView, &ImageView::pdfPageChanged, this, [this, path](int page, int totalPages) {
             m_statusLabel->setText(
@@ -590,12 +662,80 @@ void MainWindow::showImage(int index)
             );
         });
     }
+
+    // V režimu Galerie přepnout z mřížky na zobrazení obrázku
+    if (m_galleryGridActive) {
+        m_centralStack->setCurrentWidget(m_imageView);
+    }
+
+    // Přednačíst sousedy — při sekvenčním listování je další obrázek
+    // už dekódovaný v cache, než uživatel stiskne šipku.
+    prefetchNeighbors();
+}
+
+void MainWindow::displayPathEarly(const QString &path)
+{
+#ifdef Q_OS_MACOS
+    removeQuarantine(path);
+#endif
+    const QString suffix = "." + QFileInfo(path).suffix();
+    if (isPdfFile(suffix)) {
+        if (m_settingsManager->enablePdfProcessing()) {
+            m_imageView->loadPdf(path);
+        }
+        return;
+    }
+
+    const QImage cached = m_imageLoader->cachedImage(path);
+    if (!cached.isNull()) {
+        m_imageView->setImage(cached);
+        return;
+    }
+    m_pendingDisplayPath = path;
+    m_imageLoader->request(path);
+}
+
+void MainWindow::prefetchNeighbors()
+{
+    if (m_imagePaths.size() < 2 || m_currentIndex < 0) {
+        return;
+    }
+
+    QStringList neighbors;
+    const int next = (m_currentIndex + 1) % m_imagePaths.size();
+    const int previous = (m_currentIndex - 1 + m_imagePaths.size()) % m_imagePaths.size();
+    const QString nextSuffix = "." + QFileInfo(m_imagePaths.at(next)).suffix();
+    const QString prevSuffix = "." + QFileInfo(m_imagePaths.at(previous)).suffix();
+    if (!isPdfFile(nextSuffix)) {
+        neighbors.append(m_imagePaths.at(next));
+    }
+    if (previous != next && !isPdfFile(prevSuffix)) {
+        neighbors.append(m_imagePaths.at(previous));
+    }
+    m_imageLoader->prefetch(neighbors);
+}
+
+void MainWindow::onImageDecoded(const QString &path, const QImage &image)
+{
+    if (path != m_pendingDisplayPath) {
+        return;   // prefetch nebo opožděný výsledek — jen se uložil do cache
+    }
+    m_pendingDisplayPath.clear();
+
+    if (image.isNull()) {
+        m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
+        return;
+    }
+    m_imageView->setImage(image);
 }
 
 void MainWindow::updateStatus(const QString &path)
 {
     try {
         const ImageInfo info = m_imageMetadataReader.read(path);
+        if (m_metadataPanel != nullptr) {
+            m_metadataPanel->setMetadata(info);
+        }
         m_statusLabel->setText(
             tr("%1   |   %2   |   %3   |   %4 kB   |   %5 / %6")
                 .arg(info.path.section('/', -1))
@@ -607,6 +747,9 @@ void MainWindow::updateStatus(const QString &path)
         );
     } catch (...) {
         m_statusLabel->setText(path.section('/', -1));
+        if (m_metadataPanel != nullptr) {
+            m_metadataPanel->clearMetadata();
+        }
     }
 }
 
@@ -619,6 +762,14 @@ void MainWindow::setupDock()
     m_thumbnailDock = dock;
     m_togglePanelAction = dock->toggleViewAction();
     m_togglePanelAction->setText(tr("Panel náhledů"));
+
+    // Panel metadat pro rozložení "Pro" — vytvořen předem, viditelný jen v Pro
+    m_metadataPanel = new MetadataPanel(this);
+    m_metadataDock = new QDockWidget(tr("Informace"), this);
+    m_metadataDock->setWidget(m_metadataPanel);
+    m_metadataDock->setFeatures(QDockWidget::DockWidgetMovable);
+    addDockWidget(Qt::RightDockWidgetArea, m_metadataDock);
+    m_metadataDock->hide();
 }
 
 void MainWindow::setupMenu()
@@ -644,6 +795,33 @@ void MainWindow::setupMenu()
     viewMenu->addAction(m_togglePanelAction);
 
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Nastavení"));
+
+    // ── Vzhled aplikace ───────────────────────────────────────────────────────
+    QMenu *layoutMenu = settingsMenu->addMenu(tr("Vzhled aplikace"));
+    m_layoutActionGroup = new QActionGroup(this);
+    m_layoutActionGroup->setExclusive(true);
+
+    const struct { UiLayout layout; QString label; } layouts[] = {
+        { UiLayout::Classic,   tr("Klasický") },
+        { UiLayout::Filmstrip, tr("Filmový pás") },
+        { UiLayout::Immersive, tr("Imerzivní") },
+        { UiLayout::Gallery,   tr("Galerie") },
+        { UiLayout::Pro,       tr("Pro režim") },
+    };
+    const UiLayout savedLayout = uiLayoutFromString(m_settingsManager->uiLayout());
+    for (const auto &entry : layouts) {
+        QAction *action = layoutMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.layout == savedLayout);
+        m_layoutActionGroup->addAction(action);
+        const UiLayout layout = entry.layout;
+        connect(action, &QAction::triggered, this, [this, layout] {
+            applyUiLayout(layout);
+            m_settingsManager->setUiLayout(uiLayoutToString(layout));
+        });
+    }
+    settingsMenu->addSeparator();
+
     m_rememberLastFolderAction->setCheckable(true);
     m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
     connect(m_rememberLastFolderAction, &QAction::toggled, this, &MainWindow::onRememberLastFolderToggled);
@@ -664,6 +842,73 @@ void MainWindow::setupMenu()
     m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
     connect(m_askConfirmationAction, &QAction::toggled, this, &MainWindow::onAskConfirmationToggled);
     settingsMenu->addAction(m_askConfirmationAction);
+
+    settingsMenu->addSeparator();
+
+    // ── Cache náhledů ─────────────────────────────────────────────────────────
+    QMenu *cacheMenu = settingsMenu->addMenu(tr("Cache náhledů"));
+
+    QAction *cacheEnabledAction = cacheMenu->addAction(tr("Používat diskovou cache"));
+    cacheEnabledAction->setCheckable(true);
+    cacheEnabledAction->setChecked(m_settingsManager->thumbnailCacheEnabled());
+    connect(cacheEnabledAction, &QAction::toggled, this, [this](bool checked) {
+        m_settingsManager->setThumbnailCacheEnabled(checked);
+        m_thumbnailPanel->setDiskCache(checked,
+                                       m_settingsManager->effectiveThumbnailCacheDir());
+    });
+
+    cacheMenu->addAction(tr("Vybrat složku pro cache…"), this, [this] {
+        const QString folder = QFileDialog::getExistingDirectory(
+            this, tr("Vybrat složku pro cache miniatur"),
+            m_settingsManager->thumbnailCacheRoot());
+        if (folder.isEmpty()) {
+            return;
+        }
+        m_settingsManager->setThumbnailCacheRoot(folder);
+        m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
+                                       m_settingsManager->effectiveThumbnailCacheDir());
+        m_statusLabel->setText(tr("Cache miniatur: %1")
+                                   .arg(m_settingsManager->effectiveThumbnailCacheDir()));
+    });
+
+    cacheMenu->addAction(tr("Vymazat cache…"), this, [this] {
+        const QString cacheDir = m_settingsManager->effectiveThumbnailCacheDir();
+        QDir dir(cacheDir);
+        if (!dir.exists()) {
+            QMessageBox::information(this, QString(),
+                                     tr("Cache je prázdná, není co mazat."));
+            return;
+        }
+
+        // Spočítat velikost pro informovaný souhlas uživatele
+        qint64 totalBytes = 0;
+        int fileCount = 0;
+        QDirIterator it(cacheDir, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            totalBytes += it.fileInfo().size();
+            ++fileCount;
+        }
+
+        const int result = QMessageBox::question(
+            this,
+            tr("Vymazat cache miniatur"),
+            tr("Smazat %1 souborů (%2 MB) ze složky\n%3?")
+                .arg(fileCount)
+                .arg(QString::number(totalBytes / (1024.0 * 1024.0), 'f', 1))
+                .arg(cacheDir),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (result != QMessageBox::Yes) {
+            return;
+        }
+
+        if (dir.removeRecursively()) {
+            m_statusLabel->setText(tr("Cache miniatur byla vymazána."));
+        } else {
+            m_statusLabel->setText(tr("Cache se nepodařilo úplně vymazat."));
+        }
+    });
 
     settingsMenu->addSeparator();
 
@@ -698,6 +943,7 @@ void MainWindow::setupToolbar()
 {
     auto *toolbar = addToolBar(tr("Navigace"));
     toolbar->setMovable(false);
+    m_mainToolbar = toolbar;
 
     m_previousImageAction->setShortcut(QKeySequence(Qt::Key_Left));
     m_nextImageAction->setShortcut(QKeySequence(Qt::Key_Right));
@@ -728,6 +974,171 @@ void MainWindow::setupStatusBar()
 {
     statusBar()->addWidget(m_statusLabel);
     m_statusLabel->setText(tr("Vyber složku s obrázky."));
+}
+
+// ── Přepínání rozložení UI ───────────────────────────────────────────────────
+
+void MainWindow::applyUiLayout(UiLayout layout)
+{
+    // Nejdřív opustit režim Galerie, pokud je aktivní — panel se vrací do docku
+    if (m_galleryGridActive) {
+        leaveGalleryGrid();
+    }
+
+    m_uiLayout = layout;
+    m_overlayToolbar->hide();
+
+    switch (layout) {
+    case UiLayout::Classic:
+        m_thumbnailPanel->setDisplayMode(ThumbnailPanel::DisplayMode::Vertical);
+        addDockWidget(Qt::LeftDockWidgetArea, m_thumbnailDock);
+        m_thumbnailDock->show();
+        m_metadataDock->hide();
+        m_mainToolbar->show();
+        statusBar()->show();
+        break;
+
+    case UiLayout::Filmstrip:
+        m_thumbnailPanel->setDisplayMode(ThumbnailPanel::DisplayMode::Horizontal);
+        addDockWidget(Qt::BottomDockWidgetArea, m_thumbnailDock);
+        m_thumbnailDock->show();
+        m_metadataDock->hide();
+        m_mainToolbar->show();
+        statusBar()->show();
+        break;
+
+    case UiLayout::Immersive:
+        // Veškerý chrome skrytý; ovládání se objeví při pohybu myši.
+        // Menu zůstává viditelné, aby šlo rozložení kdykoli přepnout zpět.
+        m_thumbnailDock->hide();
+        m_metadataDock->hide();
+        m_mainToolbar->hide();
+        statusBar()->hide();
+        break;
+
+    case UiLayout::Gallery:
+        m_metadataDock->hide();
+        m_mainToolbar->show();
+        statusBar()->show();
+        enterGalleryGrid();
+        break;
+
+    case UiLayout::Pro:
+        m_thumbnailPanel->setDisplayMode(ThumbnailPanel::DisplayMode::Horizontal);
+        addDockWidget(Qt::BottomDockWidgetArea, m_thumbnailDock);
+        m_thumbnailDock->show();
+        m_metadataDock->show();
+        m_mainToolbar->show();
+        statusBar()->show();
+        break;
+    }
+}
+
+void MainWindow::enterGalleryGrid()
+{
+    if (m_galleryGridActive) {
+        return;
+    }
+    m_thumbnailDock->hide();
+    m_thumbnailDock->setWidget(nullptr);
+    m_thumbnailPanel->setDisplayMode(ThumbnailPanel::DisplayMode::Grid);
+    m_centralStack->addWidget(m_thumbnailPanel);
+    m_centralStack->setCurrentWidget(m_thumbnailPanel);
+    m_galleryGridActive = true;
+}
+
+void MainWindow::leaveGalleryGrid()
+{
+    if (!m_galleryGridActive) {
+        return;
+    }
+    m_centralStack->removeWidget(m_thumbnailPanel);
+    m_thumbnailDock->setWidget(m_thumbnailPanel);
+    m_centralStack->setCurrentWidget(m_imageView);
+    m_galleryGridActive = false;
+}
+
+void MainWindow::showGalleryGrid()
+{
+    if (m_galleryGridActive) {
+        m_centralStack->setCurrentWidget(m_thumbnailPanel);
+    }
+}
+
+// ── Plovoucí ovládání (imerzivní režim) ──────────────────────────────────────
+
+void MainWindow::setupOverlayToolbar()
+{
+    m_overlayToolbar = new QWidget(this);
+    m_overlayToolbar->setObjectName("overlayToolbar");
+    m_overlayToolbar->setStyleSheet(
+        "#overlayToolbar { background-color: rgba(30, 30, 32, 220); border-radius: 22px; }"
+        "QToolButton { color: #e8e6df; background: transparent; border: none;"
+        "              font-size: 16px; padding: 4px 8px; }"
+        "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 30);"
+        "                    border-radius: 8px; }"
+    );
+
+    auto *layout = new QHBoxLayout(m_overlayToolbar);
+    layout->setContentsMargins(16, 6, 16, 6);
+    layout->setSpacing(6);
+
+    const auto addButton = [this, layout](const QString &glyph, const QString &tooltip, auto slot) {
+        auto *button = new QToolButton(m_overlayToolbar);
+        button->setText(glyph);
+        button->setToolTip(tooltip);
+        connect(button, &QToolButton::clicked, this, slot);
+        layout->addWidget(button);
+    };
+
+    addButton(QStringLiteral("◀"), tr("Předchozí"), &MainWindow::showPreviousImage);
+    addButton(QStringLiteral("⏯"), tr("Slideshow"), &MainWindow::toggleSlideshow);
+    addButton(QStringLiteral("▶"), tr("Další"), &MainWindow::showNextImage);
+    addButton(QStringLiteral("⛶"), tr("Celá obrazovka"), &MainWindow::toggleFullscreen);
+    addButton(QStringLiteral("✎"), tr("Přejmenovat"), &MainWindow::renameCurrentImage);
+    addButton(QStringLiteral("🗑"), tr("Smazat"), &MainWindow::deleteOrMoveCurrentImage);
+
+    m_overlayToolbar->hide();
+
+    m_overlayHideTimer = new QTimer(this);
+    m_overlayHideTimer->setSingleShot(true);
+    m_overlayHideTimer->setInterval(2500);
+    connect(m_overlayHideTimer, &QTimer::timeout, m_overlayToolbar, &QWidget::hide);
+}
+
+void MainWindow::positionOverlayToolbar()
+{
+    m_overlayToolbar->adjustSize();
+    const int x = (width() - m_overlayToolbar->width()) / 2;
+    const int y = height() - m_overlayToolbar->height() - 24;
+    m_overlayToolbar->move(x, y);
+}
+
+void MainWindow::showOverlayToolbar()
+{
+    positionOverlayToolbar();
+    m_overlayToolbar->show();
+    m_overlayToolbar->raise();
+    m_overlayHideTimer->start();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    if (m_overlayToolbar != nullptr && m_overlayToolbar->isVisible()) {
+        positionOverlayToolbar();
+    }
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_uiLayout == UiLayout::Immersive
+        && !m_vlcActive
+        && watched == m_imageView->viewport()
+        && event->type() == QEvent::MouseMove) {
+        showOverlayToolbar();
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::onEnableDeleteImageToggled(bool checked)

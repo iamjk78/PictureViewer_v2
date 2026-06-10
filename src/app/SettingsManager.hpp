@@ -49,6 +49,21 @@ public:
     bool enablePdfProcessing() const;
     void setEnablePdfProcessing(bool enabled);
 
+    // ── UI Settings ──────────────────────────────────────────────────────────
+    // Layout values: "classic", "filmstrip", "immersive", "gallery", "pro"
+    QString uiLayout() const;
+    void setUiLayout(const QString &layout);
+
+    // ── Thumbnail Cache ──────────────────────────────────────────────────────
+    bool thumbnailCacheEnabled() const;
+    void setThumbnailCacheEnabled(bool enabled);
+    // Uživatelem zvolený kořen cache (prázdné = systémový cache adresář)
+    QString thumbnailCacheRoot() const;
+    void setThumbnailCacheRoot(const QString &path);
+    // Skutečný adresář s miniaturami: <kořen>/PictureViewerThumbs.
+    // Podsložka záměrně — mazání cache nikdy nesmaže uživatelský adresář.
+    QString effectiveThumbnailCacheDir() const;
+
 private:
     QSettings *m_settings;
 };
