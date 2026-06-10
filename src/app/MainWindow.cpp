@@ -758,17 +758,12 @@ void MainWindow::prefetchNeighbors()
 
 void MainWindow::onImageDecoded(const QString &path, const QImage &image)
 {
-    // Atomic check-and-clear to avoid TOCTOU race with prefetch/rapid navigation
+    // Zobrazujeme jen výsledek, na který právě čekáme; prefetch a opožděné
+    // výsledky se jen uložily do cache. (Slot běží v GUI vlákně — bez race.)
     if (path != m_pendingDisplayPath) {
-        return;   // prefetch nebo opožděný výsledek — jen se uložil do cache
-    }
-    const QString expectedPath = m_pendingDisplayPath;
-    m_pendingDisplayPath.clear();
-
-    // Verify path is still the one we're expecting
-    if (path != expectedPath) {
         return;
     }
+    m_pendingDisplayPath.clear();
 
     if (image.isNull()) {
         m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));

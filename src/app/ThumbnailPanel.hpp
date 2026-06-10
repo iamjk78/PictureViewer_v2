@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QListWidget>
 #include <QStringList>
 
@@ -57,7 +58,10 @@ private:
     DisplayMode m_displayMode = DisplayMode::Vertical;
     bool m_diskCacheEnabled = true;
     QString m_diskCacheDir;
-    QHash<QString, int> m_pathToIndex;  // O(1) lookup instead of O(N) linear search
+    // O(1) lookup by path. Stores item pointers (stable across index shifts on
+    // removal), NOT indices — indices become stale when items shift after a
+    // mid-list removeImage().
+    QHash<QString, QListWidgetItem *> m_pathToItem;
 };
 
 } // namespace pictureviewer

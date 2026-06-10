@@ -65,6 +65,7 @@ QImage PdfHandler::renderPage(int pageIndex, const QSize &size)
     image.fill(Qt::white);
     QPainter painter(&image);
     painter.drawImage(0, 0, rendered);
+    painter.end();   // ukončit malování před návratem (vyhne se kopii za aktivního painteru)
     return image;
 }
 

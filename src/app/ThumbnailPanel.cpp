@@ -161,9 +161,8 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
 
     ++m_generation;
     clear();
-    m_pathToIndex.clear();
+    m_pathToItem.clear();
 
-    int index = 0;
     for (const QString &path : paths) {
         auto *item = new QListWidgetItem();
         item->setToolTip(path.section('/', -1));
@@ -172,7 +171,7 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         // Nastavit fixní velikost položky - zabraňuje přesahu portrait obrázků
         item->setSizeHint(QSize(96, 96));
         addItem(item);
-        m_pathToIndex[path] = index++;
+        m_pathToItem[path] = item;
     }
 
     startThumbnailLoader(paths);
@@ -198,20 +197,20 @@ void ThumbnailPanel::removeImage(int index)
 {
     if (index >= 0 && index < count()) {
         const QString path = item(index)->data(Qt::UserRole).toString();
-        m_pathToIndex.remove(path);
+        m_pathToItem.remove(path);
         delete takeItem(index);
     }
 }
 
 void ThumbnailPanel::updateImagePath(const QString &oldPath, const QString &newPath)
 {
-    auto it = m_pathToIndex.find(oldPath);
-    if (it != m_pathToIndex.end()) {
-        int index = *it;
-        item(index)->setData(Qt::UserRole, newPath);
-        item(index)->setToolTip(newPath.section('/', -1));
-        m_pathToIndex.remove(oldPath);
-        m_pathToIndex[newPath] = index;
+    auto it = m_pathToItem.find(oldPath);
+    if (it != m_pathToItem.end()) {
+        QListWidgetItem *target = *it;
+        target->setData(Qt::UserRole, newPath);
+        target->setToolTip(newPath.section('/', -1));
+        m_pathToItem.remove(oldPath);
+        m_pathToItem[newPath] = target;
     }
 }
 
@@ -226,9 +225,9 @@ void ThumbnailPanel::onThumbnailReady(int generation, const QString &path, const
         return;
     }
 
-    auto it = m_pathToIndex.find(path);
-    if (it != m_pathToIndex.end()) {
-        item(*it)->setIcon(QIcon(QPixmap::fromImage(image)));
+    auto it = m_pathToItem.find(path);
+    if (it != m_pathToItem.end()) {
+        (*it)->setIcon(QIcon(QPixmap::fromImage(image)));
     }
 }
 
