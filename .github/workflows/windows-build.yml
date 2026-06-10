@@ -32,13 +32,13 @@ jobs:
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.5.3'
+          version: '6.8.0'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
           modules: 'qtpdf'
           cache: true
-          cache-key-prefix: 'qt6-windows-6.5.3-msvc2019'
+          cache-key-prefix: 'qt6-windows-6.8.0-msvc2019'
 
       # ── 3. MSVC prostředí + CMake konfigurace (Ninja, x64) ────────────────
       # Ninja je nezávislý na verzi Visual Studia na runneru — generátor
