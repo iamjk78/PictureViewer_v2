@@ -2,6 +2,7 @@
 
 Sepsáno 2026-06-10 na základě revize logiky aplikace.
 Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
+Aktualizováno po code review a bug fixech (verze 0.6).
 
 ## Hotovo ✓
 
@@ -37,6 +38,28 @@ Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 ## UI/UX vylepšení
 
 - [x] **Miniatury vycentrované v buňkách** – custom `CenteredIconDelegate` s zachováním aspect ratio. *(2026-06-10)*
+
+## Opravy z code review (verze 0.6)
+
+**Vyřešeno:**
+- [x] ImageLoader race condition (watcher parent null)
+- [x] VlcController onMonitorTimeout race condition
+- [x] VlcController dangling pointer (generation checking)
+- [x] MainWindow showImage() TOCTOU (imagePaths snapshot)
+- [x] ImageLoader cache key collision (přidán size)
+- [x] ThumbnailPanel O(N) lookup → O(1) hash lookup
+- [x] MainWindow onImageDecoded() TOCTOU
+- [x] VlcController dialog parent window
+- [x] MainWindow leaveGalleryGrid() widget ownership
+- [x] MainWindow prefetchNeighbors() modulo bug
+- [x] ThumbnailWorker PDF error handling
+
+**Zbývá (nižší priorita):**
+- [ ] SlideshowController thread-safety (setInterval/toggle)
+- [ ] ImageView PDF render duplication (extrahovat helper)
+- [ ] MainWindow keyPressEvent() VLC blocking guard
+- [ ] MainWindow onScanComplete() orphaned m_requestedFile
+- [ ] VlcController cleanup() verbose null checks
 
 ## Nové funkce
 
