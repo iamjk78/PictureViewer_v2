@@ -21,46 +21,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Instalace Qt 6 (MSVC 2019 64-bit, LTS 6.5.x) ─────────────────
-      # Qt 6.5 LTS je nejstabilnější volba pro CI – garantovaná dostupnost
-      # v aqt mirrorech. MSVC 2019 binaries jsou plně kompatibilní s
-      # kompilátorem MSVC 2022 přítomným na windows-latest runneru.
-      - name: Install Qt 6
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.5.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_msvc2019_64'
-          cache: true
-          cache-key-prefix: 'qt6-windows-6.5.3-msvc2019'
+      # ── 2. Instalace Qt 6 přes vcpkg (s Pdf modulem) ─────────────────────
+      # vcpkg je Microsoft's C++ package manager, má Qt 6 s kompletním
+      # Pdf modulem. Alternativa k aqt, která lépe funguje s komplexními moduly.
+      - name: Install Qt 6 via vcpkg
+        run: |
+          cd C:\vcpkg
+          .\vcpkg.exe integrate install
+          .\vcpkg.exe install qt6[pdf]:x64-windows --recurse-dependencies
 
-      # ── 3. MSVC prostředí + CMake konfigurace (Ninja, x64) ────────────────
-      # Ninja je nezávislý na verzi Visual Studia na runneru — generátor
-      # "Visual Studio 17 2022" přestal fungovat po přechodu windows-latest
-      # na image s VS 2026.
-      - name: Setup MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Configure CMake
+      # ── 3. CMake konfigurace s vcpkg toolchain ─────────────────────────────
+      - name: Configure CMake with vcpkg
         run: >
           cmake -B build
-          -G Ninja
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-windows
           -DCMAKE_BUILD_TYPE=Release
 
       # ── 4. Build ──────────────────────────────────────────────────────────
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --config Release --parallel
 
       # ── 5. Příprava dist složky ───────────────────────────────────────────
-      # Ninja je single-config — exe je přímo v build\, ne v build\Release\
+      # VS generátor vytváří .exe v build\Release\
       - name: Prepare dist folder
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
-          Copy-Item -Path "build\PictureViewer.exe" -Destination "dist_windows\"
+          Copy-Item -Path "build\Release\PictureViewer.exe" -Destination "dist_windows\"
 
       # ── 6. windeployqt — přibalení Qt DLL ────────────────────────────────
       # Přidá: Qt6Core.dll, Qt6Gui.dll, Qt6Widgets.dll, platforms/, styles/,
