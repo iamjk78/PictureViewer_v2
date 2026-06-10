@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QMutex>
 #include <QObject>
 
 class QTimer;
@@ -31,6 +32,9 @@ signals:
 private:
     QTimer *m_timer;
     int m_intervalMs;
+    // Chrání m_intervalMs a sekvenci check-then-act v toggle()/setInterval().
+    // mutable, protože ji zamykají i const gettery (isRunning/intervalMs).
+    mutable QMutex m_mutex;
 };
 
 } // namespace pictureviewer

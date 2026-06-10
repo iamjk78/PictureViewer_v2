@@ -5,8 +5,10 @@
 
 class QGraphicsPixmapItem;
 class QGraphicsScene;
+class QImage;
 class QKeyEvent;
 class QMouseEvent;
+class QSize;
 class QString;
 class QResizeEvent;
 class QTimer;
@@ -54,6 +56,14 @@ private:
     void applyZoom(double factor);
     void renderPdfPage(int pageIndex);
     void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)
+
+    // Zobrazí dekódovaný obrázek a resetuje pohled (zoom 1:1 → fit).
+    // Sdíleno mezi setImage() a renderPdfPage().
+    void showImageReset(const QImage &image);
+    // Výška renderu PDF stránky pro danou šířku se zachováním poměru stran;
+    // fallback 4:3, pokud rozměr stránky není k dispozici. Sdíleno mezi
+    // renderPdfPage() a rerenderPdfForZoom().
+    QSize pdfRenderSize(int pageIndex, int targetWidth) const;
 
     QGraphicsScene *m_scene;
     QGraphicsPixmapItem *m_pixmapItem;

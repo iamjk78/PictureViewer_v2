@@ -11,6 +11,7 @@
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSize>
 #include <QTimer>
 #include <QTransform>
 #include <QWheelEvent>
@@ -97,13 +98,18 @@ bool ImageView::setImage(const QImage &image)
     m_pdfHandler->unload();
     m_pdfRerenderTimer->stop();
 
+    showImageReset(image);
+    return true;
+}
+
+void ImageView::showImageReset(const QImage &image)
+{
     m_pixmapItem->setPixmap(QPixmap::fromImage(image));
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
     setTransform(QTransform());
     fitToWindow();
-    return true;
 }
 
 void ImageView::fitToWindow()
@@ -236,26 +242,25 @@ void ImageView::renderPdfPage(int pageIndex)
     const qreal dpr = devicePixelRatioF();
     const int targetWidth = qMax(600, static_cast<int>(viewport()->width() * dpr));
 
-    const QSizeF pageSize = m_pdfHandler->pageSize(pageIndex);
-    QSize renderSize(targetWidth, qRound(targetWidth * 4.0 / 3.0));
-    if (pageSize.isValid() && pageSize.width() > 0) {
-        renderSize.setHeight(qRound(targetWidth * pageSize.height() / pageSize.width()));
-    }
-
-    const QImage image = m_pdfHandler->renderPage(pageIndex, renderSize);
+    const QImage image = m_pdfHandler->renderPage(pageIndex, pdfRenderSize(pageIndex, targetWidth));
     if (image.isNull()) {
         return;
     }
 
-    m_pixmapItem->setPixmap(QPixmap::fromImage(image));
-    m_scene->setSceneRect(m_pixmapItem->boundingRect());
-    m_zoomLevel = 1.0;
-    m_manuallyZoomed = false;
-    setTransform(QTransform());
-    fitToWindow();
+    showImageReset(image);
 
     m_currentPdfPage = pageIndex;
     emit pdfPageChanged(pageIndex + 1, m_pdfHandler->pageCount());
+}
+
+QSize ImageView::pdfRenderSize(int pageIndex, int targetWidth) const
+{
+    const QSizeF pageSize = m_pdfHandler->pageSize(pageIndex);
+    if (pageSize.isValid() && pageSize.width() > 0) {
+        return QSize(targetWidth, qRound(targetWidth * pageSize.height() / pageSize.width()));
+    }
+    // Fallback, když rozměr stránky není dostupný — výchozí poměr 4:3.
+    return QSize(targetWidth, qRound(targetWidth * 4.0 / 3.0));
 }
 
 void ImageView::rerenderPdfForZoom()
@@ -274,13 +279,7 @@ void ImageView::rerenderPdfForZoom()
         return;   // rozdíl pod 20 % — re-render by nepřinesl viditelné zlepšení
     }
 
-    const QSizeF pageSize = m_pdfHandler->pageSize(m_currentPdfPage);
-    if (!pageSize.isValid() || pageSize.width() <= 0) {
-        return;
-    }
-
-    const QSize renderSize(static_cast<int>(desiredWidth),
-                           qRound(desiredWidth * pageSize.height() / pageSize.width()));
+    const QSize renderSize = pdfRenderSize(m_currentPdfPage, static_cast<int>(desiredWidth));
     const QImage image = m_pdfHandler->renderPage(m_currentPdfPage, renderSize);
     if (image.isNull()) {
         return;

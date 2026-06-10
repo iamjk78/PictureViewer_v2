@@ -191,6 +191,18 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.6</h3>"
+        "<ul>"
+        "<li><b>Přepínatelná rozložení UI</b> — Klasický, Filmový pás, Imerzivní, "
+        "Galerie a Pro režim (volba se pamatuje)</li>"
+        "<li><b>Disková cache náhledů</b> — rychlejší opětovné načítání složek; "
+        "automatický úklid při 500&nbsp;MB, zobrazení velikosti v nastavení</li>"
+        "<li><b>Směrový prefetch</b> — při listování se přednačítá 5 souborů vpřed</li>"
+        "<li><b>Přirozené řazení</b> — <kbd>img2</kbd> se řadí před <kbd>img10</kbd></li>"
+        "<li><b>Vycentrované náhledy</b> — miniatury na výšku i PDF se vejdou do buňky</li>"
+        "<li>Řada oprav stability — odstranění race conditions při načítání, "
+        "mazání a přehrávání videa</li>"
+        "</ul>"
         "<h3>Verze 0.5</h3>"
         "<ul>"
         "<li><b>Podpora PDF souborů</b> — PDF se zobrazují jako obrázky vedle ostatních souborů</li>"

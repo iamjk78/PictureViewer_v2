@@ -251,6 +251,16 @@ MainWindow::~MainWindow()
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
+    // ── VLC se právě spouští ─────────────────────────────────────────────────
+    // initialize() blokuje (waitForStarted, případně modální dialog výběru VLC)
+    // a po tu dobu může event loop doručit klávesy. m_vlcActive je ale stále
+    // false (nastaví se až na Running), takže by klávesy spadly do normální
+    // navigace a např. druhé 'g' by spustilo druhou inicializaci. Polkneme je.
+    if (m_vlcController->state() == VlcState::Starting) {
+        event->accept();
+        return;
+    }
+
     // ── VLC playback active ──────────────────────────────────────────────────
     if (m_vlcActive) {
         switch (event->key()) {
@@ -442,6 +452,7 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     if (paths.isEmpty()) {
         m_imagePaths.clear();
         m_currentIndex = -1;
+        m_requestedFile.clear();   // jinak zůstane viset pro další sken
         m_thumbnailPanel->clear();
         m_imageView->clearImage();
         m_statusLabel->setText(tr("Ve složce nebyly nalezeny žádné obrázky."));
