@@ -120,7 +120,6 @@ private:
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;
     VlcController *m_vlcController;
-    QGraphicsColorizeEffect *m_grayscaleEffect;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;
     UiLayout m_uiLayout = UiLayout::Classic;

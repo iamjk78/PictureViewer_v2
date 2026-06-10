@@ -29,7 +29,9 @@ QString ImageLoader::cacheKey(const QString &path)
 {
     const QFileInfo fileInfo(path);
     return path + QLatin1Char('|')
-         + QString::number(fileInfo.lastModified().toSecsSinceEpoch());
+         + QString::number(fileInfo.lastModified().toSecsSinceEpoch())
+         + QLatin1Char('|')
+         + QString::number(fileInfo.size());
 }
 
 QImage ImageLoader::cachedImage(const QString &path) const
@@ -69,21 +71,21 @@ void ImageLoader::startDecode(const QString &path)
 {
     m_inFlight.insert(path);
 
-    auto *watcher = new QFutureWatcher<QImage>(this);
+    auto *watcher = new QFutureWatcher<QImage>(nullptr);
     connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path] {
-        m_inFlight.remove(path);
-        const QImage image = watcher->result();
-        watcher->deleteLater();
-
         if (m_shuttingDown) {
+            watcher->deleteLater();
             return;
         }
+        m_inFlight.remove(path);
+        const QImage image = watcher->result();
 
         if (!image.isNull()) {
             const qsizetype costKb = qMax<qsizetype>(1, image.sizeInBytes() / 1024);
             m_cache.insert(cacheKey(path), new QImage(image), costKb);
         }
         emit imageReady(path, image);
+        watcher->deleteLater();
     });
     watcher->setFuture(QtConcurrent::run(decodeImage, path));
 }

@@ -1,7 +1,7 @@
 #include "app/VlcController.hpp"
 #include "app/SettingsManager.hpp"
 
-#include <QCoreApplication>
+#include <QApplication>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
@@ -171,7 +171,7 @@ bool VlcController::initialize(const QString &videoPath, QString &outErrorMsg)
 
     if (!VlcUtils::isValidVlcPath(vlcPath)) {
         // Need to prompt user
-        vlcPath = VlcUtils::selectVlcPathDialog(nullptr, m_settings);
+        vlcPath = VlcUtils::selectVlcPathDialog(QApplication::activeWindow(), m_settings);
     }
 
     if (vlcPath.isEmpty()) {
@@ -223,8 +223,17 @@ bool VlcController::startVlcProcess(const QString &vlcPath, const QString &video
     });
 #endif
 
-    connect(m_process, &QProcess::finished, this, &VlcController::onProcessFinished);
-    connect(m_process, &QProcess::errorOccurred, this, &VlcController::onProcessError);
+    const int currentGeneration = m_vlcGeneration;
+    connect(m_process, &QProcess::finished, this, [this, currentGeneration](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (currentGeneration == m_vlcGeneration && m_process != nullptr) {
+            onProcessFinished(exitCode, exitStatus);
+        }
+    });
+    connect(m_process, &QProcess::errorOccurred, this, [this, currentGeneration](QProcess::ProcessError error) {
+        if (currentGeneration == m_vlcGeneration && m_process != nullptr) {
+            onProcessError(error);
+        }
+    });
 
     // Qt stores NAS paths as //server/share/... which VLC on Windows misinterprets
     // as a relative path and prepends the CWD. Convert to smb:// which VLC handles natively.
@@ -318,16 +327,17 @@ void VlcController::onMonitorTimeout()
     if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
         return;
 
-    if (!m_process || m_process->state() != QProcess::Running) {
+    QProcess *process = m_process;
+    if (!process || process->state() != QProcess::Running) {
         // Stop timer immediately — prevent re-entry while dialogs are open
         m_monitorTimer->stop();
         setStateAndEmit(VlcState::Stopped);
 
         // Capture output and write log BEFORE emitting any signal
-        const QString stdOut = m_process ? QString::fromLocal8Bit(m_process->readAllStandardOutput()) : QString();
-        const QString stdErr = m_process ? QString::fromLocal8Bit(m_process->readAllStandardError()) : QString();
-        const int exitCode    = m_process ? m_process->exitCode() : -1;
-        const auto exitStatus = m_process ? m_process->exitStatus() : QProcess::CrashExit;
+        const QString stdOut = process ? QString::fromLocal8Bit(process->readAllStandardOutput()) : QString();
+        const QString stdErr = process ? QString::fromLocal8Bit(process->readAllStandardError()) : QString();
+        const int exitCode    = process ? process->exitCode() : -1;
+        const auto exitStatus = process ? process->exitStatus() : QProcess::CrashExit;
         writeDiagnosticLog(exitCode, exitStatus, stdOut, stdErr);
 
         // Only report crash for non-zero exit or OS-level crash; code 0 = normal close

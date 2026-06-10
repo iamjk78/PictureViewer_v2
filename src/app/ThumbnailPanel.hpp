@@ -57,6 +57,7 @@ private:
     DisplayMode m_displayMode = DisplayMode::Vertical;
     bool m_diskCacheEnabled = true;
     QString m_diskCacheDir;
+    QHash<QString, int> m_pathToIndex;  // O(1) lookup instead of O(N) linear search
 };
 
 } // namespace pictureviewer

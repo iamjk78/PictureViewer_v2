@@ -118,7 +118,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_deletePictureAction(new QAction(this))
     , m_renameImageAction(new QAction(this))
     , m_vlcController(new VlcController(m_settingsManager, this))
-    , m_grayscaleEffect(nullptr)
 {
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
@@ -613,11 +612,14 @@ void MainWindow::restoreLastFolder()
 
 void MainWindow::showImage(int index)
 {
-    if (index < 0 || index >= m_imagePaths.size()) {
+    // Take a snapshot of the current path list to avoid TOCTOU race condition
+    // where list changes between validation and usage
+    const QStringList imagePaths = m_imagePaths;
+    if (index < 0 || index >= imagePaths.size()) {
         return;
     }
 
-    const QString path = m_imagePaths.at(index);
+    const QString path = imagePaths.at(index);
 #ifdef Q_OS_MACOS
     removeQuarantine(path);
 #endif
@@ -731,7 +733,8 @@ void MainWindow::prefetchNeighbors()
     } else {
         // Listuju vzad: prefetchovat N-1, N-2, N-3, N-4, N-5
         for (int i = 1; i <= 5; ++i) {
-            const int idx = (m_currentIndex - i + size * 100) % size;  // +size*100 pro bezpečné modulo
+            int idx = m_currentIndex - i;
+            if (idx < 0) idx += size;
             const QString suffix = "." + QFileInfo(m_imagePaths.at(idx)).suffix();
             if (!isPdfFile(suffix)) {
                 neighbors.append(m_imagePaths.at(idx));
@@ -744,10 +747,17 @@ void MainWindow::prefetchNeighbors()
 
 void MainWindow::onImageDecoded(const QString &path, const QImage &image)
 {
+    // Atomic check-and-clear to avoid TOCTOU race with prefetch/rapid navigation
     if (path != m_pendingDisplayPath) {
         return;   // prefetch nebo opožděný výsledek — jen se uložil do cache
     }
+    const QString expectedPath = m_pendingDisplayPath;
     m_pendingDisplayPath.clear();
+
+    // Verify path is still the one we're expecting
+    if (path != expectedPath) {
+        return;
+    }
 
     if (image.isNull()) {
         m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
@@ -1091,8 +1101,9 @@ void MainWindow::leaveGalleryGrid()
     if (!m_galleryGridActive) {
         return;
     }
-    m_centralStack->removeWidget(m_thumbnailPanel);
+    // Restore dock ownership BEFORE removing from stack to avoid orphaning the widget
     m_thumbnailDock->setWidget(m_thumbnailPanel);
+    m_centralStack->removeWidget(m_thumbnailPanel);
     m_centralStack->setCurrentWidget(m_imageView);
     m_galleryGridActive = false;
 }
