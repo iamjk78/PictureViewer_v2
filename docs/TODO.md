@@ -27,7 +27,6 @@ Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 - [x] **Přejmenování neaktualizuje panel náhledů** – položka drží starou cestu v `Qt::UserRole` a starý tooltip. *(2026-06-10)*
 - [x] **Status bar u PDF po otevření** – `pdfPageChanged` se emituje dřív, než se připojí handler; číslo stránky se ukáže až po listování. *(2026-06-10)*
 - [x] **Slideshow běží při přehrávání videa** – akce se jen zakáže, ale `QTimer` běží dál a přepíná obrázky pod videem. Zastavit slideshow při startu VLC. *(2026-06-10)*
-- [ ] **Esc zavírá celou aplikaci** – nečekané; zvážit potvrzení nebo Esc pouze pro fullscreen/galerii.
 
 ## Výkon
 
