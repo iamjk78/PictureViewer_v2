@@ -40,24 +40,32 @@ jobs:
           cache: true
           cache-key-prefix: 'qt6-windows-6.5.3-msvc2019'
 
-      # ── 3. CMake konfigurace (Visual Studio 2022, x64) ────────────────────
+      # ── 3. MSVC prostředí + CMake konfigurace (Ninja, x64) ────────────────
+      # Ninja je nezávislý na verzi Visual Studia na runneru — generátor
+      # "Visual Studio 17 2022" přestal fungovat po přechodu windows-latest
+      # na image s VS 2026.
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure CMake
         run: >
           cmake -B build
-          -G "Visual Studio 17 2022"
-          -A x64
+          -G Ninja
           -DCMAKE_BUILD_TYPE=Release
 
       # ── 4. Build ──────────────────────────────────────────────────────────
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --parallel
 
       # ── 5. Příprava dist složky ───────────────────────────────────────────
+      # Ninja je single-config — exe je přímo v build\, ne v build\Release\
       - name: Prepare dist folder
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist_windows | Out-Null
-          Copy-Item -Path "build\Release\PictureViewer.exe" -Destination "dist_windows\"
+          Copy-Item -Path "build\PictureViewer.exe" -Destination "dist_windows\"
 
       # ── 6. windeployqt — přibalení Qt DLL ────────────────────────────────
       # Přidá: Qt6Core.dll, Qt6Gui.dll, Qt6Widgets.dll, platforms/, styles/,
