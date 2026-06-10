@@ -1,18 +1,25 @@
 # PictureViewer v2
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.7**.
 
 ## Funkce
 
-- Procházení obrázků ve složce (JPG, PNG, GIF, BMP, WEBP, TIFF)
-- Prohlížení PDF dokumentů
-- Přibližování a posun obrázků (zoom, pan)
+- Procházení obrázků ve složce — seznam formátů se odvozuje z nainstalovaných
+  Qt pluginů (JPG, PNG, GIF, BMP, WEBP, TIFF a podle prostředí i HEIC, HEIF,
+  SVG, JP2…)
+- **Animované GIFy** přehrávané přes QMovie
+- Prohlížení PDF dokumentů s listováním stránek
+- Přibližování a posun obrázků (zoom, pan) + **indikátor zoomu** ve status baru
+- **Otočení obrázku** o 90° (vizuální)
+- Volba řazení souborů — podle názvu / data změny / velikosti, vzestupně i sestupně
+- **Drag & drop** složky nebo souboru do okna
+- **Kontextové menu** — Zobrazit ve Finderu, kopírovat obrázek / cestu
 - Slideshow s nastavitelným intervalem
 - Mazání a přejmenování souborů
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
-- Asynchronní načítání obrázků s cache
-- Disková cache náhledů
+- Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
 - Přehrávání videí přes VLC
+- Jednotkové testy jádra (Qt Test)
 
 ## Buildování
 
@@ -35,6 +42,9 @@ cmake --build . --parallel
 
 # Spuštění
 ./PictureViewer.app/Contents/MacOS/PictureViewer
+
+# Jednotkové testy
+ctest --output-on-failure
 ```
 
 **Poznámka**: Pokud máš Qt nainstalovanou na jinou cestu, použij:
@@ -95,10 +105,14 @@ cmake --build . --config Release --parallel
 | `F` | Celá obrazovka |
 | `D` / `Delete` | Smazat nebo přesunout do Delete |
 | `R` | Přejmenovat soubor |
+| `[` / `L` , `]` | Otočit doleva / doprava |
 | `G` | Přehrát video ve VLC |
 | `+` / `-` | Zoom |
 | `0` / `Space` | Originální velikost |
 | `Esc` | Konec fullscreenu / zavřít |
+
+Pravým tlačítkem nad obrázkem se otevře kontextové menu (Zobrazit ve Finderu,
+kopírovat obrázek / cestu). Složku nebo soubor lze také přetáhnout do okna.
 
 ---
 
@@ -109,9 +123,11 @@ Konfigurace se ukládá v:
 - **Windows**: `%APPDATA%\JiriKrejci\PictureViewer\config.ini`
 
 Menu Nastavení přístupuje k:
+- Vzhled aplikace (5 rozložení UI)
+- Řazení souborů (název / datum / velikost, vzestupně / sestupně)
 - Zapamatování poslední složky
 - Režim mazání souborů
-- Cache náhledů (povolen/zakázán, volba složky)
+- Cache náhledů (povolen/zakázán, volba složky, aktuální velikost)
 - Zpracování PDF
 
 ---
@@ -125,7 +141,7 @@ Náměty na vylepšení: [docs/TODO.md](docs/TODO.md)
 
 ## Známé limity
 
-- GIF animace se zobrazují jako statický první snímek
+- Otočení obrázku je pouze vizuální — neukládá se zpět do souboru
 - EXIF data (clona, ISO, expozice) se zatím nečtou
 
 ---
@@ -136,6 +152,7 @@ Projekt je napsaný v C++20 s Qt6 frameworkem. Architektura:
 - `src/app/` — GUI komponenty (Qt widgety)
 - `src/core/` — logika bez GUI
 - `src/workers/` — asynchronní úlohy (FolderScanWorker, ThumbnailWorker)
+- `tests/` — jednotkové testy jádra (Qt Test), spustitelné přes `ctest`
 
 ---
 
