@@ -13,3 +13,4 @@ venv/
 .mypy_cache/
 *.log
 .DS_Store
+build_test/

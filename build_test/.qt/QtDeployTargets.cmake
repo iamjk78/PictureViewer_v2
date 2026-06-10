@@ -1,4 +1,0 @@
-set(__QT_DEPLOY_TARGET_picture_viewer_core_FILE /Users/jirikrejci/CladeAI/Projects/PictureViewer/build_test/src/core/libpicture_viewer_core.a)
-set(__QT_DEPLOY_TARGET_picture_viewer_core_TYPE STATIC_LIBRARY)
-set(__QT_DEPLOY_TARGET_PictureViewer_FILE /Users/jirikrejci/CladeAI/Projects/PictureViewer/build_test/PictureViewer.app/Contents/MacOS/PictureViewer)
-set(__QT_DEPLOY_TARGET_PictureViewer_TYPE EXECUTABLE)
