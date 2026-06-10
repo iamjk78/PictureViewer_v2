@@ -82,6 +82,7 @@ private slots:
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
     void loadFolder(const QString &folderPath);
+    void reloadCurrentFolder();   // znovu naskenovat (po změně řazení), zachovat obrázek
     void applyUiLayout(UiLayout layout);
     void displayPathEarly(const QString &path);   // zobrazení souboru před koncem skenu
     void prefetchNeighbors();
@@ -111,6 +112,7 @@ private:
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
     QString m_requestedFile;
+    QString m_currentFolder;   // poslední načtená složka (pro reload při změně řazení)
     int m_currentIndex = -1;
     int m_lastPrefetchIndex = -1;   // pro detekci směru listování
     int m_scanGeneration = 0;

@@ -54,6 +54,13 @@ public:
     QString uiLayout() const;
     void setUiLayout(const QString &layout);
 
+    // ── Řazení souborů ───────────────────────────────────────────────────────
+    // sortKey: 0 = název, 1 = datum, 2 = velikost (odpovídá ImageCatalog::SortKey)
+    int sortKey() const;
+    void setSortKey(int key);
+    bool sortAscending() const;
+    void setSortAscending(bool ascending);
+
     // ── Thumbnail Cache ──────────────────────────────────────────────────────
     bool thumbnailCacheEnabled() const;
     void setThumbnailCacheEnabled(bool enabled);

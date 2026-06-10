@@ -98,6 +98,76 @@ private slots:
         QCOMPARE(fileNames, expected);
     }
 
+    void catalog_sortByNameDescending()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (const QString &name : {"a.jpg", "b.jpg", "c.jpg"}) {
+            QVERIFY(writeFileOfSize(dir.filePath(name), 1));
+        }
+
+        ImageCatalog catalog;
+        const QStringList result =
+            catalog.loadFolder(dir.path(), true, SortKey::Name, /*ascending=*/false);
+
+        QStringList names;
+        for (const QString &p : result) {
+            names.append(QFileInfo(p).fileName());
+        }
+        const QStringList expected = {"c.jpg", "b.jpg", "a.jpg"};
+        QCOMPARE(names, expected);
+    }
+
+    void catalog_sortBySize()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("small.jpg"), 100));
+        QVERIFY(writeFileOfSize(dir.filePath("big.jpg"), 5000));
+        QVERIFY(writeFileOfSize(dir.filePath("medium.jpg"), 1000));
+
+        ImageCatalog catalog;
+
+        const QStringList asc =
+            catalog.loadFolder(dir.path(), true, SortKey::Size, /*ascending=*/true);
+        QCOMPARE(QFileInfo(asc.first()).fileName(), QString("small.jpg"));
+        QCOMPARE(QFileInfo(asc.last()).fileName(), QString("big.jpg"));
+
+        const QStringList desc =
+            catalog.loadFolder(dir.path(), true, SortKey::Size, /*ascending=*/false);
+        QCOMPARE(QFileInfo(desc.first()).fileName(), QString("big.jpg"));
+        QCOMPARE(QFileInfo(desc.last()).fileName(), QString("small.jpg"));
+    }
+
+    void catalog_sortByDate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // Vytvořit soubory a nastavit jim různé časy poslední změny.
+        const QString older = dir.filePath("older.jpg");
+        const QString newer = dir.filePath("newer.jpg");
+        QVERIFY(writeFileOfSize(older, 1));
+        QVERIFY(writeFileOfSize(newer, 1));
+
+        QFile fOlder(older);
+        QVERIFY(fOlder.open(QIODevice::ReadWrite));
+        fOlder.setFileTime(QDateTime::currentDateTime().addDays(-2),
+                           QFileDevice::FileModificationTime);
+        fOlder.close();
+
+        QFile fNewer(newer);
+        QVERIFY(fNewer.open(QIODevice::ReadWrite));
+        fNewer.setFileTime(QDateTime::currentDateTime(),
+                           QFileDevice::FileModificationTime);
+        fNewer.close();
+
+        ImageCatalog catalog;
+        const QStringList asc =
+            catalog.loadFolder(dir.path(), true, SortKey::Date, /*ascending=*/true);
+        QCOMPARE(QFileInfo(asc.first()).fileName(), QString("older.jpg"));
+        QCOMPARE(QFileInfo(asc.last()).fileName(), QString("newer.jpg"));
+    }
+
     void catalog_pdfInclusionToggle()
     {
         QTemporaryDir dir;

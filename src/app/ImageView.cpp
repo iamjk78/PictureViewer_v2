@@ -8,6 +8,7 @@
 #include <QGraphicsScene>
 #include <QImageReader>
 #include <QKeyEvent>
+#include <QMovie>
 #include <QPainter>
 #include <QPixmap>
 #include <QResizeEvent>
@@ -69,6 +70,7 @@ ImageView::~ImageView() = default;
 
 void ImageView::clearImage()
 {
+    stopAnimation();
     m_pdfHandler->unload();
     m_pdfRerenderTimer->stop();
     m_pixmapItem->setPixmap(createPlaceholderPixmap());
@@ -105,13 +107,54 @@ bool ImageView::setImage(const QImage &image)
         return false;
     }
 
-    // Uvolnit případné PDF — jinak by PageDown/zoom re-render dál pracoval
-    // se stránkami dokumentu, který už není zobrazen.
+    // Uvolnit případné PDF/GIF — jinak by PageDown/zoom re-render dál pracoval
+    // se stránkami dokumentu nebo by pod statickým obrázkem běžela animace.
+    stopAnimation();
     m_pdfHandler->unload();
     m_pdfRerenderTimer->stop();
 
     showImageReset(image);
     return true;
+}
+
+bool ImageView::loadAnimation(const QString &path)
+{
+    stopAnimation();
+    m_pdfHandler->unload();
+    m_pdfRerenderTimer->stop();
+
+    m_movie = new QMovie(path, QByteArray(), this);
+    if (!m_movie->isValid()) {
+        stopAnimation();
+        return false;
+    }
+
+    // Každý snímek přemaluje pixmapu. Rozměry snímků jsou konstantní, takže
+    // scénu a fit stačí nastavit jednou (níže z prvního snímku).
+    connect(m_movie, &QMovie::frameChanged, this, [this] {
+        m_pixmapItem->setPixmap(m_movie->currentPixmap());
+    });
+
+    m_movie->jumpToFrame(0);
+    m_pixmapItem->setPixmap(m_movie->currentPixmap());
+    m_scene->setSceneRect(m_pixmapItem->boundingRect());
+    m_hasContent = true;
+    m_zoomLevel = 1.0;
+    m_manuallyZoomed = false;
+    setTransform(QTransform());
+    fitToWindow();
+
+    m_movie->start();
+    return true;
+}
+
+void ImageView::stopAnimation()
+{
+    if (m_movie != nullptr) {
+        m_movie->stop();
+        delete m_movie;   // má parent this; delete ho korektně odpojí
+        m_movie = nullptr;
+    }
 }
 
 void ImageView::showImageReset(const QImage &image)
@@ -157,9 +200,9 @@ void ImageView::zoomOut()
 
 void ImageView::rotateBy(int degrees)
 {
-    // Otáčíme jen obrázky. U PDF by rotaci stejně přepsal re-render při zoomu,
-    // proto ji tam neumožňujeme. Rotace je čistě vizuální (neukládá se na disk).
-    if (!m_hasContent || isPdfLoaded()) {
+    // Otáčíme jen statické obrázky. U PDF by rotaci přepsal re-render při zoomu,
+    // u GIFu další snímek — proto je tam neumožňujeme. Čistě vizuální (neukládá).
+    if (!m_hasContent || isPdfLoaded() || m_movie != nullptr) {
         return;
     }
     const QPixmap current = m_pixmapItem->pixmap();
@@ -282,6 +325,7 @@ void ImageView::applyZoom(double factor)
 
 bool ImageView::loadPdf(const QString &path)
 {
+    stopAnimation();
     if (!m_pdfHandler->load(path)) {
         return false;
     }

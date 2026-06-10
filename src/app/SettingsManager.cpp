@@ -38,6 +38,9 @@ constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
 
 constexpr auto kUiLayoutKey              = "UI/layout";
 
+constexpr auto kSortKeyKey               = "Sort/key";
+constexpr auto kSortAscendingKey         = "Sort/ascending";
+
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
 constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
 
@@ -212,6 +215,28 @@ QString SettingsManager::uiLayout() const
 void SettingsManager::setUiLayout(const QString &layout)
 {
     m_settings->setValue(kUiLayoutKey, layout);
+}
+
+// ── Řazení souborů ─────────────────────────────────────────────────────────
+
+int SettingsManager::sortKey() const
+{
+    return m_settings->value(kSortKeyKey, 0).toInt();   // 0 = název
+}
+
+void SettingsManager::setSortKey(int key)
+{
+    m_settings->setValue(kSortKeyKey, key);
+}
+
+bool SettingsManager::sortAscending() const
+{
+    return m_settings->value(kSortAscendingKey, true).toBool();
+}
+
+void SettingsManager::setSortAscending(bool ascending)
+{
+    m_settings->setValue(kSortAscendingKey, ascending);
 }
 
 // ── Thumbnail Cache ──────────────────────────────────────────────────────────

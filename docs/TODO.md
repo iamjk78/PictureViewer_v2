@@ -79,12 +79,16 @@ Aktualizováno po code review a bug fixech (verze 0.6).
       kopírovat cestu. *(2026-06-10)*
 - [x] **Jednotkové testy** jádra (Qt Test) – řazení, formáty, cacheKey, velikost
       cache; zachytily regresi s `pdf` v image formátech. *(2026-06-10)*
+- [x] **Animované GIFy** přes `QMovie` – přehrávání všech snímků; přechod na jiný
+      soubor animaci korektně zastaví. *(2026-06-11)*
+- [x] **Volba řazení** (název / datum změny / velikost, vzestupně / sestupně) –
+      Nastavení → Řazení souborů; reload zachová zobrazený obrázek. QCollator
+      pro názvy, prohození argumentů pro sestupně (kvůli strict-weak-ordering).
+      Pokryto testy. *(2026-06-11)*
 
 ## Nové funkce – zbývá
 
 - [ ] Otočení – volitelně uložit otočení do souboru (zatím jen vizuální)
-- [ ] Animované GIFy přes `QMovie`
-- [ ] Volba řazení (název / datum / velikost, vzestupně / sestupně)
 - [ ] Náhodné pořadí slideshow
 - [ ] Vícenásobný výběr v režimu Galerie (hromadné mazání/přesun)
 - [ ] Rekurzivní sken podsložek (volitelně)

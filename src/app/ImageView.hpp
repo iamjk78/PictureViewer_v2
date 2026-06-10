@@ -9,6 +9,7 @@ class QImage;
 class QContextMenuEvent;
 class QKeyEvent;
 class QMouseEvent;
+class QMovie;
 class QSize;
 class QString;
 class QResizeEvent;
@@ -30,6 +31,7 @@ public:
     void clearImage();
     bool loadImage(const QString &path);
     bool setImage(const QImage &image);   // zobrazí už dekódovaný obrázek (cache/worker)
+    bool loadAnimation(const QString &path);   // přehraje animovaný GIF přes QMovie
     bool loadPdf(const QString &path);
     void fitToWindow();
     void resetZoom();
@@ -67,6 +69,7 @@ protected:
 private:
     void applyZoom(double factor);
     void rotateBy(int degrees);
+    void stopAnimation();     // zastaví a uvolní případný běžící QMovie
     void emitZoomChanged();   // odešle aktuální zoom % (nebo -1 pro skrytí)
     void renderPdfPage(int pageIndex);
     void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)
@@ -87,6 +90,7 @@ private:
     std::unique_ptr<PdfHandler> m_pdfHandler;
     int m_currentPdfPage;
     QTimer *m_pdfRerenderTimer = nullptr;
+    QMovie *m_movie = nullptr;   // aktivní animovaný GIF (jinak nullptr)
 };
 
 } // namespace pictureviewer

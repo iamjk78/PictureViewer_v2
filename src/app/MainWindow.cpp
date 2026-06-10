@@ -648,12 +648,25 @@ void MainWindow::toggleSlideshow()
     m_toggleSlideshowAction->setText(tr("▶ Slideshow"));
 }
 
+void MainWindow::reloadCurrentFolder()
+{
+    if (m_currentFolder.isEmpty()) {
+        return;
+    }
+    // Zachovat právě zobrazený soubor — po přeřazení se na něj vrátíme.
+    if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        m_requestedFile = m_imagePaths.at(m_currentIndex);
+    }
+    loadFolder(m_currentFolder);
+}
+
 void MainWindow::loadFolder(const QString &folderPath)
 {
     if (m_shuttingDown) {
         return;
     }
 
+    m_currentFolder = folderPath;
     ++m_scanGeneration;
     m_statusLabel->setText(tr("Načítám složku…"));
 
@@ -732,9 +745,10 @@ void MainWindow::showImage(int index)
     removeQuarantine(path);
 #endif
 
-    // Check if it's a PDF file
+    // Check the file type
     const QString suffix = "." + QFileInfo(path).suffix();
     const bool isPdf = isPdfFile(suffix);
+    const bool isGif = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
 
     if (isPdf) {
         m_pendingDisplayPath.clear();
@@ -742,6 +756,19 @@ void MainWindow::showImage(int index)
             m_currentIndex = -1;
             m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
             return;
+        }
+    } else if (isGif) {
+        // Animovaný GIF přehráváme přes QMovie (async dekodér by vrátil jen
+        // první snímek). Při neúspěchu spadneme zpět na statické zobrazení.
+        m_pendingDisplayPath.clear();
+        if (!m_imageView->loadAnimation(path)) {
+            const QImage cached = m_imageLoader->cachedImage(path);
+            if (!cached.isNull()) {
+                m_imageView->setImage(cached);
+            } else {
+                m_pendingDisplayPath = path;
+                m_imageLoader->request(path);
+            }
         }
     } else {
         // Asynchronní cesta: cache hit → okamžité zobrazení; miss → rozmazaný
@@ -960,6 +987,51 @@ void MainWindow::setupMenu()
             m_settingsManager->setUiLayout(uiLayoutToString(layout));
         });
     }
+
+    // ── Řazení souborů ────────────────────────────────────────────────────────
+    QMenu *sortMenu = settingsMenu->addMenu(tr("Řazení souborů"));
+
+    auto *sortKeyGroup = new QActionGroup(this);
+    sortKeyGroup->setExclusive(true);
+    const struct { int key; QString label; } sortKeys[] = {
+        { 0, tr("Podle názvu") },
+        { 1, tr("Podle data změny") },
+        { 2, tr("Podle velikosti") },
+    };
+    const int savedSortKey = m_settingsManager->sortKey();
+    for (const auto &entry : sortKeys) {
+        QAction *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.key == savedSortKey);
+        sortKeyGroup->addAction(action);
+        const int key = entry.key;
+        connect(action, &QAction::triggered, this, [this, key] {
+            m_settingsManager->setSortKey(key);
+            reloadCurrentFolder();
+        });
+    }
+
+    sortMenu->addSeparator();
+
+    auto *sortOrderGroup = new QActionGroup(this);
+    sortOrderGroup->setExclusive(true);
+    const bool ascending = m_settingsManager->sortAscending();
+    const struct { bool asc; QString label; } sortOrders[] = {
+        { true,  tr("Vzestupně") },
+        { false, tr("Sestupně") },
+    };
+    for (const auto &entry : sortOrders) {
+        QAction *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.asc == ascending);
+        sortOrderGroup->addAction(action);
+        const bool asc = entry.asc;
+        connect(action, &QAction::triggered, this, [this, asc] {
+            m_settingsManager->setSortAscending(asc);
+            reloadCurrentFolder();
+        });
+    }
+
     settingsMenu->addSeparator();
 
     m_rememberLastFolderAction->setCheckable(true);
