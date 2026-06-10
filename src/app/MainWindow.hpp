@@ -10,6 +10,7 @@
 class QAction;
 class QActionGroup;
 class QDockWidget;
+class QFileSystemWatcher;
 class QGraphicsColorizeEffect;
 class QLabel;
 class QSpinBox;
@@ -73,6 +74,7 @@ private slots:
     void onVlcConnectionLost();
     void onVlcProcessCrashed();
     void pollVlcKeys();
+    void onFolderChanged();
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -107,6 +109,7 @@ private:
     QStringList m_imagePaths;
     QString m_requestedFile;
     int m_currentIndex = -1;
+    int m_lastPrefetchIndex = -1;   // pro detekci směru listování
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
@@ -130,6 +133,8 @@ private:
     MetadataPanel *m_metadataPanel = nullptr;
     QWidget *m_overlayToolbar = nullptr;
     QTimer *m_overlayHideTimer = nullptr;
+    QFileSystemWatcher *m_folderWatcher = nullptr;
+    QString m_currentFolderPath;
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QSpinBox *m_intervalSpinBox;

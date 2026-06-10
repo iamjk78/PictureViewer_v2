@@ -17,6 +17,8 @@ set(APP_SOURCES
     SlideshowController.cpp
     SettingsManager.hpp
     SettingsManager.cpp
+    ThumbnailCacheManager.hpp
+    ThumbnailCacheManager.cpp
     VlcController.hpp
     VlcController.cpp
 )

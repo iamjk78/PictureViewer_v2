@@ -5,6 +5,7 @@
 #include "app/MetadataPanel.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
+#include "app/ThumbnailCacheManager.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VlcController.hpp"
 #include "core/ImageFormats.hpp"
@@ -19,6 +20,7 @@
 #include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QGraphicsColorizeEffect>
 #include <QMessageBox>
 #include <QUrl>
@@ -156,6 +158,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
                                    m_settingsManager->effectiveThumbnailCacheDir());
 
+    // Vyčistit cache náhledů pokud překročila limit (500 MB)
+    ThumbnailCacheManager::cleanupIfNeeded(m_settingsManager->effectiveThumbnailCacheDir());
+
     connect(m_thumbnailPanel, &ThumbnailPanel::imageSelected, this, &MainWindow::showImage);
     connect(m_slideshowController, &SlideshowController::nextImageRequested, this, &MainWindow::showNextImage);
     setupDock();
@@ -207,6 +212,13 @@ void MainWindow::cancelAllWorkers()
     // Stop delivering decoded images; running decodes finish into the void.
     if (m_imageLoader != nullptr) {
         m_imageLoader->shutdown();
+    }
+
+    // Zrušit sledování složky
+    if (m_folderWatcher != nullptr) {
+        disconnect(m_folderWatcher, nullptr, this, nullptr);
+        m_folderWatcher->deleteLater();
+        m_folderWatcher = nullptr;
     }
 }
 
@@ -504,6 +516,15 @@ void MainWindow::onScanFinished(int generation)
     m_folderScanWorker = nullptr;
 }
 
+void MainWindow::onFolderChanged()
+{
+    // Složka se změnila na disku (přidán/smazán/změněn soubor)
+    // Znovu spustit sken, aby se katalog aktualizoval
+    if (!m_currentFolderPath.isEmpty()) {
+        loadFolder(m_currentFolderPath);
+    }
+}
+
 void MainWindow::showPreviousImage()
 {
     if (m_imagePaths.isEmpty()) {
@@ -554,6 +575,17 @@ void MainWindow::loadFolder(const QString &folderPath)
         m_folderScanWorker->cancel();
         m_folderScanWorker = nullptr;
     }
+
+    // Sledovat změny v otevřené složce (nové/smazané soubory)
+    if (m_folderWatcher != nullptr) {
+        disconnect(m_folderWatcher, nullptr, this, nullptr);
+        m_folderWatcher->deleteLater();
+    }
+    m_currentFolderPath = folderPath;
+    m_folderWatcher = new QFileSystemWatcher(this);
+    m_folderWatcher->addPath(folderPath);
+    connect(m_folderWatcher, &QFileSystemWatcher::directoryChanged,
+            this, &MainWindow::onFolderChanged);
 
     // Parent must be nullptr — memory is managed by the deleteLater connection
     // below. A Qt parent would create a second deletion path → double-free.
@@ -703,17 +735,36 @@ void MainWindow::prefetchNeighbors()
         return;
     }
 
+    // Detekovat směr listování (vpřed = +1, vzad = -1)
+    int direction = 0;
+    if (m_lastPrefetchIndex >= 0 && m_lastPrefetchIndex != m_currentIndex) {
+        direction = (m_currentIndex - m_lastPrefetchIndex > 0) ? 1 : -1;
+    }
+    m_lastPrefetchIndex = m_currentIndex;
+
     QStringList neighbors;
-    const int next = (m_currentIndex + 1) % m_imagePaths.size();
-    const int previous = (m_currentIndex - 1 + m_imagePaths.size()) % m_imagePaths.size();
-    const QString nextSuffix = "." + QFileInfo(m_imagePaths.at(next)).suffix();
-    const QString prevSuffix = "." + QFileInfo(m_imagePaths.at(previous)).suffix();
-    if (!isPdfFile(nextSuffix)) {
-        neighbors.append(m_imagePaths.at(next));
+    const int size = m_imagePaths.size();
+
+    if (direction > 0) {
+        // Listuju vpřed: prefetchovat N+1, N+2, N+3, N+4, N+5
+        for (int i = 1; i <= 5; ++i) {
+            const int idx = (m_currentIndex + i) % size;
+            const QString suffix = "." + QFileInfo(m_imagePaths.at(idx)).suffix();
+            if (!isPdfFile(suffix)) {
+                neighbors.append(m_imagePaths.at(idx));
+            }
+        }
+    } else {
+        // Listuju vzad: prefetchovat N-1, N-2, N-3, N-4, N-5
+        for (int i = 1; i <= 5; ++i) {
+            const int idx = (m_currentIndex - i + size * 100) % size;  // +size*100 pro bezpečné modulo
+            const QString suffix = "." + QFileInfo(m_imagePaths.at(idx)).suffix();
+            if (!isPdfFile(suffix)) {
+                neighbors.append(m_imagePaths.at(idx));
+            }
+        }
     }
-    if (previous != next && !isPdfFile(prevSuffix)) {
-        neighbors.append(m_imagePaths.at(previous));
-    }
+
     m_imageLoader->prefetch(neighbors);
 }
 
