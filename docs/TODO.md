@@ -31,7 +31,7 @@ Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 
 ## Výkon
 
-- [x] **`QFileSystemWatcher`** – automatická reakce na změny složky na disku. *(2026-06-10)*
+- [ ] **`QFileSystemWatcher`** – automatická reakce na změny složky na disku. (Vypnuto – vytváří nekonečné cykly)
 - [x] **Úklid diskové cache náhledů** – strop velikosti (500 MB) + mazání nejstarších záznamů. *(2026-06-10)*
 - [x] **Směrový prefetch** – při listování vpřed přednačítat N+1 až N+5 místo N−1. *(2026-06-10)*
 
