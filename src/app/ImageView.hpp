@@ -45,6 +45,9 @@ public:
 
 signals:
     void pdfPageChanged(int page, int totalPages);
+    // Procento zvětšení obrázku (100.0 = 1:1). Záporná hodnota = skrýt
+    // indikátor (PDF nebo prázdný pohled — tam zoom % nedává smysl).
+    void zoomChanged(double percent);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -54,6 +57,7 @@ protected:
 
 private:
     void applyZoom(double factor);
+    void emitZoomChanged();   // odešle aktuální zoom % (nebo -1 pro skrytí)
     void renderPdfPage(int pageIndex);
     void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)
 
@@ -69,6 +73,7 @@ private:
     QGraphicsPixmapItem *m_pixmapItem;
     double m_zoomLevel;
     bool m_manuallyZoomed;
+    bool m_hasContent = false;   // je zobrazen skutečný obrázek (ne placeholder)?
     std::unique_ptr<PdfHandler> m_pdfHandler;
     int m_currentPdfPage;
     QTimer *m_pdfRerenderTimer = nullptr;

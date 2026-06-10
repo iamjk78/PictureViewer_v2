@@ -76,6 +76,7 @@ Aktualizováno po code review a bug fixech (verze 0.6).
 - [ ] „Zobrazit ve Finderu/Exploreru" + kopírovat obrázek do schránky
 - [ ] Vícenásobný výběr v režimu Galerie (hromadné mazání/přesun)
 - [ ] Rekurzivní sken podsložek (volitelně)
-- [ ] Indikátor úrovně zoomu ve status baru
+- [x] Indikátor úrovně zoomu ve status baru – jen pro obrázky (1:1 = 100 %),
+      u PDF skrytý (rozlišení renderu se přizpůsobuje zoomu). *(2026-06-10)*
 - [ ] EXIF data (clona, ISO, expozice) v Pro panelu metadat
 - [ ] Aktualizace HelpDialog o nové režimy vzhledu a cache

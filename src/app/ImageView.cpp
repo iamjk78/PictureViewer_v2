@@ -74,8 +74,19 @@ void ImageView::clearImage()
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
+    m_hasContent = false;
     setTransform(QTransform());
     fitToWindow();
+}
+
+void ImageView::emitZoomChanged()
+{
+    // Zoom % má smysl jen pro obrázky (100 % = 1:1 pixel). U PDF se rozlišení
+    // renderu přizpůsobuje zoomu, takže transform scale neodpovídá vizuálnímu
+    // zvětšení; prázdný pohled žádný zoom nemá. V obou případech pošleme -1,
+    // což indikátor ve status baru skryje.
+    const bool meaningful = m_hasContent && !isPdfLoaded();
+    emit zoomChanged(meaningful ? m_zoomLevel * 100.0 : -1.0);
 }
 
 bool ImageView::loadImage(const QString &path)
@@ -108,6 +119,7 @@ void ImageView::showImageReset(const QImage &image)
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
+    m_hasContent = true;
     setTransform(QTransform());
     fitToWindow();
 }
@@ -121,6 +133,7 @@ void ImageView::fitToWindow()
     fitInView(m_pixmapItem, Qt::KeepAspectRatio);
     m_zoomLevel = transform().m11();
     m_manuallyZoomed = false;
+    emitZoomChanged();
 }
 
 void ImageView::resetZoom()
@@ -128,6 +141,7 @@ void ImageView::resetZoom()
     setTransform(QTransform());
     m_zoomLevel = 1.0;
     m_manuallyZoomed = true;
+    emitZoomChanged();
 }
 
 void ImageView::zoomIn()
@@ -213,6 +227,7 @@ void ImageView::applyZoom(double factor)
     scale(factor, factor);
     m_zoomLevel = nextZoom;
     m_manuallyZoomed = true;
+    emitZoomChanged();
 
     if (isPdfLoaded()) {
         m_pdfRerenderTimer->start();

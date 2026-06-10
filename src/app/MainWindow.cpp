@@ -1029,6 +1029,19 @@ void MainWindow::setupStatusBar()
 {
     statusBar()->addWidget(m_statusLabel);
     m_statusLabel->setText(tr("Vyber složku s obrázky."));
+
+    // Indikátor zoomu vpravo; skrytý dokud není zobrazen obrázek.
+    m_zoomLabel = new QLabel(this);
+    m_zoomLabel->hide();
+    statusBar()->addPermanentWidget(m_zoomLabel);
+    connect(m_imageView, &ImageView::zoomChanged, this, [this](double percent) {
+        if (percent <= 0.0) {
+            m_zoomLabel->hide();
+        } else {
+            m_zoomLabel->setText(tr("Zoom: %1 %").arg(qRound(percent)));
+            m_zoomLabel->show();
+        }
+    });
 }
 
 // ── Přepínání rozložení UI ───────────────────────────────────────────────────

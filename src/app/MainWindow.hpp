@@ -132,6 +132,7 @@ private:
     QTimer *m_overlayHideTimer = nullptr;
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
+    QLabel *m_zoomLabel = nullptr;   // indikátor zoomu vpravo ve status baru
     QSpinBox *m_intervalSpinBox;
     SlideshowController *m_slideshowController;
     QAction *m_openFolderAction;
