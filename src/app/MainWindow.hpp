@@ -112,11 +112,13 @@ private:
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
     // ── Kategorie ────────────────────────────────────────────────────────────
-    void setupCategoriesToolbar();   // vytvořit toolbar pro kategorie
-    void onCategoryAssign();         // otevřít dialog pro přiřazení kategorií
-    void onCategoryRemoveAll();      // smazat všechny kategorie z obrázku
-    void onCategoryFilterChanged();  // filtrování podle vybraných kategorií
-    void updateStatusBarCategories(); // aktualizovat kategorie ve status baru
+    void setupCategoriesToolbar();      // vytvořit toolbar pro kategorie
+    void refreshCategoryButtons();      // znovu vytvořit tlačítka pro kategorie
+    void onCategoryButtonToggled(int categoryId);  // toggle přiřazení kategorie
+    void updateCategoryButtonStates();  // aktualizovat stavy tlačítek podle obrázku
+    void onCategoryRemoveAll();         // smazat všechny kategorie z obrázku
+    void onCategoryFilterChanged();     // filtrování podle vybraných kategorií
+    void updateStatusBarCategories();   // aktualizovat kategorie ve status baru
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
@@ -131,6 +133,7 @@ private:
     QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
+    QMap<int, class QPushButton*> m_categoryButtons;  // mapa: categoryId → button widget
     FolderScanWorker *m_folderScanWorker;
     ImageLoader *m_imageLoader = nullptr;
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení

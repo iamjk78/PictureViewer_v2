@@ -44,10 +44,12 @@
 #include <QProcess>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QPushButton>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
@@ -804,6 +806,7 @@ void MainWindow::showImage(int index)
     m_currentIndex = index;
     m_thumbnailPanel->setCurrentIndex(index);
     updateStatus(path);
+    updateCategoryButtonStates();
 
     // Disconnect old signal if present and connect new one for PDF
     disconnect(m_imageView, &ImageView::pdfPageChanged, this, nullptr);
@@ -1912,17 +1915,17 @@ void MainWindow::setupCategoriesToolbar()
         if (dialog.exec() == QDialog::Accepted) {
             Category cat = m_categoryManager->addCategory(dialog.categoryName(), dialog.selectedColor());
             if (cat.id > 0) {
-                // Úspěšně vytvořeno
+                refreshCategoryButtons();  // Přidám nové tlačítko po vytvoření
             }
         }
     });
 
     m_categoriesToolbar->addSeparator();
 
-    // Tlačítko [Přiřadit]
-    QAction *assignAction = m_categoriesToolbar->addAction(tr("[Přiřadit]"));
-    assignAction->setToolTip(tr("Přiřadit kategorie k obrázku"));
-    connect(assignAction, &QAction::triggered, this, &MainWindow::onCategoryAssign);
+    // Dynamická tlačítka pro kategorie budou přidána v refreshCategoryButtons()
+    refreshCategoryButtons();
+
+    m_categoriesToolbar->addSeparator();
 
     // Tlačítko [Odebrat vše]
     QAction *removeAllAction = m_categoriesToolbar->addAction(tr("[Odebrat vše]"));
@@ -1947,32 +1950,6 @@ void MainWindow::setupCategoriesToolbar()
     m_categoriesToolbar->setVisible(wasVisible);
 }
 
-void MainWindow::onCategoryAssign()
-{
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
-        return;
-    }
-
-    QString imagePath = m_imagePaths.at(m_currentIndex);
-    QList<Category> allCats = m_categoryManager->allCategories();
-    QList<Category> currentCats = m_categoryManager->categoriesForImage(imagePath);
-
-    AssignCategoriesDialog dialog(allCats, currentCats, this);
-    if (dialog.exec() == QDialog::Accepted) {
-        // Smazat starší
-        for (const Category &cat : currentCats) {
-            m_categoryManager->unassignCategory(imagePath, cat.id);
-        }
-
-        // Přidat nové
-        for (int catId : dialog.selectedCategoryIds()) {
-            m_categoryManager->assignCategory(imagePath, catId);
-        }
-
-        updateStatus(imagePath);
-    }
-}
-
 void MainWindow::onCategoryRemoveAll()
 {
     if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
@@ -1982,6 +1959,161 @@ void MainWindow::onCategoryRemoveAll()
     QString imagePath = m_imagePaths.at(m_currentIndex);
     m_categoryManager->unassignAll(imagePath);
     updateStatus(imagePath);
+    updateCategoryButtonStates();
+}
+
+void MainWindow::refreshCategoryButtons()
+{
+    // Najít a smazat starou akci s kontejnerem kategorií
+    QAction *oldContainerAction = nullptr;
+    for (QAction *action : m_categoriesToolbar->actions()) {
+        QWidget *widget = m_categoriesToolbar->widgetForAction(action);
+        if (widget && widget->objectName() == "categoryButtonsContainer") {
+            oldContainerAction = action;
+            break;
+        }
+    }
+
+    // Smazat staré tlačítka
+    for (QPushButton *btn : m_categoryButtons) {
+        btn->deleteLater();
+    }
+    m_categoryButtons.clear();
+
+    // Smazat starý kontejner
+    if (oldContainerAction) {
+        m_categoriesToolbar->removeAction(oldContainerAction);
+    }
+
+    // Vytvořit nový kontejner pro kategorie
+    QWidget *newContainer = new QWidget(this);
+    newContainer->setObjectName("categoryButtonsContainer");
+    QHBoxLayout *layout = new QHBoxLayout(newContainer);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+
+    // Načíst všechny kategorie
+    QList<Category> allCategories = m_categoryManager->allCategories();
+
+    // Pro každou kategorii vytvořit tlačítko
+    for (const Category &cat : allCategories) {
+        QPushButton *btn = new QPushButton(cat.name);
+        btn->setCheckable(true);
+        btn->setFlat(false);
+        btn->setMaximumHeight(24);
+
+        // Nastavit barvu pozadí
+        QString colorStr = cat.color.name();
+        int lightness = cat.color.lightness();
+        QString textColor = lightness > 128 ? "#000000" : "#FFFFFF";
+
+        btn->setStyleSheet(QString(
+            "QPushButton {"
+            "  background-color: %1;"
+            "  color: %2;"
+            "  border: 2px solid #ccc;"
+            "  border-radius: 4px;"
+            "  padding: 2px 6px;"
+            "  font-weight: bold;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton:checked, QPushButton:pressed {"
+            "  border: 3px solid #333;"
+            "}"
+        ).arg(colorStr, textColor));
+
+        // Připojit klik
+        connect(btn, &QPushButton::clicked, this, [this, cat] {
+            onCategoryButtonToggled(cat.id);
+        });
+
+        // Přidat do layoutu
+        layout->addWidget(btn);
+
+        // Uložit do mapy
+        m_categoryButtons[cat.id] = btn;
+    }
+
+    layout->addStretch();
+
+    // Vložit kontejner do toolbaru (na druhou pozici, za "[+ Nová]" + separator)
+    QList<QAction*> actions = m_categoriesToolbar->actions();
+    if (actions.size() >= 2) {
+        m_categoriesToolbar->insertWidget(actions.at(1), newContainer);
+    } else {
+        m_categoriesToolbar->addWidget(newContainer);
+    }
+
+    // Aktualizovat stavy tlačítek podle aktuálního obrázku
+    updateCategoryButtonStates();
+}
+
+void MainWindow::onCategoryButtonToggled(int categoryId)
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+
+    QString imagePath = m_imagePaths.at(m_currentIndex);
+    QPushButton *btn = m_categoryButtons.value(categoryId);
+    if (!btn) return;
+
+    // Zkontrolovat, zda je kategorie už přiřazena
+    QList<Category> currentCategories = m_categoryManager->categoriesForImage(imagePath);
+    bool isAssigned = false;
+    for (const Category &cat : currentCategories) {
+        if (cat.id == categoryId) {
+            isAssigned = true;
+            break;
+        }
+    }
+
+    if (isAssigned) {
+        // Odebrat kategorii
+        m_categoryManager->unassignCategory(imagePath, categoryId);
+        btn->setChecked(false);
+    } else {
+        // Přidat kategorii (pokud je místo)
+        if (currentCategories.size() >= 5) {
+            QMessageBox::warning(this, tr("Upozornění"),
+                tr("Nelze přiřadit více než 5 kategorií jednomu obrázku."));
+            btn->setChecked(false);
+            return;
+        }
+        m_categoryManager->assignCategory(imagePath, categoryId);
+        btn->setChecked(true);
+    }
+
+    updateStatus(imagePath);
+}
+
+void MainWindow::updateCategoryButtonStates()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        // Vypnout všechna tlačítka
+        for (QPushButton *btn : m_categoryButtons) {
+            btn->setChecked(false);
+            btn->setEnabled(false);
+        }
+        return;
+    }
+
+    QString imagePath = m_imagePaths.at(m_currentIndex);
+    QList<Category> currentCategories = m_categoryManager->categoriesForImage(imagePath);
+
+    // Vytvořit set přiřazených kategorií pro rychlé vyhledávání
+    QSet<int> assignedIds;
+    for (const Category &cat : currentCategories) {
+        assignedIds.insert(cat.id);
+    }
+
+    // Aktualizovat stav všech tlačítek
+    for (auto it = m_categoryButtons.begin(); it != m_categoryButtons.end(); ++it) {
+        QPushButton *btn = it.value();
+        bool assigned = assignedIds.contains(it.key());
+        btn->setChecked(assigned);
+        btn->setEnabled(true);
+    }
 }
 
 void MainWindow::onCategoryFilterChanged()
