@@ -907,14 +907,32 @@ void MainWindow::updateStatus(const QString &path)
         if (m_metadataPanel != nullptr) {
             m_metadataPanel->setMetadata(info);
         }
+
+        // Přidat kategorie (max 3 + "..." pokud jich je víc)
+        QString categoryStr;
+        if (m_categoryManager) {
+            QList<Category> cats = m_categoryManager->categoriesForImage(path);
+            QStringList catNames;
+            for (int i = 0; i < qMin(3, cats.size()); ++i) {
+                catNames.append(cats[i].name);
+            }
+            if (cats.size() > 3) {
+                catNames.append("...");
+            }
+            if (!catNames.isEmpty()) {
+                categoryStr = tr("   |   Kategorie: ") + catNames.join(", ");
+            }
+        }
+
         m_statusLabel->setText(
-            tr("%1   |   %2   |   %3   |   %4 kB   |   %5 / %6")
+            tr("%1   |   %2   |   %3   |   %4 kB   |   %5 / %6%7")
                 .arg(info.path.section('/', -1))
                 .arg(info.dimensionsString())
                 .arg(info.format)
                 .arg(QString::number(info.fileSizeKb(), 'f', 1))
                 .arg(m_currentIndex + 1)
                 .arg(m_imagePaths.size())
+                .arg(categoryStr)
         );
     } catch (...) {
         m_statusLabel->setText(path.section('/', -1));
@@ -1929,7 +1947,7 @@ void MainWindow::onCategoryAssign()
             m_categoryManager->assignCategory(imagePath, catId);
         }
 
-        updateStatusBarCategories();
+        updateStatus(imagePath);
     }
 }
 
@@ -1941,38 +1959,23 @@ void MainWindow::onCategoryRemoveAll()
 
     QString imagePath = m_imagePaths.at(m_currentIndex);
     m_categoryManager->unassignAll(imagePath);
-    updateStatusBarCategories();
+    updateStatus(imagePath);
 }
 
 void MainWindow::onCategoryFilterChanged()
 {
-    // TODO: Reimplementovat loadFolder s filtrem
-    // if (!m_currentFolder.isEmpty()) {
-    //     loadFolder(m_currentFolder);
-    // }
+    // Znovu načíst složku s novým filtrem
+    if (!m_currentFolder.isEmpty()) {
+        loadFolder(m_currentFolder);
+    }
 }
 
 void MainWindow::updateStatusBarCategories()
 {
-    // TODO: Aktualizovat status bar s kategoriemi
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
-        return;
+    // Nyní implementován v updateStatus()
+    if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        updateStatus(m_imagePaths.at(m_currentIndex));
     }
-
-    QString imagePath = m_imagePaths.at(m_currentIndex);
-    QList<Category> cats = m_categoryManager->categoriesForImage(imagePath);
-
-    // Zobrazit max 3 kategorie + "..."
-    QStringList catNames;
-    for (int i = 0; i < qMin(3, cats.size()); ++i) {
-        catNames.append(cats[i].name);
-    }
-
-    if (cats.size() > 3) {
-        catNames.append("...");
-    }
-
-    // Aktualizovat status bar (TODO: zapojit do updateStatus())
 }
 
 void MainWindow::updateFavoritesMenu()
