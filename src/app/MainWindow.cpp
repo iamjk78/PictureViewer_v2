@@ -41,6 +41,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QEvent>
+#include <QBuffer>
 #include <QMimeData>
 #include <QProcess>
 #include <QFileDialog>
@@ -543,7 +544,19 @@ void MainWindow::showImageContextMenu(const QPoint &globalPos)
     QAction *copyImageAction = menu.addAction(tr("Kopírovat obrázek"));
     connect(copyImageAction, &QAction::triggered, this, [this] {
         const QImage image = m_imageView->displayedImage();
-        if (!image.isNull()) {
+        if (image.isNull()) {
+            return;
+        }
+        if (m_imageView->hasCrop()) {
+            // Uložit výřez jako dočasný JPEG soubor a vložit soubor do schránky
+            QString configDir = QFileInfo(SettingsManager::configFilePath()).absolutePath();
+            QString tempPath  = configDir + "/picture.jpg";
+            if (image.save(tempPath, "JPEG", 90)) {
+                QMimeData *mimeData = new QMimeData();
+                mimeData->setUrls({QUrl::fromLocalFile(tempPath)});
+                QApplication::clipboard()->setMimeData(mimeData);
+            }
+        } else {
             QApplication::clipboard()->setImage(image);
         }
     });
@@ -1270,6 +1283,19 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_rotateLeftAction);
     toolbar->addAction(m_rotateRightAction);
     toolbar->addSeparator();
+
+    m_cropAction = new QAction(QStringLiteral("✂"), this);
+    m_cropAction->setToolTip(tr("Ořez obrázku — označte oblast myší"));
+    m_cropAction->setCheckable(true);
+    connect(m_cropAction, &QAction::toggled, this, [this](bool checked) {
+        m_imageView->setCropMode(checked);
+    });
+    connect(m_imageView, &ImageView::cropModeChanged, this, [this](bool active) {
+        m_cropAction->setChecked(active);
+    });
+    toolbar->addAction(m_cropAction);
+    toolbar->addSeparator();
+
     toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
 }

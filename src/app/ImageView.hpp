@@ -10,6 +10,7 @@ class QContextMenuEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QMovie;
+class QRubberBand;
 class QSize;
 class QString;
 class QResizeEvent;
@@ -52,16 +53,24 @@ public:
     // PDF). Prázdný QImage, pokud není co zobrazit. Pro kopírování do schránky.
     QImage displayedImage() const;
 
+    // Crop mode — uživatel označí oblast myší, zobrazení se ořízne (vizuálně).
+    void setCropMode(bool active);
+    bool isCropMode() const { return m_cropMode; }
+    bool hasCrop() const { return m_hasCrop; }
+
 signals:
     void pdfPageChanged(int page, int totalPages);
     void contextMenuRequested(const QPoint &globalPos);   // pravý klik nad pohledem
     // Procento zvětšení obrázku (100.0 = 1:1). Záporná hodnota = skrýt
     // indikátor (PDF nebo prázdný pohled — tam zoom % nedává smysl).
     void zoomChanged(double percent);
+    void cropModeChanged(bool active);   // emitováno při aktivaci/deaktivaci crop módu
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
@@ -82,11 +91,18 @@ private:
     // renderPdfPage() a rerenderPdfForZoom().
     QSize pdfRenderSize(int pageIndex, int targetWidth) const;
 
+    void applyCropFromViewport(const QRect &viewportRect);
+    void exitCropMode();   // deaktivuje crop mode a emituje signál
+
     QGraphicsScene *m_scene;
     QGraphicsPixmapItem *m_pixmapItem;
     double m_zoomLevel;
     bool m_manuallyZoomed;
     bool m_hasContent = false;   // je zobrazen skutečný obrázek (ne placeholder)?
+    bool m_cropMode = false;
+    bool m_hasCrop = false;
+    QRubberBand *m_rubberBand = nullptr;
+    QPoint m_cropOrigin;
     std::unique_ptr<PdfHandler> m_pdfHandler;
     int m_currentPdfPage;
     QTimer *m_pdfRerenderTimer = nullptr;

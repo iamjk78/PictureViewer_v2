@@ -8,10 +8,12 @@
 #include <QGraphicsScene>
 #include <QImageReader>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QMovie>
 #include <QPainter>
 #include <QPixmap>
 #include <QResizeEvent>
+#include <QRubberBand>
 #include <QScrollBar>
 #include <QSize>
 #include <QTimer>
@@ -71,6 +73,8 @@ ImageView::~ImageView() = default;
 void ImageView::clearImage()
 {
     stopAnimation();
+    if (m_cropMode) { exitCropMode(); }
+    m_hasCrop = false;
     m_pdfHandler->unload();
     m_pdfRerenderTimer->stop();
     m_pixmapItem->setPixmap(createPlaceholderPixmap());
@@ -159,6 +163,8 @@ void ImageView::stopAnimation()
 
 void ImageView::showImageReset(const QImage &image)
 {
+    if (m_cropMode) { exitCropMode(); }
+    m_hasCrop = false;
     m_pixmapItem->setPixmap(QPixmap::fromImage(image));
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     m_zoomLevel = 1.0;
@@ -237,8 +243,78 @@ QImage ImageView::displayedImage() const
     return pixmap.isNull() ? QImage() : pixmap.toImage();
 }
 
+// ── Crop mode ─────────────────────────────────────────────────────────────────
+
+void ImageView::setCropMode(bool active)
+{
+    if (m_cropMode == active) {
+        return;
+    }
+    m_cropMode = active;
+    if (active) {
+        setDragMode(QGraphicsView::NoDrag);
+        viewport()->setCursor(Qt::CrossCursor);
+    } else {
+        setDragMode(QGraphicsView::ScrollHandDrag);
+        viewport()->unsetCursor();
+        if (m_rubberBand) {
+            m_rubberBand->hide();
+        }
+    }
+    emit cropModeChanged(active);
+}
+
+void ImageView::exitCropMode()
+{
+    m_cropMode = false;
+    setDragMode(QGraphicsView::ScrollHandDrag);
+    viewport()->unsetCursor();
+    if (m_rubberBand) {
+        m_rubberBand->hide();
+    }
+    emit cropModeChanged(false);
+}
+
+void ImageView::applyCropFromViewport(const QRect &viewportRect)
+{
+    // Viewport souřadnice → scene souřadnice → souřadnice pixmapy
+    QPointF sceneTopLeft     = mapToScene(viewportRect.topLeft());
+    QPointF sceneBottomRight = mapToScene(viewportRect.bottomRight());
+
+    QPointF itemTopLeft     = m_pixmapItem->mapFromScene(sceneTopLeft);
+    QPointF itemBottomRight = m_pixmapItem->mapFromScene(sceneBottomRight);
+
+    QRectF itemRect = QRectF(itemTopLeft, itemBottomRight).normalized();
+    itemRect = itemRect.intersected(m_pixmapItem->boundingRect());
+
+    if (itemRect.width() < 2 || itemRect.height() < 2) {
+        return;
+    }
+
+    QPixmap cropped = m_pixmapItem->pixmap().copy(itemRect.toRect());
+    if (cropped.isNull()) {
+        return;
+    }
+
+    m_pixmapItem->setPixmap(cropped);
+    m_scene->setSceneRect(m_pixmapItem->boundingRect());
+    m_hasCrop = true;
+
+    // Přizpůsobit výřez oknu
+    fitInView(m_pixmapItem, Qt::KeepAspectRatio);
+    m_zoomLevel = 1.0;
+    m_manuallyZoomed = false;
+    emitZoomChanged();
+}
+
 void ImageView::contextMenuEvent(QContextMenuEvent *event)
 {
+    // V crop módu pravý klik cancel mode, nekontextové menu
+    if (m_cropMode) {
+        exitCropMode();
+        event->accept();
+        return;
+    }
     emit contextMenuRequested(event->globalPos());
     event->accept();
 }
@@ -259,6 +335,14 @@ void ImageView::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Space:
         resetZoom();
         event->accept();
+        return;
+    case Qt::Key_Escape:
+        if (m_cropMode) {
+            exitCropMode();
+            event->accept();
+            return;
+        }
+        event->ignore();
         return;
     default:
         event->ignore();
@@ -297,6 +381,17 @@ void ImageView::wheelEvent(QWheelEvent *event)
 
 void ImageView::mousePressEvent(QMouseEvent *event)
 {
+    if (m_cropMode && event->button() == Qt::LeftButton) {
+        m_cropOrigin = event->pos();
+        if (!m_rubberBand) {
+            m_rubberBand = new QRubberBand(QRubberBand::Rectangle, viewport());
+        }
+        m_rubberBand->setGeometry(QRect(m_cropOrigin, QSize()));
+        m_rubberBand->show();
+        event->accept();
+        return;
+    }
+
     if (event->button() == Qt::MiddleButton) {
         resetZoom();
         event->accept();
@@ -304,6 +399,33 @@ void ImageView::mousePressEvent(QMouseEvent *event)
     }
 
     QGraphicsView::mousePressEvent(event);
+}
+
+void ImageView::mouseMoveEvent(QMouseEvent *event)
+{
+    if (m_cropMode && m_rubberBand && m_rubberBand->isVisible()) {
+        m_rubberBand->setGeometry(QRect(m_cropOrigin, event->pos()).normalized());
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseMoveEvent(event);
+}
+
+void ImageView::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (m_cropMode && event->button() == Qt::LeftButton && m_rubberBand) {
+        QRect selection = QRect(m_cropOrigin, event->pos()).normalized();
+        m_rubberBand->hide();
+
+        if (selection.width() > 5 && selection.height() > 5) {
+            applyCropFromViewport(selection);
+        }
+
+        exitCropMode();
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseReleaseEvent(event);
 }
 
 void ImageView::applyZoom(double factor)

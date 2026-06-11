@@ -5,6 +5,7 @@ set(APP_SOURCES
     CategoryManager.cpp
     CategoryDialogs.hpp
     CategoryDialogs.cpp
+    ClipboardHelper.hpp
     HelpDialog.hpp
     HelpDialog.cpp
     ImageLoader.hpp
@@ -26,6 +27,15 @@ set(APP_SOURCES
     VlcController.hpp
     VlcController.cpp
 )
+
+if(APPLE)
+    list(APPEND APP_SOURCES ClipboardHelper_mac.mm)
+    set_source_files_properties(ClipboardHelper_mac.mm PROPERTIES
+        COMPILE_FLAGS "-x objective-c++"
+    )
+else()
+    list(APPEND APP_SOURCES ClipboardHelper.cpp)
+endif()
 
 add_library(picture_viewer_app OBJECT ${APP_SOURCES})
 target_include_directories(picture_viewer_app

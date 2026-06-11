@@ -193,6 +193,7 @@ private:
     QAction *m_renameImageAction;
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;
+    QAction *m_cropAction = nullptr;
 };
 
 } // namespace pictureviewer
