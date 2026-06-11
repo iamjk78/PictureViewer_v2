@@ -2154,6 +2154,57 @@ void MainWindow::setupCategoriesToolbar()
     // Obnovit stav z nastavení (nebo skrýt na začátku, pokud není uložen)
     bool wasVisible = m_settingsManager->categoriesToolbarVisible();
     m_categoriesToolbar->setVisible(wasVisible);
+
+    // Zvětšit tlačítka hlavního toolbaru — nastavit až tady, kdy jsou přidána
+    // i toggle tlačítka Oblíbené a Kategorie.
+    const QString toolbarButtonStyle =
+        "QToolButton {"
+        "  font-size: 14px;"
+        "  font-weight: bold;"
+        "  min-height: 30px;"
+        "  padding: 2px 10px;"
+        "  border-radius: 4px;"
+        "}"
+        "QToolButton:hover {"
+        "  background-color: rgba(0,0,0,0.08);"
+        "}"
+        "QToolButton:checked {"
+        "  background-color: rgba(60,120,220,0.20);"
+        "  border: 1px solid rgba(60,120,220,0.35);"
+        "}";
+    m_mainToolbar->setStyleSheet(toolbarButtonStyle);
+    m_mainToolbar->setIconSize(QSize(24, 24));
+
+    // Zvětšit konkrétní tlačítka — emoji (rotace, výstřižek) a ikona přejmenování
+    const QString bigEmojiStyle =
+        "QToolButton {"
+        "  font-size: 22px;"
+        "  min-width: 36px;"
+        "  min-height: 34px;"
+        "  padding: 2px 6px;"
+        "}";
+    const QString bigIconStyle =
+        "QToolButton {"
+        "  min-width: 36px;"
+        "  min-height: 34px;"
+        "  padding: 2px 6px;"
+        "}";
+
+    auto applyStyle = [this](QAction *action, const QString &style) {
+        auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(action));
+        if (btn) {
+            btn->setStyleSheet(style);
+        }
+    };
+    applyStyle(m_rotateLeftAction,  bigEmojiStyle);
+    applyStyle(m_rotateRightAction, bigEmojiStyle);
+    applyStyle(m_cropAction,        bigEmojiStyle);
+
+    // Ikona přejmenování — zvětšit pouze rozměr ikony
+    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(m_renameImageAction))) {
+        btn->setStyleSheet(bigIconStyle);
+        btn->setIconSize(QSize(28, 28));
+    }
 }
 
 void MainWindow::onCategoryRemoveAll()
