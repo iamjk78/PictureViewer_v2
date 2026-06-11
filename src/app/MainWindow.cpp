@@ -1,3 +1,4 @@
+#include "app/CategoryDialogs.hpp"
 #include "app/CategoryManager.hpp"
 #include "app/HelpDialog.hpp"
 #include "app/ImageLoader.hpp"
@@ -178,6 +179,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupDock();
     setupMenu();
     setupToolbar();
+    setupCategoriesToolbar();
     setupStatusBar();
     setupOverlayToolbar();
 
@@ -1867,6 +1869,110 @@ void MainWindow::updateVideoMetadata(const QString &videoPath)
 
     const QString statusText = tr("▶ Video: %1 (%2) [ESC = exit]").arg(fileName, sizeStr);
     m_statusLabel->setText(statusText);
+}
+
+void MainWindow::setupCategoriesToolbar()
+{
+    auto *toolbar = addToolBar(tr("Kategorie"));
+    toolbar->setMovable(false);
+
+    // Tlačítko [+ Nová kategorie]
+    QAction *newCatAction = toolbar->addAction(tr("[+ Nová]"));
+    newCatAction->setToolTip(tr("Vytvořit novou kategorii"));
+    connect(newCatAction, &QAction::triggered, this, [this] {
+        NewCategoryDialog dialog(this);
+        if (dialog.exec() == QDialog::Accepted) {
+            Category cat = m_categoryManager->addCategory(dialog.categoryName(), dialog.selectedColor());
+            if (cat.id > 0) {
+                // Úspěšně vytvořeno
+            }
+        }
+    });
+
+    toolbar->addSeparator();
+
+    // Tlačítko [Přiřadit]
+    QAction *assignAction = toolbar->addAction(tr("[Přiřadit]"));
+    assignAction->setToolTip(tr("Přiřadit kategorie k obrázku"));
+    connect(assignAction, &QAction::triggered, this, &MainWindow::onCategoryAssign);
+
+    // Tlačítko [Odebrat vše]
+    QAction *removeAllAction = toolbar->addAction(tr("[Odebrat vše]"));
+    removeAllAction->setToolTip(tr("Smazat všechny kategorie z obrázku"));
+    connect(removeAllAction, &QAction::triggered, this, &MainWindow::onCategoryRemoveAll);
+
+    toolbar->addSeparator();
+
+    // Filtr — dropdown se checkboxy (TODO: zjednoduššme na dropdown)
+    toolbar->addWidget(new QLabel(tr("Filtr:")));
+}
+
+void MainWindow::onCategoryAssign()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+
+    QString imagePath = m_imagePaths.at(m_currentIndex);
+    QList<Category> allCats = m_categoryManager->allCategories();
+    QList<Category> currentCats = m_categoryManager->categoriesForImage(imagePath);
+
+    AssignCategoriesDialog dialog(allCats, currentCats, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // Smazat starší
+        for (const Category &cat : currentCats) {
+            m_categoryManager->unassignCategory(imagePath, cat.id);
+        }
+
+        // Přidat nové
+        for (int catId : dialog.selectedCategoryIds()) {
+            m_categoryManager->assignCategory(imagePath, catId);
+        }
+
+        updateStatusBarCategories();
+    }
+}
+
+void MainWindow::onCategoryRemoveAll()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+
+    QString imagePath = m_imagePaths.at(m_currentIndex);
+    m_categoryManager->unassignAll(imagePath);
+    updateStatusBarCategories();
+}
+
+void MainWindow::onCategoryFilterChanged()
+{
+    // TODO: Reimplementovat loadFolder s filtrem
+    // if (!m_currentFolder.isEmpty()) {
+    //     loadFolder(m_currentFolder);
+    // }
+}
+
+void MainWindow::updateStatusBarCategories()
+{
+    // TODO: Aktualizovat status bar s kategoriemi
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+
+    QString imagePath = m_imagePaths.at(m_currentIndex);
+    QList<Category> cats = m_categoryManager->categoriesForImage(imagePath);
+
+    // Zobrazit max 3 kategorie + "..."
+    QStringList catNames;
+    for (int i = 0; i < qMin(3, cats.size()); ++i) {
+        catNames.append(cats[i].name);
+    }
+
+    if (cats.size() > 3) {
+        catNames.append("...");
+    }
+
+    // Aktualizovat status bar (TODO: zapojit do updateStatus())
 }
 
 void MainWindow::updateFavoritesMenu()

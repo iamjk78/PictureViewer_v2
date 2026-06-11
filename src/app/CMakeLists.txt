@@ -3,6 +3,8 @@ set(APP_SOURCES
     Application.cpp
     CategoryManager.hpp
     CategoryManager.cpp
+    CategoryDialogs.hpp
+    CategoryDialogs.cpp
     HelpDialog.hpp
     HelpDialog.cpp
     ImageLoader.hpp
