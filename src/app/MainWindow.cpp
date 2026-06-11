@@ -856,24 +856,20 @@ void MainWindow::prefetchNeighbors()
     QStringList neighbors;
     const int size = m_imagePaths.size();
 
-    if (direction > 0) {
-        // Listuju vpřed: prefetchovat N+1, N+2, N+3, N+4, N+5
-        for (int i = 1; i <= 5; ++i) {
-            const int idx = (m_currentIndex + i) % size;
-            const QString suffix = "." + QFileInfo(m_imagePaths.at(idx)).suffix();
-            if (!isPdfFile(suffix)) {
-                neighbors.append(m_imagePaths.at(idx));
-            }
-        }
-    } else {
-        // Listuju vzad: prefetchovat N-1, N-2, N-3, N-4, N-5
-        for (int i = 1; i <= 5; ++i) {
-            int idx = m_currentIndex - i;
-            if (idx < 0) idx += size;
-            const QString suffix = "." + QFileInfo(m_imagePaths.at(idx)).suffix();
-            if (!isPdfFile(suffix)) {
-                neighbors.append(m_imagePaths.at(idx));
-            }
+    // Prefetch má smysl jen pro staticky dekódované obrázky. PDF jde přes PDF
+    // render a GIF přes QMovie — ani jeden nečte z ImageLoader cache, takže by
+    // jejich přednačítání jen zbytečně plnilo RAM cache.
+    auto worthPrefetching = [](const QString &path) {
+        const QString suffix = "." + QFileInfo(path).suffix();
+        const bool isGif = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
+        return !isPdfFile(suffix) && !isGif;
+    };
+
+    for (int i = 1; i <= 5; ++i) {
+        int idx = m_currentIndex + (direction > 0 ? i : -i);
+        idx = ((idx % size) + size) % size;
+        if (worthPrefetching(m_imagePaths.at(idx))) {
+            neighbors.append(m_imagePaths.at(idx));
         }
     }
 
