@@ -112,13 +112,16 @@ private:
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
     // ── Kategorie ────────────────────────────────────────────────────────────
-    void setupCategoriesToolbar();      // vytvořit toolbar pro kategorie
-    void refreshCategoryButtons();      // znovu vytvořit tlačítka pro kategorie
+    void setupCategoriesToolbar();         // vytvořit toolbar pro kategorie
+    void refreshCategoryButtons();         // znovu vytvořit tlačítka pro přiřazení
     void onCategoryButtonToggled(int categoryId);  // toggle přiřazení kategorie
-    void updateCategoryButtonStates();  // aktualizovat stavy tlačítek podle obrázku
-    void onCategoryRemoveAll();         // smazat všechny kategorie z obrázku
-    void onCategoryFilterChanged();     // filtrování podle vybraných kategorií
-    void updateStatusBarCategories();   // aktualizovat kategorie ve status baru
+    void updateCategoryButtonStates();     // aktualizovat stavy tlačítek podle obrázku
+    void updateCategoryFilterButtons();    // znovu vytvořit tlačítka pro filtrování
+    void onCategoryFilterToggled(int categoryId);  // toggle filtr kategorie
+    void clearFilters();                  // vyčistit filtr
+    void onCategoryRemoveAll();            // smazat všechny kategorie z obrázku
+    void onCategoryFilterChanged();        // filtrování podle vybraných kategorií
+    void updateStatusBarCategories();      // aktualizovat kategorie ve status baru
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
@@ -133,7 +136,9 @@ private:
     QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
-    QMap<int, class QPushButton*> m_categoryButtons;  // mapa: categoryId → button widget
+    QMap<int, class QPushButton*> m_categoryButtons;  // mapa: categoryId → assignment button widget
+    QMap<int, class QPushButton*> m_categoryFilterButtons;  // mapa: categoryId → filter button widget
+    class QWidget *m_filterButtonsContainer = nullptr;  // kontejner pro filtr tlačítka
     FolderScanWorker *m_folderScanWorker;
     ImageLoader *m_imageLoader = nullptr;
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení

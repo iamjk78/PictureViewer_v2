@@ -572,8 +572,14 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         return;
     }
 
-    m_imagePaths = paths;
-    m_thumbnailPanel->loadImages(paths);
+    // Aplikovat filtr kategorií pokud je aktivní
+    if (!m_categoryFilterIds.isEmpty()) {
+        m_imagePaths = m_categoryManager->imagePathsWithAllCategories(m_categoryFilterIds);
+    } else {
+        m_imagePaths = paths;
+    }
+
+    m_thumbnailPanel->loadImages(m_imagePaths);
 
     int index = 0;
     if (!m_requestedFile.isEmpty()) {
@@ -1916,6 +1922,7 @@ void MainWindow::setupCategoriesToolbar()
             Category cat = m_categoryManager->addCategory(dialog.categoryName(), dialog.selectedColor());
             if (cat.id > 0) {
                 refreshCategoryButtons();  // Přidám nové tlačítko po vytvoření
+                updateCategoryFilterButtons();  // Přidám nový filtr tlačítko
             }
         }
     });
@@ -1934,8 +1941,14 @@ void MainWindow::setupCategoriesToolbar()
 
     m_categoriesToolbar->addSeparator();
 
-    // Filtr — label + placeholder (TODO: přidat kontrolu filtrování)
+    // Filtr — kontejner s tlačítky pro filtrování
     m_categoriesToolbar->addWidget(new QLabel(tr("Filtr:")));
+    updateCategoryFilterButtons();
+
+    // Tlačítko pro vyčistění filtru
+    QAction *clearFiltersAction = m_categoriesToolbar->addAction(tr("[Vyčistit filtr]"));
+    clearFiltersAction->setToolTip(tr("Odebrat všechny kategorie z filtru"));
+    connect(clearFiltersAction, &QAction::triggered, this, &MainWindow::clearFilters);
 
     // Přidat toggle tlačítko na HLAVNÍ toolbar
     m_mainToolbar->addSeparator();
@@ -2114,6 +2127,128 @@ void MainWindow::updateCategoryButtonStates()
         btn->setChecked(assigned);
         btn->setEnabled(true);
     }
+}
+
+void MainWindow::updateCategoryFilterButtons()
+{
+    // Najít a smazat starý kontejner
+    QAction *oldContainerAction = nullptr;
+    for (QAction *action : m_categoriesToolbar->actions()) {
+        QWidget *widget = m_categoriesToolbar->widgetForAction(action);
+        if (widget && widget == m_filterButtonsContainer) {
+            oldContainerAction = action;
+            break;
+        }
+    }
+
+    // Smazat staré tlačítka
+    for (QPushButton *btn : m_categoryFilterButtons) {
+        btn->deleteLater();
+    }
+    m_categoryFilterButtons.clear();
+
+    // Smazat starý kontejner
+    if (oldContainerAction) {
+        m_categoriesToolbar->removeAction(oldContainerAction);
+    }
+
+    // Vytvořit nový kontejner pro filtr
+    QWidget *newContainer = new QWidget(this);
+    newContainer->setObjectName("filterButtonsContainer");
+    QHBoxLayout *layout = new QHBoxLayout(newContainer);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+
+    // Načíst všechny kategorie
+    QList<Category> allCategories = m_categoryManager->allCategories();
+
+    // Pro každou kategorii vytvořit tlačítko na filtr
+    for (const Category &cat : allCategories) {
+        QPushButton *btn = new QPushButton(cat.name);
+        btn->setCheckable(true);
+        btn->setFlat(false);
+        btn->setMaximumHeight(24);
+        btn->setToolTip(tr("Filtrovat podle: %1").arg(cat.name));
+
+        // Nastavit barvu pozadí (stejně jako assignment tlačítka)
+        QString colorStr = cat.color.name();
+        int lightness = cat.color.lightness();
+        QString textColor = lightness > 128 ? "#000000" : "#FFFFFF";
+
+        btn->setStyleSheet(QString(
+            "QPushButton {"
+            "  background-color: %1;"
+            "  color: %2;"
+            "  border: 2px solid #ccc;"
+            "  border-radius: 4px;"
+            "  padding: 2px 6px;"
+            "  font-weight: bold;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton:checked, QPushButton:pressed {"
+            "  border: 3px solid #333;"
+            "}"
+        ).arg(colorStr, textColor));
+
+        // Připojit klik
+        connect(btn, &QPushButton::clicked, this, [this, cat] {
+            onCategoryFilterToggled(cat.id);
+        });
+
+        // Vybrat pokud je už v filtru
+        if (m_categoryFilterIds.contains(cat.id)) {
+            btn->setChecked(true);
+        }
+
+        // Přidat do layoutu
+        layout->addWidget(btn);
+
+        // Uložit do mapy
+        m_categoryFilterButtons[cat.id] = btn;
+    }
+
+    layout->addStretch();
+
+    // Vložit kontejner do toolbaru
+    QList<QAction*> actions = m_categoriesToolbar->actions();
+    QAction *afterLabel = nullptr;
+    for (int i = 0; i < actions.size(); ++i) {
+        if (i > 0 && actions.at(i - 1)->text() == tr("Filtr:")) {
+            afterLabel = actions.at(i);
+            break;
+        }
+    }
+
+    if (afterLabel) {
+        m_categoriesToolbar->insertWidget(afterLabel, newContainer);
+    } else {
+        m_categoriesToolbar->addWidget(newContainer);
+    }
+
+    m_filterButtonsContainer = newContainer;
+}
+
+void MainWindow::onCategoryFilterToggled(int categoryId)
+{
+    if (m_categoryFilterIds.contains(categoryId)) {
+        m_categoryFilterIds.removeAll(categoryId);
+    } else {
+        m_categoryFilterIds.append(categoryId);
+    }
+
+    onCategoryFilterChanged();
+}
+
+void MainWindow::clearFilters()
+{
+    m_categoryFilterIds.clear();
+
+    // Unchecknout všechna filtr tlačítka
+    for (QPushButton *btn : m_categoryFilterButtons) {
+        btn->setChecked(false);
+    }
+
+    onCategoryFilterChanged();
 }
 
 void MainWindow::onCategoryFilterChanged()
