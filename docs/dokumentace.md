@@ -23,17 +23,19 @@ src/
 │   ├── MetadataPanel         – panel metadat pro rozložení „Pro"
 │   ├── SlideshowController   – QTimer pro automatické přepínání
 │   ├── SettingsManager       – perzistentní nastavení (config.ini)
+│   ├── ThumbnailCacheManager – velikost a automatický úklid diskové cache
 │   ├── VlcController         – ovládání externího VLC přes RC rozhraní
 │   └── HelpDialog            – dialogy nápovědy
 ├── core/                     – logika bez závislosti na GUI
-│   ├── ImageCatalog          – výpis podporovaných souborů ze složky
-│   ├── ImageFormats          – seznam podporovaných přípon
+│   ├── ImageCatalog          – výpis a řazení podporovaných souborů ze složky
+│   ├── ImageFormats          – přípony odvozené z Qt image pluginů
 │   ├── ImageInfo             – struktura metadat souboru
 │   ├── ImageMetadataReader   – čtení rozměrů/formátu/velikosti
 │   └── PdfHandler            – načítání a render PDF (Qt PDF)
-└── workers/                  – úlohy v QThreadPool
-    ├── FolderScanWorker      – asynchronní sken složky (generační čítač)
-    └── ThumbnailWorker       – generování náhledů + disková cache
+├── workers/                  – úlohy v QThreadPool
+│   ├── FolderScanWorker      – asynchronní sken složky (generační čítač)
+│   └── ThumbnailWorker       – generování náhledů + disková cache
+tests/                        – jednotkové testy jádra (Qt Test, ctest)
 ```
 
 ---
@@ -42,10 +44,11 @@ src/
 
 ### Asynchronní načítání obrázků (`ImageLoader`)
 - Dekódování probíhá přes `QtConcurrent` mimo UI vlákno — listování nikdy neblokuje.
-- **RAM cache** (LRU, limit 256 MB) s klíčem *cesta + mtime* — změna souboru na
-  disku přirozeně zneplatní záznam.
-- **Prefetch**: po zobrazení obrázku se na pozadí přednačtou oba sousedé;
-  při sekvenčním listování je další obrázek vždy připraven.
+- **RAM cache** (LRU, limit 256 MB) s klíčem *cesta + mtime + velikost* — změna
+  souboru na disku přirozeně zneplatní záznam.
+- **Směrový prefetch**: po zobrazení obrázku se podle směru listování přednačte
+  5 následujících (resp. předchozích) souborů. PDF a GIF se přeskakují — jdou
+  jinou cestou (PDF render / QMovie), cache by jim nepomohla.
 - Při cache missu se okamžitě zobrazí zvětšený náhled jako placeholder
   a po dekódování se obraz doostří.
 - EXIF orientace se aplikuje automaticky (`QImageReader::setAutoTransform`).
@@ -59,6 +62,22 @@ src/
   ze sítě a rychlejší dekódování.
 - Ovládání v menu **Nastavení → Cache náhledů**: povolit/zakázat, vybrat
   složku, vymazat (s potvrzením a výpisem velikosti).
+- **Automatický úklid** (`ThumbnailCacheManager`, kontrola při startu): pod
+  500 MB se nemaže nic; po dosažení limitu se mažou nejstarší soubory, dokud
+  cache neklesne pod 80 % limitu (400 MB).
+
+### Animované GIFy
+- GIF se přehrává přes `QMovie` (`ImageView::loadAnimation`) — každý snímek
+  přemaluje zobrazovanou pixmapu. Přechod na jiný soubor animaci zastaví a uvolní.
+- Rotace u běžícího GIFu je vypnutá (další snímek by ji přepsal).
+
+### Řazení souborů
+- `ImageCatalog` řadí podle názvu (přirozeně přes `QCollator` s numericMode —
+  `img2` < `img10`), data změny nebo velikosti, vzestupně i sestupně.
+- Sestupné pořadí se získá prohozením argumentů komparátoru (ne negací — ta by
+  u shodných klíčů porušila ostré uspořádání).
+- Volba v **Nastavení → Řazení souborů**; změna znovu naskenuje složku a
+  zachová právě zobrazený obrázek.
 
 ### PDF
 - Render stránky v rozlišení podle viewportu × devicePixelRatio se zachováním
@@ -96,6 +115,7 @@ Volba se ukládá a obnoví po restartu. Přepínání funguje za běhu.
 | `F` | Celá obrazovka |
 | `D` / `Delete` | Smazat (do koše) nebo přesunout do složky Delete |
 | `R` | Přejmenovat soubor |
+| `[` / `L` , `]` | Otočit obrázek doleva / doprava (vizuálně) |
 | `G` | Přehrát video se stejným názvem ve VLC |
 | `+` / `-` / kolečko | Zoom |
 | `0` / `Space` / prostřední tlačítko | Originální velikost (1:1) |
@@ -103,6 +123,10 @@ Volba se ukládá a obnoví po restartu. Přepínání funguje za běhu.
 
 Při aktivním VLC: `Space` pauza, `←`/`→` posun ±10 s, `+`/`-` hlasitost,
 `F` fullscreen videa, `Esc` ukončení přehrávání.
+
+**Myš a další gesta**: pravý klik nad obrázkem otevře kontextové menu (Zobrazit
+ve Finderu, kopírovat obrázek / cestu); složku nebo soubor lze přetáhnout do
+okna (drag & drop). Indikátor zoomu (%) je vpravo ve status baru u obrázků.
 
 ---
 
@@ -117,6 +141,7 @@ Umístění: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini` (macOS)
 | FileHandling | enable_delete_image, enable_move_to_delete, ask_confirmation_delete | Režim mazání |
 | PDF | enable_pdf_processing | Zobrazovat PDF soubory |
 | UI | layout | Zvolené rozložení (classic/filmstrip/immersive/gallery/pro) |
+| Sort | key, ascending | Řazení souborů (0=název, 1=datum, 2=velikost) a směr |
 | Cache | thumbnail_cache_enabled, thumbnail_cache_root | Disková cache náhledů |
 | VLC | vlc_path, vlc_timeout_ms | Cesta k VLC |
 | Updates | … | Kontrola aktualizací |
@@ -125,29 +150,35 @@ Umístění: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini` (macOS)
 
 ## Sestavení
 
-Vyžaduje CMake ≥ 3.21 a Qt 6 (moduly Core, Concurrent, Gui, Widgets, Network, Pdf).
+Vyžaduje CMake ≥ 3.21 a Qt 6 (moduly Core, Concurrent, Gui, Widgets, Network,
+Pdf; pro testy navíc Test).
 
 ```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-open build/PictureViewer.app          # macOS
+ctest --test-dir build --output-on-failure   # jednotkové testy
+open build/PictureViewer.app                  # macOS
 ```
 
-Na macOS se bundle automaticky podepíše ad-hoc podpisem s entitlements
-pro přístup k souborům. Detaily nasazení: `MACOS_DEPLOYMENT.md`.
+Překlad zapíná `-Wall -Wextra` (GCC/Clang) / `/W3` (MSVC); strom je bez varování.
+Na macOS se bundle automaticky podepíše ad-hoc podpisem s entitlements pro
+přístup k souborům. Detaily nasazení: `MACOS_DEPLOYMENT.md`.
 
 ---
 
 ## Podporované formáty
 
-Obrázky: JPG, JPEG, PNG, GIF (statický), BMP, WEBP, TIFF/TIF.
-Dokumenty: PDF (volitelně).
+Obrázky: seznam se odvozuje z `QImageReader::supportedImageFormats()`, tedy
+z Qt pluginů nainstalovaných v systému — vždy JPG/JPEG, PNG, GIF (animovaný),
+BMP, WEBP, TIFF/TIF a podle prostředí i HEIC, HEIF, SVG, JP2 a další.
+Dokumenty: PDF (volitelně). Dokumentové přípony jsou z obrázkového seznamu
+vyřazené, aby PDF šlo přes PDF render, ne přes obrázkový dekodér.
 
 ---
 
 ## Známé limity
 
-- GIF animace se zobrazují jako statický první snímek.
+- Otočení obrázku je pouze vizuální — neukládá se zpět do souboru.
 - EXIF data (clona, ISO, expozice) se zatím nečtou — panel metadat v Pro
   režimu zobrazuje jen údaje o souboru.
 

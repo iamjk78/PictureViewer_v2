@@ -35,7 +35,7 @@ void ThumbnailCacheManager::cleanupIfNeeded(const QString &cacheDir)
     // Spočítat aktuální velikost cache
     qint64 totalSize = calculateCacheSize(cacheDir);
 
-    // Jenom mazat pokud cache >= 500 MB
+    // Pod limitem se nemaže nic — cache se nechá růst až do 500 MB.
     if (totalSize < CacheLimitBytes) {
         return;
     }
@@ -48,36 +48,27 @@ void ThumbnailCacheManager::cleanupIfNeeded(const QString &cacheDir)
     };
 
     QList<CacheFile> files;
-    const qint64 thirtyDaysAgo = QDateTime::currentSecsSinceEpoch() - (DeleteOlderThanDays * 86400);
 
     QDirIterator it(cacheDir, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         it.next();
-        QFileInfo fileInfo(it.fileInfo());
-        qint64 lastModified = fileInfo.lastModified().toSecsSinceEpoch();
-
-        // Jenom zahrnout soubory starší než 30 dní
-        if (lastModified < thirtyDaysAgo) {
-            CacheFile f;
-            f.path = fileInfo.absoluteFilePath();
-            f.size = fileInfo.size();
-            f.lastModifiedTime = lastModified;
-            files.append(f);
-        }
+        const QFileInfo fileInfo(it.fileInfo());
+        CacheFile f;
+        f.path = fileInfo.absoluteFilePath();
+        f.size = fileInfo.size();
+        f.lastModifiedTime = fileInfo.lastModified().toSecsSinceEpoch();
+        files.append(f);
     }
 
-    // Pokud nemáme žádné soubory ke smazání, skončit
-    if (files.isEmpty()) {
-        return;
-    }
-
-    // Setřídit podle času přístupu (nejstarší na začátku)
+    // Setřídit podle času změny (nejstarší na začátku)
     std::sort(files.begin(), files.end(), [](const CacheFile &a, const CacheFile &b) {
         return a.lastModifiedTime < b.lastModifiedTime;
     });
 
-    // Smazat nejstarší soubory, dokud se nedostaneme pod limit
-    qint64 targetSize = CacheLimitBytes * 80 / 100;  // Cíl: 80% limitu (400 MB)
+    // Mazat nejstarší soubory, dokud cache neklesne pod cílových 80 % limitu
+    // (400 MB). Mažeme bez ohledu na stáří — strop musí platit i při intenzivním
+    // používání během krátké doby, kdy jsou všechny soubory čerstvé.
+    const qint64 targetSize = CacheLimitBytes * 80 / 100;
     for (const CacheFile &f : files) {
         if (totalSize <= targetSize) {
             break;
