@@ -24,6 +24,18 @@ ImageLoader::ImageLoader(QObject *parent)
 {
 }
 
+ImageLoader::~ImageLoader()
+{
+    // Čekat na všechny běžící futures. Lamdy ze QFutureWatcher mají guard
+    // if (m_shuttingDown), ale destruktor se volá po shutdown() a přesto chceme
+    // jistotu, že se žádná lambda nespustí s nyní neplatným objektem.
+    for (QFutureWatcher<QImage> *watcher : m_watchers) {
+        watcher->waitForFinished();
+        delete watcher;
+    }
+    m_watchers.clear();
+}
+
 // static
 QString ImageLoader::cacheKey(const QString &path)
 {
@@ -72,11 +84,17 @@ void ImageLoader::startDecode(const QString &path)
     m_inFlight.insert(path);
 
     auto *watcher = new QFutureWatcher<QImage>(nullptr);
+    m_watchers.append(watcher);
+
     connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path] {
+        // Odebrat z aktivního seznamu — destruktor čekat nemusí
+        m_watchers.removeAll(watcher);
+
         if (m_shuttingDown) {
             watcher->deleteLater();
             return;
         }
+
         m_inFlight.remove(path);
         const QImage image = watcher->result();
 

@@ -2,9 +2,13 @@
 
 #include <QCache>
 #include <QImage>
+#include <QList>
 #include <QObject>
 #include <QSet>
 #include <QString>
+
+template <typename T>
+class QFutureWatcher;
 
 namespace pictureviewer {
 
@@ -25,6 +29,7 @@ public:
     static constexpr int DefaultCacheLimitKb = 256 * 1024;
 
     explicit ImageLoader(QObject *parent = nullptr);
+    ~ImageLoader();
 
     // Vrátí dekódovaný obrázek z cache, nebo null QImage při missu.
     QImage cachedImage(const QString &path) const;
@@ -52,6 +57,7 @@ private:
     mutable QCache<QString, QImage> m_cache;
     QSet<QString> m_inFlight;
     bool m_shuttingDown = false;
+    QList<QFutureWatcher<QImage>*> m_watchers;   // sledují běžící futures
 };
 
 } // namespace pictureviewer
