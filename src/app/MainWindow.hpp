@@ -194,6 +194,18 @@ private:
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;
     QAction *m_cropAction = nullptr;
+    QAction *m_saveAction = nullptr;
+    QAction *m_saveAsAction = nullptr;
+    bool m_imageModified = false;
+
+    // ── Ukládání obrázku ─────────────────────────────────────────────────────
+    void onSaveImage();
+    void onSaveAsImage();
+    void updateSaveButtonStates();
+    void saveImageToPath(const QString &targetPath);
+    // Zobrazí dialog pro zadání názvu a výběr cílové složky.
+    // Vrací absolutní cestu k cílovému souboru, nebo prázdný řetězec při zrušení.
+    QString runSaveAsDialog(const QString &originalPath);
 };
 
 } // namespace pictureviewer

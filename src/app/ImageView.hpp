@@ -65,6 +65,7 @@ signals:
     // indikátor (PDF nebo prázdný pohled — tam zoom % nedává smysl).
     void zoomChanged(double percent);
     void cropModeChanged(bool active);   // emitováno při aktivaci/deaktivaci crop módu
+    void imageModified();               // emitováno po otočení nebo ořezu obrázku
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

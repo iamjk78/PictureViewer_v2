@@ -20,6 +20,7 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QDir>
+#include <QDialog>
 #include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
@@ -860,6 +861,8 @@ void MainWindow::showImage(int index)
     m_thumbnailPanel->setCurrentIndex(index);
     updateStatus(path);
     updateCategoryButtonStates();
+    m_imageModified = false;
+    updateSaveButtonStates();
 
     // Disconnect old signal if present and connect new one for PDF
     disconnect(m_imageView, &ImageView::pdfPageChanged, this, nullptr);
@@ -1312,6 +1315,25 @@ void MainWindow::setupToolbar()
     });
     toolbar->addAction(m_cropAction);
     toolbar->addSeparator();
+
+    m_saveAction = new QAction(tr("Uložit"), this);
+    m_saveAction->setToolTip(tr("Uložit upravenou kopii (přepsat originál)"));
+    m_saveAction->setEnabled(false);
+    connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveImage);
+
+    m_saveAsAction = new QAction(tr("Uložit jako"), this);
+    m_saveAsAction->setToolTip(tr("Uložit jako nový soubor JPEG"));
+    m_saveAsAction->setEnabled(false);
+    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAsImage);
+
+    toolbar->addAction(m_saveAction);
+    toolbar->addAction(m_saveAsAction);
+    toolbar->addSeparator();
+
+    connect(m_imageView, &ImageView::imageModified, this, [this]() {
+        m_imageModified = true;
+        updateSaveButtonStates();
+    });
 
     toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
@@ -2216,6 +2238,8 @@ void MainWindow::setupCategoriesToolbar()
     applyStyle(m_rotateLeftAction,  bigEmojiStyle);
     applyStyle(m_rotateRightAction, bigEmojiStyle);
     applyStyle(m_cropAction,        bigEmojiStyle);
+    applyStyle(m_saveAction,        bigIconStyle);
+    applyStyle(m_saveAsAction,      bigIconStyle);
 
     // Ikona přejmenování — zvětšit pouze rozměr ikony
     if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(m_renameImageAction))) {
@@ -2767,6 +2791,162 @@ void MainWindow::onCategoryDelete(int categoryId)
     if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
         updateCategoryButtonStates();
     }
+}
+
+// ── Ukládání obrázku ─────────────────────────────────────────────────────────
+
+void MainWindow::updateSaveButtonStates()
+{
+    const bool hasStaticImage =
+        m_currentIndex >= 0 &&
+        !m_imageView->displayedImage().isNull() &&
+        !m_imageView->isPdfLoaded();
+
+    if (m_saveAction)   m_saveAction->setEnabled(hasStaticImage && m_imageModified);
+    if (m_saveAsAction) m_saveAsAction->setEnabled(hasStaticImage);
+}
+
+void MainWindow::saveImageToPath(const QString &targetPath)
+{
+    const QImage img = m_imageView->displayedImage();
+    if (img.isNull()) {
+        return;
+    }
+    if (!img.save(targetPath, "JPEG", 92)) {
+        QMessageBox::critical(this, tr("Chyba ukládání"),
+            tr("Soubor se nepodařilo uložit:\n%1").arg(targetPath));
+    }
+}
+
+void MainWindow::onSaveImage()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    const QString fileName    = QFileInfo(currentPath).fileName();
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Uložit"));
+    msgBox.setText(tr("Chcete přepsat existující soubor?"));
+    msgBox.setInformativeText(fileName);
+    msgBox.setIcon(QMessageBox::Question);
+    QPushButton *btnYes    = msgBox.addButton(tr("Ano"),         QMessageBox::AcceptRole);
+    QPushButton *btnRename = msgBox.addButton(tr("Přejmenovat"), QMessageBox::ActionRole);
+    /*QPushButton *btnNo =*/ msgBox.addButton(tr("Ne"),          QMessageBox::RejectRole);
+    msgBox.setDefaultButton(btnYes);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == btnYes) {
+        saveImageToPath(currentPath);
+        m_imageModified = false;
+        updateSaveButtonStates();
+    } else if (msgBox.clickedButton() == btnRename) {
+        const QString targetPath = runSaveAsDialog(currentPath);
+        if (!targetPath.isEmpty()) {
+            saveImageToPath(targetPath);
+            // Načíst cílovou složku a přepnout na nový soubor
+            const QString targetDir = QFileInfo(targetPath).absolutePath();
+            m_requestedFile = targetPath;
+            loadFolder(targetDir);
+        }
+    }
+}
+
+void MainWindow::onSaveAsImage()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    const QString targetPath  = runSaveAsDialog(currentPath);
+    if (!targetPath.isEmpty()) {
+        saveImageToPath(targetPath);
+        const QString targetDir = QFileInfo(targetPath).absolutePath();
+        m_requestedFile = targetPath;
+        loadFolder(targetDir);
+    }
+}
+
+QString MainWindow::runSaveAsDialog(const QString &originalPath)
+{
+    const QString origDir  = QFileInfo(originalPath).absolutePath();
+    const QString origBase = QFileInfo(originalPath).completeBaseName();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Uložit jako"));
+    dlg.setMinimumWidth(460);
+
+    auto *layout = new QVBoxLayout(&dlg);
+
+    // Název souboru
+    auto *nameLabel = new QLabel(tr("Název souboru:"), &dlg);
+    layout->addWidget(nameLabel);
+    auto *nameEdit = new QLineEdit(origBase, &dlg);
+    layout->addWidget(nameEdit);
+
+    layout->addSpacing(8);
+
+    // Destinace
+    auto *destLabel = new QLabel(tr("Uložit do:"), &dlg);
+    layout->addWidget(destLabel);
+
+    QString selectedDir;
+
+    auto makeDestButton = [&](const QString &label, const QString &dir) {
+        auto *btn = new QPushButton(label, &dlg);
+        btn->setToolTip(dir);
+        connect(btn, &QPushButton::clicked, &dlg, [&dlg, &selectedDir, dir]() {
+            selectedDir = dir;
+            dlg.accept();
+        });
+        layout->addWidget(btn);
+    };
+
+    makeDestButton(tr("Stejné umístění jako originál"), origDir);
+
+    // Oblíbené složky
+    const QStringList favorites = m_settingsManager->favoriteFolders();
+    for (const QString &fav : favorites) {
+        makeDestButton(QDir(fav).dirName(), fav);
+    }
+
+    layout->addSpacing(8);
+
+    // Zrušit
+    auto *btnCancel = new QPushButton(tr("Zrušit"), &dlg);
+    connect(btnCancel, &QPushButton::clicked, &dlg, &QDialog::reject);
+    layout->addWidget(btnCancel);
+
+    if (dlg.exec() != QDialog::Accepted || selectedDir.isEmpty()) {
+        return {};
+    }
+
+    // Sestavit cílovou cestu — odstranit případnou příponu ze vstupu
+    QString baseName = nameEdit->text().trimmed();
+    if (baseName.isEmpty()) {
+        baseName = origBase;
+    }
+    // Odebrat příponu pokud ji uživatel zadal
+    if (baseName.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive)
+        || baseName.endsWith(QLatin1String(".jpeg"), Qt::CaseInsensitive)) {
+        baseName = QFileInfo(baseName).completeBaseName();
+    }
+
+    QString targetPath = QDir(selectedDir).filePath(baseName + QStringLiteral(".jpg"));
+
+    // Pokud cílový soubor existuje, zeptat se
+    if (QFile::exists(targetPath)) {
+        const int ret = QMessageBox::question(
+            this, tr("Soubor existuje"),
+            tr("Soubor '%1' již existuje.\nChcete ho přepsat?").arg(baseName + ".jpg"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (ret != QMessageBox::Yes) {
+            return {};
+        }
+    }
+
+    return targetPath;
 }
 
 } // namespace pictureviewer

@@ -222,6 +222,7 @@ void ImageView::rotateBy(int degrees)
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     setTransform(QTransform());
     fitToWindow();
+    emit imageModified();
 }
 
 void ImageView::rotateLeft()
@@ -305,6 +306,7 @@ void ImageView::applyCropFromViewport(const QRect &viewportRect)
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
     emitZoomChanged();
+    emit imageModified();
 }
 
 void ImageView::contextMenuEvent(QContextMenuEvent *event)
