@@ -41,6 +41,9 @@ constexpr auto kUiLayoutKey              = "UI/layout";
 constexpr auto kSortKeyKey               = "Sort/key";
 constexpr auto kSortAscendingKey         = "Sort/ascending";
 
+constexpr auto kFavoriteFoldersKey       = "Favorites/folders";
+constexpr int kMaxFavoriteFolders        = 10;
+
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
 constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
 
@@ -237,6 +240,38 @@ bool SettingsManager::sortAscending() const
 void SettingsManager::setSortAscending(bool ascending)
 {
     m_settings->setValue(kSortAscendingKey, ascending);
+}
+
+// ── Oblíbené složky ─────────────────────────────────────────────────────
+
+QStringList SettingsManager::favoriteFolders() const
+{
+    return m_settings->value(kFavoriteFoldersKey, QStringList()).toStringList();
+}
+
+void SettingsManager::addFavoriteFolder(const QString &folderPath)
+{
+    QStringList favorites = favoriteFolders();
+    if (favorites.size() >= kMaxFavoriteFolders) {
+        return;   // limit dosažen
+    }
+    if (!favorites.contains(folderPath)) {
+        favorites.append(folderPath);
+        m_settings->setValue(kFavoriteFoldersKey, favorites);
+    }
+}
+
+void SettingsManager::removeFavoriteFolder(const QString &folderPath)
+{
+    QStringList favorites = favoriteFolders();
+    if (favorites.removeAll(folderPath) > 0) {
+        m_settings->setValue(kFavoriteFoldersKey, favorites);
+    }
+}
+
+bool SettingsManager::isFavoriteFolder(const QString &folderPath) const
+{
+    return favoriteFolders().contains(folderPath);
 }
 
 // ── Thumbnail Cache ──────────────────────────────────────────────────────────

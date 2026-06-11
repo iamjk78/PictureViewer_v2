@@ -18,7 +18,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Widgets Network Pdf)
+find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Widgets Network Pdf Sql)
 
 # Build subdirectories for core, app, and workers
 add_subdirectory(src)

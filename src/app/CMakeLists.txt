@@ -1,6 +1,8 @@
 set(APP_SOURCES
     Application.hpp
     Application.cpp
+    CategoryManager.hpp
+    CategoryManager.cpp
     HelpDialog.hpp
     HelpDialog.cpp
     ImageLoader.hpp
@@ -37,4 +39,5 @@ target_link_libraries(picture_viewer_app
         Qt6::Gui
         Qt6::Widgets
         Qt6::Network
+        Qt6::Sql
 )

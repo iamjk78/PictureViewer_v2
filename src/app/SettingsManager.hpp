@@ -61,6 +61,13 @@ public:
     bool sortAscending() const;
     void setSortAscending(bool ascending);
 
+    // ── Oblíbené složky ──────────────────────────────────────────────────────
+    // Max 10 složek. Seznam obsahuje absolutní cesty.
+    QStringList favoriteFolders() const;
+    void addFavoriteFolder(const QString &folderPath);
+    void removeFavoriteFolder(const QString &folderPath);
+    bool isFavoriteFolder(const QString &folderPath) const;
+
     // ── Thumbnail Cache ──────────────────────────────────────────────────────
     bool thumbnailCacheEnabled() const;
     void setThumbnailCacheEnabled(bool enabled);
