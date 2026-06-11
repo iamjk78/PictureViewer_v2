@@ -53,7 +53,7 @@ Application::Application(int &argc, char **argv)
     : m_qtApplication(std::make_unique<PictureViewerApplication>(argc, argv))
 {
     m_qtApplication->setApplicationName("PictureViewer");
-    m_qtApplication->setApplicationVersion("0.8");
+    m_qtApplication->setApplicationVersion("0.9");
     m_qtApplication->setOrganizationName("JiriKrejci");
     m_qtApplication->setOrganizationDomain("com.jk78");
 
