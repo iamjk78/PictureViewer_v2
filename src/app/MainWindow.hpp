@@ -190,6 +190,12 @@ private:
     QAction *m_enablePdfProcessingAction;
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
+    QAction *m_recycleAction = nullptr;
+    // Zásobník přesunutých souborů: {cesta v Delete složce, původní cesta}
+    QList<QPair<QString, QString>> m_deleteHistory;
+
+    void onUndoDelete();
+    void updateRecycleButtonState();
     QAction *m_renameImageAction;
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;

@@ -1337,6 +1337,12 @@ void MainWindow::setupToolbar()
 
     toolbar->addAction(m_deletePictureAction);
     toolbar->addAction(m_deleteFolderAction);
+
+    m_recycleAction = new QAction(QStringLiteral("♻"), this);
+    m_recycleAction->setToolTip(tr("Vrátit poslední přesunutý soubor zpět do původní složky"));
+    m_recycleAction->setEnabled(false);
+    connect(m_recycleAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
+    toolbar->addAction(m_recycleAction);
 }
 
 void MainWindow::setupStatusBar()
@@ -1633,6 +1639,8 @@ void MainWindow::moveImageToDeleteFolder()
     const QString newPath = deleteFolderPath + "/" + fileInfo.fileName();
 
     if (QFile::rename(currentPath, newPath)) {
+        m_deleteHistory.append({newPath, currentPath});
+        updateRecycleButtonState();
         removeImageFromList(m_currentIndex);
     } else {
         m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete."));
@@ -1748,6 +1756,12 @@ void MainWindow::onDeleteFolder()
     if (result == QMessageBox::Yes) {
         if (deleteFolder.removeRecursively()) {
             m_statusLabel->setText(tr("Složka Delete byla smazána."));
+            // Vyčistit zásobník recyklace pro tuto Delete složku
+            const QString deleteFolderPrefix = deleteFolderPath + "/";
+            m_deleteHistory.removeIf([&](const QPair<QString, QString> &entry) {
+                return entry.first.startsWith(deleteFolderPrefix);
+            });
+            updateRecycleButtonState();
         } else {
             m_statusLabel->setText(tr("Nepodařilo se smazat složku Delete."));
         }
@@ -2238,6 +2252,7 @@ void MainWindow::setupCategoriesToolbar()
     applyStyle(m_rotateLeftAction,  bigEmojiStyle);
     applyStyle(m_rotateRightAction, bigEmojiStyle);
     applyStyle(m_cropAction,        bigEmojiStyle);
+    applyStyle(m_recycleAction,     bigEmojiStyle);
     applyStyle(m_saveAction,        bigIconStyle);
     applyStyle(m_saveAsAction,      bigIconStyle);
 
@@ -2790,6 +2805,53 @@ void MainWindow::onCategoryDelete(int categoryId)
     // Obnovit stav obrázku
     if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
         updateCategoryButtonStates();
+    }
+}
+
+// ── Recyklace (Undo přesunu do Delete) ───────────────────────────────────────
+
+void MainWindow::updateRecycleButtonState()
+{
+    if (m_recycleAction) {
+        m_recycleAction->setEnabled(!m_deleteHistory.isEmpty());
+    }
+}
+
+void MainWindow::onUndoDelete()
+{
+    if (m_deleteHistory.isEmpty()) {
+        return;
+    }
+
+    const auto [deletedPath, originalPath] = m_deleteHistory.last();
+
+    // Ověřit, že soubor stále existuje v Delete složce
+    if (!QFile::exists(deletedPath)) {
+        m_deleteHistory.removeLast();
+        updateRecycleButtonState();
+        m_statusLabel->setText(tr("Soubor v Delete složce nenalezen, byl zřejmě odstraněn externě."));
+        return;
+    }
+
+    // Cílový soubor nesmí existovat
+    if (QFile::exists(originalPath)) {
+        QMessageBox::warning(this, tr("Nelze obnovit"),
+            tr("V původním umístění již soubor '%1' existuje.")
+                .arg(QFileInfo(originalPath).fileName()));
+        return;
+    }
+
+    // Zajistit, že cílový adresář existuje
+    QDir().mkpath(QFileInfo(originalPath).absolutePath());
+
+    if (QFile::rename(deletedPath, originalPath)) {
+        m_deleteHistory.removeLast();
+        updateRecycleButtonState();
+        // Přepnout na obnovenou složku a soubor
+        m_requestedFile = originalPath;
+        loadFolder(QFileInfo(originalPath).absolutePath());
+    } else {
+        m_statusLabel->setText(tr("Nepodařilo se obnovit soubor."));
     }
 }
 
