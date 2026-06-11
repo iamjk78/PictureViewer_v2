@@ -42,6 +42,8 @@ constexpr auto kSortKeyKey               = "Sort/key";
 constexpr auto kSortAscendingKey         = "Sort/ascending";
 
 constexpr auto kFavoriteFoldersKey       = "Favorites/folders";
+constexpr auto kFavoriteColorsKey        = "Favorites/colors";
+constexpr auto kFavoritesToolbarVisibleKey = "Favorites/toolbar_visible";
 constexpr int kMaxFavoriteFolders        = 10;
 
 constexpr auto kCategoriesToolbarVisibleKey = "Categories/toolbar_visible";
@@ -251,29 +253,76 @@ QStringList SettingsManager::favoriteFolders() const
     return m_settings->value(kFavoriteFoldersKey, QStringList()).toStringList();
 }
 
-void SettingsManager::addFavoriteFolder(const QString &folderPath)
+QStringList SettingsManager::favoriteFolderColors() const
+{
+    return m_settings->value(kFavoriteColorsKey, QStringList()).toStringList();
+}
+
+bool SettingsManager::addFavoriteFolder(const QString &folderPath, const QString &colorHex)
 {
     QStringList favorites = favoriteFolders();
     if (favorites.size() >= kMaxFavoriteFolders) {
-        return;   // limit dosažen
+        return false;   // limit dosažen
     }
     if (!favorites.contains(folderPath)) {
         favorites.append(folderPath);
         m_settings->setValue(kFavoriteFoldersKey, favorites);
+
+        // Uložit barvu na stejný index
+        QStringList colors = favoriteFolderColors();
+        while (colors.size() < favorites.size() - 1) {
+            colors.append(QString());  // doplnit prázdné pro předchozí záznamy
+        }
+        colors.append(colorHex.isEmpty() ? QStringLiteral("#4ECDC4") : colorHex);
+        m_settings->setValue(kFavoriteColorsKey, colors);
     }
+    return true;
 }
 
 void SettingsManager::removeFavoriteFolder(const QString &folderPath)
 {
     QStringList favorites = favoriteFolders();
-    if (favorites.removeAll(folderPath) > 0) {
+    QStringList colors = favoriteFolderColors();
+
+    int idx = favorites.indexOf(folderPath);
+    if (idx >= 0) {
+        favorites.removeAt(idx);
+        if (idx < colors.size()) {
+            colors.removeAt(idx);
+        }
         m_settings->setValue(kFavoriteFoldersKey, favorites);
+        m_settings->setValue(kFavoriteColorsKey, colors);
     }
 }
 
 bool SettingsManager::isFavoriteFolder(const QString &folderPath) const
 {
     return favoriteFolders().contains(folderPath);
+}
+
+void SettingsManager::setFavoriteFolderColor(const QString &folderPath, const QString &colorHex)
+{
+    QStringList favorites = favoriteFolders();
+    QStringList colors = favoriteFolderColors();
+    int idx = favorites.indexOf(folderPath);
+    if (idx < 0) {
+        return;
+    }
+    while (colors.size() <= idx) {
+        colors.append(QString());
+    }
+    colors[idx] = colorHex;
+    m_settings->setValue(kFavoriteColorsKey, colors);
+}
+
+bool SettingsManager::favoritesToolbarVisible() const
+{
+    return m_settings->value(kFavoritesToolbarVisibleKey, false).toBool();
+}
+
+void SettingsManager::setFavoritesToolbarVisible(bool visible)
+{
+    m_settings->setValue(kFavoritesToolbarVisibleKey, visible);
 }
 
 // ── Kategorie toolbar ────────────────────────────────────────────────────────

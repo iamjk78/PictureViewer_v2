@@ -34,6 +34,9 @@ public:
     // Smaže kategorii (a všechna přiřazení k obrázků)
     void deleteCategory(int categoryId);
 
+    // Aktualizuje kategorii (jméno a/nebo barvu)
+    bool updateCategory(int categoryId, const QString &newName, const QColor &newColor);
+
     // Přiřadí kategorii obrázku. Ignoruje pokud už má, max 5 na obrázek.
     void assignCategory(const QString &imagePath, int categoryId);
 

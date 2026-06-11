@@ -166,6 +166,64 @@ void CategoryManager::deleteCategory(int categoryId)
     }
 }
 
+bool CategoryManager::updateCategory(int categoryId, const QString &newName, const QColor &newColor)
+{
+    QSqlDatabase db = QSqlDatabase::database("categories");
+    if (!db.isOpen()) {
+        return false;
+    }
+
+    // Pokud newName není prázdný, zkontroluj, zda není duplicitní
+    if (!newName.isEmpty()) {
+        QSqlQuery checkQuery(db);
+        checkQuery.prepare("SELECT id FROM categories WHERE name = ? AND id != ?");
+        checkQuery.addBindValue(newName);
+        checkQuery.addBindValue(categoryId);
+
+        if (checkQuery.exec() && checkQuery.next()) {
+            qWarning() << "Kategorie s tímto jménem již existuje";
+            return false;
+        }
+    }
+
+    // Připravit UPDATE dotaz
+    QString updateSql = "UPDATE categories SET ";
+    QStringList updates;
+    QVariantList values;
+
+    if (!newName.isEmpty()) {
+        updates.append("name = ?");
+        values.append(newName);
+    }
+
+    if (newColor.isValid()) {
+        updates.append("color = ?");
+        values.append(newColor.name());
+    }
+
+    if (updates.isEmpty()) {
+        return true;  // Nic se neměnilo
+    }
+
+    updateSql += updates.join(", ");
+    updateSql += " WHERE id = ?";
+    values.append(categoryId);
+
+    QSqlQuery query(db);
+    query.prepare(updateSql);
+
+    for (const QVariant &val : values) {
+        query.addBindValue(val);
+    }
+
+    if (!query.exec()) {
+        qWarning() << "Chyba aktualizace kategorie:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
 void CategoryManager::assignCategory(const QString &imagePath, int categoryId)
 {
     QSqlDatabase db = QSqlDatabase::database("categories");

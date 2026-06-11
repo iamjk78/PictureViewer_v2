@@ -111,6 +111,13 @@ private:
     void updateVideoMetadata(const QString &videoPath);
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
+    // ── Oblíbené složky toolbar ──────────────────────────────────────────────
+    void setupFavoritesToolbar();          // vytvořit toolbar pro oblíbené složky
+    void refreshFavoriteButtons();         // znovu vytvořit tlačítka oblíbených
+    void onAddCurrentFolderToFavorites();  // přidat aktuální složku do oblíbených
+    void onFavoriteRemove(const QString &folderPath);  // odebrat složku z oblíbených
+    QString pickRandomUnusedFavoriteColor() const;     // vybrat barvu pro novou oblíbenou
+
     // ── Kategorie ────────────────────────────────────────────────────────────
     void setupCategoriesToolbar();         // vytvořit toolbar pro kategorie
     void refreshCategoryButtons();         // znovu vytvořit tlačítka pro přiřazení
@@ -122,6 +129,9 @@ private:
     void onCategoryRemoveAll();            // smazat všechny kategorie z obrázku
     void onCategoryFilterChanged();        // filtrování podle vybraných kategorií
     void updateStatusBarCategories();      // aktualizovat kategorie ve status baru
+    void onCategoryRename(int categoryId); // přejmenovat kategorii
+    void onCategoryChangeColor(int categoryId); // změnit barvu kategorie
+    void onCategoryDelete(int categoryId); // smazat kategorii
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)
@@ -153,6 +163,7 @@ private:
     bool m_galleryGridActive = false;        // panel je v centrálním stacku (režim Galerie)
     QStackedWidget *m_centralStack = nullptr;
     QToolBar *m_mainToolbar = nullptr;
+    QToolBar *m_favoritesToolbar = nullptr;    // Sekundární toolbar pro oblíbené složky
     QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;

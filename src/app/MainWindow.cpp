@@ -35,6 +35,7 @@
 #endif
 #include <QActionGroup>
 #include <QClipboard>
+#include <QCursor>
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QDragEnterEvent>
@@ -47,6 +48,9 @@
 #include <QVBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
+#include <QColorDialog>
+#include <QLineEdit>
+#include <QRandomGenerator>
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QPushButton>
@@ -181,6 +185,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupDock();
     setupMenu();
     setupToolbar();
+    setupFavoritesToolbar();
     setupCategoriesToolbar();
     setupStatusBar();
     setupOverlayToolbar();
@@ -244,11 +249,14 @@ void MainWindow::cancelAllWorkers()
 // By the time exec() returns, the thread pool is completely idle.
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // Uložit stav kategoriálního toolbaru
+    // Uložit stav toolbarů
+    if (m_favoritesToolbar) {
+        m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
+    }
     if (m_categoriesToolbar) {
         m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
-        m_settingsManager->syncToDisk();
     }
+    m_settingsManager->syncToDisk();
 
     cancelAllWorkers();
     QThreadPool::globalInstance()->waitForDone();
@@ -576,8 +584,10 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     // Uložit unfiltered paths pro filtr kategorií
     m_unfilteredImagePaths = paths;
 
-    // Obnovit tlačítka filtrů podle kategorií v této složce
-    updateCategoryFilterButtons();
+    // Obnovit tlačítka filtrů podle kategorií v této složce (jen když je toolbar viditelný)
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
 
     // Aplikovat filtr kategorií pokud je aktivní
     if (!m_categoryFilterIds.isEmpty()) {
@@ -997,12 +1007,7 @@ void MainWindow::setupMenu()
     // ── Oblíbené složky ──────────────────────────────────────────────────────
     QMenu *favoritesMenu = fileMenu->addMenu(tr("⭐ Oblíbené"));
     QAction *addFavAction = favoritesMenu->addAction(tr("[+ Přidat aktuální]"));
-    connect(addFavAction, &QAction::triggered, this, [this] {
-        if (!m_currentFolder.isEmpty() && m_settingsManager->favoriteFolders().size() < 10) {
-            m_settingsManager->addFavoriteFolder(m_currentFolder);
-            updateFavoritesMenu();
-        }
-    });
+    connect(addFavAction, &QAction::triggered, this, &MainWindow::onAddCurrentFolderToFavorites);
     favoritesMenu->addSeparator();
     updateFavoritesMenu();
 
@@ -1911,6 +1916,156 @@ void MainWindow::updateVideoMetadata(const QString &videoPath)
     m_statusLabel->setText(statusText);
 }
 
+// 20 předdefinovaných barev — stejné jako u kategorií
+static constexpr const char *FavPredefinedColors[] = {
+    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8",
+    "#F7DC6F", "#BB8FCE", "#85C1E2", "#F8B88B", "#A9DFBF",
+    "#F5B7B1", "#D7BDE2", "#F9E79F", "#AED6F1", "#F8B4B8",
+    "#B7E8D6", "#FDBFED", "#D4EFDF", "#FADBD8", "#EBD5B4"
+};
+static constexpr int FavPredefinedColorCount = 20;
+
+QString MainWindow::pickRandomUnusedFavoriteColor() const
+{
+    QStringList usedColors = m_settingsManager->favoriteFolderColors();
+
+    for (int attempt = 0; attempt < FavPredefinedColorCount; ++attempt) {
+        int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
+        QString colorHex = FavPredefinedColors[idx];
+        if (!usedColors.contains(colorHex)) {
+            return colorHex;
+        }
+    }
+    // Fallback — všechny barvy použity
+    int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
+    return FavPredefinedColors[idx];
+}
+
+void MainWindow::setupFavoritesToolbar()
+{
+    addToolBarBreak();
+
+    m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
+    m_favoritesToolbar->setMovable(false);
+
+    // Tlačítko [+ Přidat aktuální složku]
+    QAction *addAction = m_favoritesToolbar->addAction(tr("[+ Přidat]"));
+    addAction->setToolTip(tr("Přidat aktuální složku do oblíbených"));
+    connect(addAction, &QAction::triggered, this, &MainWindow::onAddCurrentFolderToFavorites);
+
+    m_favoritesToolbar->addSeparator();
+
+    // Dynamická barevná tlačítka — naplněna v refreshFavoriteButtons()
+    refreshFavoriteButtons();
+
+    // Toggle tlačítko v hlavním toolbaru
+    m_mainToolbar->addSeparator();
+    QAction *toggleFavoritesAction = m_mainToolbar->addAction(tr("⭐ Oblíbené"));
+    toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
+    connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
+        m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
+    });
+
+    // Obnovit stav z nastavení
+    m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+}
+
+void MainWindow::refreshFavoriteButtons()
+{
+    // Smazat stará tlačítka složek (za separatorem na indexu 1)
+    QList<QAction *> actions = m_favoritesToolbar->actions();
+    // Zachovat: [+ Přidat] (index 0) + separator (index 1), smazat zbytek
+    while (m_favoritesToolbar->actions().size() > 2) {
+        QAction *last = m_favoritesToolbar->actions().last();
+        m_favoritesToolbar->removeAction(last);
+        delete last;
+    }
+
+    const QStringList folders = m_settingsManager->favoriteFolders();
+    const QStringList colors  = m_settingsManager->favoriteFolderColors();
+
+    for (int i = 0; i < folders.size(); ++i) {
+        const QString &path = folders.at(i);
+        QString colorHex = (i < colors.size() && !colors.at(i).isEmpty())
+                           ? colors.at(i)
+                           : QStringLiteral("#4ECDC4");
+
+        QString displayName = QDir(path).dirName();
+        if (displayName.isEmpty()) {
+            displayName = path;
+        }
+
+        QPushButton *btn = new QPushButton(displayName);
+        btn->setFlat(false);
+        btn->setMaximumHeight(24);
+        btn->setToolTip(path);
+
+        QColor color(colorHex);
+        QString textColor = color.lightness() > 128 ? "#000000" : "#FFFFFF";
+        btn->setStyleSheet(QString(
+            "QPushButton {"
+            "  background-color: %1;"
+            "  color: %2;"
+            "  border: 2px solid #ccc;"
+            "  border-radius: 4px;"
+            "  padding: 2px 8px;"
+            "  font-weight: bold;"
+            "  font-size: 11px;"
+            "}"
+            "QPushButton:pressed {"
+            "  border: 3px solid #333;"
+            "}"
+        ).arg(colorHex, textColor));
+
+        // Klik = otevřít složku
+        connect(btn, &QPushButton::clicked, this, [this, path] {
+            loadFolder(path);
+        });
+
+        // Pravý klik = context menu
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QWidget::customContextMenuRequested, this, [this, path]() {
+            QMenu menu;
+            menu.addAction(tr("Odebrat z oblíbených"), this, [this, path] {
+                onFavoriteRemove(path);
+            });
+            menu.exec(QCursor::pos());
+        });
+
+        m_favoritesToolbar->addWidget(btn);
+    }
+}
+
+void MainWindow::onAddCurrentFolderToFavorites()
+{
+    if (m_currentFolder.isEmpty()) {
+        return;
+    }
+
+    if (m_settingsManager->isFavoriteFolder(m_currentFolder)) {
+        return;  // Už je oblíbená
+    }
+
+    QString color = pickRandomUnusedFavoriteColor();
+    if (!m_settingsManager->addFavoriteFolder(m_currentFolder, color)) {
+        QMessageBox::warning(this, tr("Limit oblíbených"),
+            tr("Byl dosažen maximální počet oblíbených složek (10).\n"
+               "Před přidáním nové složky odeberte některou stávající\n"
+               "(pravý klik na tlačítko složky → Odebrat z oblíbených)."));
+        return;
+    }
+
+    refreshFavoriteButtons();
+    updateFavoritesMenu();
+}
+
+void MainWindow::onFavoriteRemove(const QString &folderPath)
+{
+    m_settingsManager->removeFavoriteFolder(folderPath);
+    refreshFavoriteButtons();
+    updateFavoritesMenu();
+}
+
 void MainWindow::setupCategoriesToolbar()
 {
     // Přidat toolbar break — vytvoří nový ŘÁDEK pod hlavní lištou
@@ -1962,7 +2117,12 @@ void MainWindow::setupCategoriesToolbar()
     QAction *toggleCategoriesAction = m_mainToolbar->addAction(tr("🏷️ Kategorie"));
     toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel kategorií"));
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
-        m_categoriesToolbar->setVisible(!m_categoriesToolbar->isVisible());
+        bool willBeVisible = !m_categoriesToolbar->isVisible();
+        m_categoriesToolbar->setVisible(willBeVisible);
+        // Načíst filtr tlačítka jen když se toolbar stane viditelný (lazy loading)
+        if (willBeVisible) {
+            updateCategoryFilterButtons();
+        }
     });
 
     // Obnovit stav z nastavení (nebo skrýt na začátku, pokud není uložen)
@@ -1980,6 +2140,11 @@ void MainWindow::onCategoryRemoveAll()
     m_categoryManager->unassignAll(imagePath);
     updateStatus(imagePath);
     updateCategoryButtonStates();
+
+    // Obnovit filtr tlačítka pokud je toolbar viditelný
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
 }
 
 void MainWindow::refreshCategoryButtons()
@@ -2041,6 +2206,17 @@ void MainWindow::refreshCategoryButtons()
             "  border: 3px solid #333;"
             "}"
         ).arg(colorStr, textColor));
+
+        // Nastavit context menu
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QWidget::customContextMenuRequested, this, [this, cat]() {
+            QMenu menu;
+            menu.addAction(tr("Přejmenovat"), this, [this, cat] { onCategoryRename(cat.id); });
+            menu.addAction(tr("Změnit barvu"), this, [this, cat] { onCategoryChangeColor(cat.id); });
+            menu.addSeparator();
+            menu.addAction(tr("Odstranit"), this, [this, cat] { onCategoryDelete(cat.id); });
+            menu.exec(QCursor::pos());
+        });
 
         // Připojit klik
         connect(btn, &QPushButton::clicked, this, [this, cat] {
@@ -2105,6 +2281,11 @@ void MainWindow::onCategoryButtonToggled(int categoryId)
     }
 
     updateStatus(imagePath);
+
+    // Obnovit filtr tlačítka pokud je toolbar viditelný
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
 }
 
 void MainWindow::updateCategoryButtonStates()
@@ -2196,6 +2377,17 @@ void MainWindow::updateCategoryFilterButtons()
             "  border: 3px solid #333;"
             "}"
         ).arg(colorStr, textColor));
+
+        // Nastavit context menu
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QWidget::customContextMenuRequested, this, [this, cat]() {
+            QMenu menu;
+            menu.addAction(tr("Přejmenovat"), this, [this, cat] { onCategoryRename(cat.id); });
+            menu.addAction(tr("Změnit barvu"), this, [this, cat] { onCategoryChangeColor(cat.id); });
+            menu.addSeparator();
+            menu.addAction(tr("Odstranit"), this, [this, cat] { onCategoryDelete(cat.id); });
+            menu.exec(QCursor::pos());
+        });
 
         // Připojit klik
         connect(btn, &QPushButton::clicked, this, [this, cat] {
@@ -2331,7 +2523,7 @@ void MainWindow::updateFavoritesMenu()
     }
 
     for (const QString &path : favorites) {
-        QString displayName = QFileInfo(path).fileName();
+        QString displayName = QDir(path).dirName();
         if (displayName.isEmpty()) {
             displayName = path;
         }
@@ -2357,6 +2549,130 @@ void MainWindow::updateFavoritesMenu()
     // Alternativně: mít "-" items vedle. Ale to je komplexní. Zatím necháme
     // bez GUI na smazání z menu. Bude jen otevírání z menu, a mazání z UI.
     // (Později lze přidat pravý-klik handler.)
+}
+
+void MainWindow::onCategoryRename(int categoryId)
+{
+    QList<Category> allCategories = m_categoryManager->allCategories();
+    Category currentCategory;
+    bool found = false;
+
+    for (const Category &cat : allCategories) {
+        if (cat.id == categoryId) {
+            currentCategory = cat;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    bool ok;
+    QString newName = QInputDialog::getText(this,
+        tr("Přejmenovat kategorii"),
+        tr("Nové jméno:"),
+        QLineEdit::Normal,
+        currentCategory.name,
+        &ok);
+
+    if (!ok || newName.trimmed().isEmpty()) {
+        return;
+    }
+
+    if (!m_categoryManager->updateCategory(categoryId, newName.trimmed(), QColor())) {
+        QMessageBox::warning(this, tr("Chyba"),
+            tr("Nelze přejmenovat kategorii. Možná kategorie s tímto jménem již existuje."));
+        return;
+    }
+
+    // Obnovit tlačítka
+    refreshCategoryButtons();
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
+}
+
+void MainWindow::onCategoryChangeColor(int categoryId)
+{
+    QList<Category> allCategories = m_categoryManager->allCategories();
+    Category currentCategory;
+    bool found = false;
+
+    for (const Category &cat : allCategories) {
+        if (cat.id == categoryId) {
+            currentCategory = cat;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    QColor newColor = QColorDialog::getColor(currentCategory.color, this,
+        tr("Vyberte novou barvu"));
+
+    if (!newColor.isValid()) {
+        return;
+    }
+
+    if (!m_categoryManager->updateCategory(categoryId, QString(), newColor)) {
+        QMessageBox::warning(this, tr("Chyba"),
+            tr("Nelze změnit barvu kategorie."));
+        return;
+    }
+
+    // Obnovit tlačítka
+    refreshCategoryButtons();
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
+}
+
+void MainWindow::onCategoryDelete(int categoryId)
+{
+    QList<Category> allCategories = m_categoryManager->allCategories();
+    Category categoryToDelete;
+    bool found = false;
+
+    for (const Category &cat : allCategories) {
+        if (cat.id == categoryId) {
+            categoryToDelete = cat;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    int result = QMessageBox::warning(this,
+        tr("Potvrzení smazání"),
+        tr("Opravdu chcete smazat kategorii '%1'?\n"
+           "Tím se odebere ze všech obrázků, které ji mají přiřazenu.").arg(categoryToDelete.name),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+
+    if (result != QMessageBox::Yes) {
+        return;
+    }
+
+    m_categoryManager->deleteCategory(categoryId);
+
+    // Obnovit tlačítka
+    refreshCategoryButtons();
+    if (m_categoriesToolbar->isVisible()) {
+        updateCategoryFilterButtons();
+    }
+
+    // Obnovit stav obrázku
+    if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        updateCategoryButtonStates();
+    }
 }
 
 } // namespace pictureviewer

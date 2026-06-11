@@ -86,6 +86,22 @@ Aktualizováno po code review a bug fixech (verze 0.6).
       pro názvy, prohození argumentů pro sestupně (kvůli strict-weak-ordering).
       Pokryto testy. *(2026-06-11)*
 
+## Verze 0.8 – nové funkce
+
+- [x] **Systém kategorií** – přiřazení až 5 barevných štítků k obrázku, SQLite databáze,
+      toolbar se dvěma řadami (přiřazení + filtrování). *(2026-06-11)*
+- [x] **Filtrování podle kategorií** – AND logika; zobrazí jen obrázky mající všechny
+      vybrané kategorie. *(2026-06-11)*
+- [x] **Lazy loading filtračního toolbaru** – filtr se načte jen když je toolbar viditelný;
+      aktualizuje se při změně přiřazení nebo přepnutí viditelnosti. *(2026-06-11)*
+- [x] **Filtr zobrazuje jen použité kategorie** – SQL INNER JOIN vrátí jen kategorie
+      přiřazené alespoň jednomu obrázku v aktuální složce. *(2026-06-11)*
+- [x] **Context menu na tlačítkách kategorií** – pravý klik → Přejmenovat / Změnit barvu /
+      Odstranit (funguje na přiřazovacích i filtračních tlačítkách). *(2026-06-11)*
+- [x] **Oblíbené složky** – max 10 položek v menu Soubor. *(2026-06-11)*
+- [x] **Oprava výběru náhodné barvy** – při vytvoření kategorie bez zvolené barvy se vybere
+      skutečně nepoužitá barva z 20 předdefinovaných. *(2026-06-11)*
+
 ## Nové funkce – zbývá
 
 - [ ] Otočení – volitelně uložit otočení do souboru (zatím jen vizuální)
@@ -93,4 +109,5 @@ Aktualizováno po code review a bug fixech (verze 0.6).
 - [ ] Vícenásobný výběr v režimu Galerie (hromadné mazání/přesun)
 - [ ] Rekurzivní sken podsložek (volitelně)
 - [ ] EXIF data (clona, ISO, expozice) v Pro panelu metadat
-- [ ] Aktualizace HelpDialog o nové režimy vzhledu a cache
+- [ ] Export/import kategorií (přenositelnost mezi počítači)
+- [ ] Přejmenování a změna barvy kategorie – vlastní dialog s výběrem z 20 barev (nyní system QColorDialog)

@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QString>
+#include <QStringList>
 
 class QSettings;
 
@@ -62,11 +63,17 @@ public:
     void setSortAscending(bool ascending);
 
     // ── Oblíbené složky ──────────────────────────────────────────────────────
-    // Max 10 složek. Seznam obsahuje absolutní cesty.
+    // Max 10 složek. addFavoriteFolder vrátí false pokud je dosažen limit.
     QStringList favoriteFolders() const;
-    void addFavoriteFolder(const QString &folderPath);
+    QStringList favoriteFolderColors() const;
+    bool addFavoriteFolder(const QString &folderPath, const QString &colorHex = QString());
     void removeFavoriteFolder(const QString &folderPath);
     bool isFavoriteFolder(const QString &folderPath) const;
+    void setFavoriteFolderColor(const QString &folderPath, const QString &colorHex);
+
+    // ── Oblíbené toolbar ─────────────────────────────────────────────────────
+    bool favoritesToolbarVisible() const;
+    void setFavoritesToolbarVisible(bool visible);
 
     // ── Kategorie toolbar ────────────────────────────────────────────────────
     // Pamatovat si, zda byl kategoriální toolbar viditelný při posledním vypnutí

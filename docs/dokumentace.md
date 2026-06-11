@@ -5,7 +5,8 @@
 Multiplatformní prohlížeč obrázků a PDF napsaný v **C++20 / Qt6** (macOS, Windows).
 Umožňuje procházet obrázky ve složce, přibližovat/oddalovat, spouštět slideshow,
 mazat a přejmenovávat soubory, prohlížet PDF dokumenty a přehrávat doprovodná
-videa přes VLC. Nabízí pět přepínatelných rozložení UI.
+videa přes VLC. Nabízí pět přepínatelných rozložení UI a systém kategorizace
+obrázků s barevnými štítky a filtrováním.
 
 ---
 
@@ -24,6 +25,8 @@ src/
 │   ├── SlideshowController   – QTimer pro automatické přepínání
 │   ├── SettingsManager       – perzistentní nastavení (config.ini)
 │   ├── ThumbnailCacheManager – velikost a automatický úklid diskové cache
+│   ├── CategoryManager       – správa kategorií v SQLite (CRUD, filtrování, přiřazení k obrázkům)
+│   ├── CategoryDialogs       – dialogy pro tvorbu a hromadné přiřazení kategorií
 │   ├── VlcController         – ovládání externího VLC přes RC rozhraní
 │   └── HelpDialog            – dialogy nápovědy
 ├── core/                     – logika bez závislosti na GUI
@@ -37,6 +40,33 @@ src/
 │   └── ThumbnailWorker       – generování náhledů + disková cache
 tests/                        – jednotkové testy jádra (Qt Test, ctest)
 ```
+
+---
+
+## Systém kategorií
+
+### Přiřazení kategorií (`CategoryManager`)
+- Kategorie se ukládají v SQLite databázi (`categories.db`) vedle `config.ini`.
+- **Schéma**: tabulka `categories` (id, name, color) + `image_categories` (image_path, category_id).
+  Vztah M:N s CASCADE DELETE — smazání kategorie automaticky odebere všechna přiřazení.
+- **Limit**: max 5 kategorií na jeden obrázek.
+- **20 předdefinovaných barev** (hex); při vytvoření bez zvolené barvy se náhodně vybere barva,
+  která ještě není použita pro žádnou existující kategorii.
+- Klíčem je absolutní cesta souboru — při přesunutí souboru se přiřazení ztratí.
+
+### Toolbar kategorií
+- **Sekundární toolbar** (skrytý/viditelný tlačítkem „🏷️ Kategorie") se skládá ze dvou řad:
+  - *Horní řada*: tlačítko „+ Nová" + barevná tlačítka pro přiřazení k aktuálnímu obrázku
+  - *Dolní řada*: nápis „Filtr:" + filtrační tlačítka (AND logika — zobrazí se jen obrázky mající všechny vybrané kategorie)
+- **Lazy loading**: filtrační tlačítka se vytvoří/obnoví až když je toolbar viditelný (šetří DB dotazy).
+- **Filtr zobrazuje jen použité kategorie**: SQL dotaz `INNER JOIN` vrátí jen kategorie přiřazené
+  alespoň jednomu obrázku v aktuální složce.
+- **Pravý klik** na libovolné tlačítko kategorie zobrazí context menu: Přejmenovat, Změnit barvu, Odstranit.
+
+### Nastavení config.ini
+| Sekce | Klíč | Význam |
+|---|---|---|
+| Categories | toolbar_visible | Zda je sekundární toolbar zobrazen |
 
 ---
 
@@ -144,6 +174,8 @@ Umístění: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini` (macOS)
 | Sort | key, ascending | Řazení souborů (0=název, 1=datum, 2=velikost) a směr |
 | Cache | thumbnail_cache_enabled, thumbnail_cache_root | Disková cache náhledů |
 | VLC | vlc_path, vlc_timeout_ms | Cesta k VLC |
+| Categories | toolbar_visible | Viditelnost toolbaru kategorií |
+| Favorites | folders | Seznam oblíbených složek (max 10) |
 | Updates | … | Kontrola aktualizací |
 
 ---
