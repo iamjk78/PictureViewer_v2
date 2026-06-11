@@ -191,6 +191,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupToolbar();
     setupFavoritesToolbar();
     setupCategoriesToolbar();
+    setupPdfToolbar();
     setupStatusBar();
     setupOverlayToolbar();
 
@@ -863,6 +864,7 @@ void MainWindow::showImage(int index)
     updateCategoryButtonStates();
     m_imageModified = false;
     updateSaveButtonStates();
+    updatePdfToolbarVisibility(isPdf);
 
     // Disconnect old signal if present and connect new one for PDF
     disconnect(m_imageView, &ImageView::pdfPageChanged, this, nullptr);
@@ -876,6 +878,9 @@ void MainWindow::showImage(int index)
                     .arg(m_currentIndex + 1)
                     .arg(m_imagePaths.size())
             );
+            if (m_pdfPageLabel) {
+                m_pdfPageLabel->setText(tr("  %1 / %2  ").arg(page).arg(totalPages));
+            }
         });
         // Emitovat signal s aktuální stránkou (v případě že byl emitován dříve než se handler připojil)
         m_imageView->emitCurrentPdfPageInfo();
@@ -2806,6 +2811,104 @@ void MainWindow::onCategoryDelete(int categoryId)
     if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
         updateCategoryButtonStates();
     }
+}
+
+// ── PDF toolbar ───────────────────────────────────────────────────────────────
+
+void MainWindow::setupPdfToolbar()
+{
+    m_pdfToolbar = new QToolBar(tr("PDF"), this);
+    m_pdfToolbar->setObjectName("pdfToolbar");
+    m_pdfToolbar->setMovable(false);
+    addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
+    m_pdfToolbar->hide();
+
+    auto *prevAction = new QAction(QStringLiteral("◀"), m_pdfToolbar);
+    prevAction->setToolTip(tr("Předchozí stránka (PgUp)"));
+    connect(prevAction, &QAction::triggered, this, [this]() { m_imageView->previousPage(); });
+
+    auto *nextAction = new QAction(QStringLiteral("▶"), m_pdfToolbar);
+    nextAction->setToolTip(tr("Další stránka (PgDn)"));
+    connect(nextAction, &QAction::triggered, this, [this]() { m_imageView->nextPage(); });
+
+    m_pdfPageLabel = new QLabel(QStringLiteral("  -  "), m_pdfToolbar);
+    m_pdfPageLabel->setAlignment(Qt::AlignCenter);
+    m_pdfPageLabel->setMinimumWidth(70);
+
+    auto *gotoAction = new QAction(tr("Přejít na stranu"), m_pdfToolbar);
+    gotoAction->setToolTip(tr("Zadat číslo stránky a přejít na ni"));
+    connect(gotoAction, &QAction::triggered, this, &MainWindow::onPdfGoToPage);
+
+    auto *screenshotAction = new QAction(tr("Screenshot"), m_pdfToolbar);
+    screenshotAction->setToolTip(tr("Uložit aktuální stránku jako obrázek (JPEG) — pak použijte Uložit jako"));
+    connect(screenshotAction, &QAction::triggered, this, &MainWindow::onPdfScreenshot);
+
+    m_pdfToolbar->addAction(prevAction);
+    m_pdfToolbar->addWidget(m_pdfPageLabel);
+    m_pdfToolbar->addAction(nextAction);
+    m_pdfToolbar->addSeparator();
+    m_pdfToolbar->addAction(gotoAction);
+    m_pdfToolbar->addSeparator();
+    m_pdfToolbar->addAction(screenshotAction);
+
+    // Styl — stejná výška jako ostatní toolbary
+    const QString style =
+        "QToolButton {"
+        "  font-size: 14px; font-weight: bold;"
+        "  min-height: 30px; padding: 2px 10px; border-radius: 4px;"
+        "}";
+    m_pdfToolbar->setStyleSheet(style);
+}
+
+void MainWindow::updatePdfToolbarVisibility(bool isPdf)
+{
+    if (!m_pdfToolbar) {
+        return;
+    }
+    if (isPdf) {
+        m_pdfToolbar->show();
+    } else {
+        m_pdfToolbar->hide();
+        if (m_pdfPageLabel) {
+            m_pdfPageLabel->setText(QStringLiteral("  -  "));
+        }
+    }
+}
+
+void MainWindow::onPdfGoToPage()
+{
+    if (!m_imageView->isPdfLoaded()) {
+        return;
+    }
+    const int total = m_imageView->pdfPageCount();
+    bool ok = false;
+    const int page = QInputDialog::getInt(
+        this,
+        tr("Přejít na stranu"),
+        tr("Číslo strany (1 – %1):").arg(total),
+        m_imageView->currentPdfPage() + 1,  // zobrazit 1-based
+        1, total, 1, &ok
+    );
+    if (ok) {
+        m_imageView->goToPage(page - 1);    // interně 0-based
+    }
+}
+
+void MainWindow::onPdfScreenshot()
+{
+    if (!m_imageView->isPdfLoaded()) {
+        return;
+    }
+    const QImage img = m_imageView->displayedImage();
+    if (img.isNull()) {
+        return;
+    }
+    // Zobrazit jako statický obrázek — PDF se uvolní, toolbar se skryje
+    m_imageView->setImage(img);
+    m_imageModified = true;
+    updateSaveButtonStates();
+    updatePdfToolbarVisibility(false);
+    m_statusLabel->setText(tr("Stránka PDF zachycena jako obrázek — použijte Uložit jako pro uložení."));
 }
 
 // ── Recyklace (Undo přesunu do Delete) ───────────────────────────────────────

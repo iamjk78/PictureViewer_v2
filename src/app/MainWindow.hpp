@@ -118,6 +118,12 @@ private:
     void onFavoriteRemove(const QString &folderPath);  // odebrat složku z oblíbených
     QString pickRandomUnusedFavoriteColor() const;     // vybrat barvu pro novou oblíbenou
 
+    // ── PDF toolbar ──────────────────────────────────────────────────────────
+    void setupPdfToolbar();
+    void updatePdfToolbarVisibility(bool isPdf);
+    void onPdfGoToPage();
+    void onPdfScreenshot();
+
     // ── Kategorie ────────────────────────────────────────────────────────────
     void setupCategoriesToolbar();         // vytvořit toolbar pro kategorie
     void refreshCategoryButtons();         // znovu vytvořit tlačítka pro přiřazení
@@ -165,6 +171,7 @@ private:
     QToolBar *m_mainToolbar = nullptr;
     QToolBar *m_favoritesToolbar = nullptr;    // Sekundární toolbar pro oblíbené složky
     QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)
+    QToolBar *m_pdfToolbar = nullptr;          // Toolbar pro PDF — viditelný jen při PDF
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;
     QWidget *m_overlayToolbar = nullptr;
@@ -172,6 +179,7 @@ private:
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QLabel *m_zoomLabel = nullptr;   // indikátor zoomu vpravo ve status baru
+    QLabel *m_pdfPageLabel = nullptr; // indikátor "strana X / Y" v PDF toolbaru
     QSpinBox *m_intervalSpinBox;
     SlideshowController *m_slideshowController;
     QAction *m_openFolderAction;

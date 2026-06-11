@@ -555,6 +555,18 @@ bool ImageView::previousPage()
     return true;
 }
 
+bool ImageView::goToPage(int pageIndex)
+{
+    if (!isPdfLoaded()) {
+        return false;
+    }
+    if (pageIndex < 0 || pageIndex >= m_pdfHandler->pageCount()) {
+        return false;
+    }
+    renderPdfPage(pageIndex);
+    return true;
+}
+
 bool ImageView::isPdfLoaded() const
 {
     return m_pdfHandler && m_pdfHandler->isLoaded();

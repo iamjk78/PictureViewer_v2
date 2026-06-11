@@ -44,6 +44,7 @@ public:
     // PDF navigation
     bool nextPage();
     bool previousPage();
+    bool goToPage(int pageIndex);    // 0-based; vrátí false pokud index mimo rozsah
     bool isPdfLoaded() const;
     int currentPdfPage() const;
     int pdfPageCount() const;
