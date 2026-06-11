@@ -242,6 +242,12 @@ void MainWindow::cancelAllWorkers()
 // By the time exec() returns, the thread pool is completely idle.
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // Uložit stav kategoriálního toolbaru
+    if (m_categoriesToolbar) {
+        m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
+        m_settingsManager->syncToDisk();
+    }
+
     cancelAllWorkers();
     QThreadPool::globalInstance()->waitForDone();
     // NOTE: processEvents() is intentionally omitted here.
@@ -1891,10 +1897,12 @@ void MainWindow::updateVideoMetadata(const QString &videoPath)
 
 void MainWindow::setupCategoriesToolbar()
 {
-    // Vytvořit sekundární toolbar pro kategorie (skrytý na začátku)
+    // Přidat toolbar break — vytvoří nový ŘÁDEK pod hlavní lištou
+    addToolBarBreak();
+
+    // Vytvořit sekundární toolbar pro kategorie (na novém řádku, skrytý na začátku)
     m_categoriesToolbar = addToolBar(tr("Kategorie"));
     m_categoriesToolbar->setMovable(false);
-    m_categoriesToolbar->setVisible(false);  // Skrytá na začátku
 
     // Tlačítko [+ Nová kategorie]
     QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
@@ -1933,6 +1941,10 @@ void MainWindow::setupCategoriesToolbar()
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         m_categoriesToolbar->setVisible(!m_categoriesToolbar->isVisible());
     });
+
+    // Obnovit stav z nastavení (nebo skrýt na začátku, pokud není uložen)
+    bool wasVisible = m_settingsManager->categoriesToolbarVisible();
+    m_categoriesToolbar->setVisible(wasVisible);
 }
 
 void MainWindow::onCategoryAssign()

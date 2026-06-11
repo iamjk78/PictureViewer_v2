@@ -68,6 +68,15 @@ public:
     void removeFavoriteFolder(const QString &folderPath);
     bool isFavoriteFolder(const QString &folderPath) const;
 
+    // ── Kategorie toolbar ────────────────────────────────────────────────────
+    // Pamatovat si, zda byl kategoriální toolbar viditelný při posledním vypnutí
+    bool categoriesToolbarVisible() const;
+    void setCategoriesToolbarVisible(bool visible);
+
+    // ── Persistence ──────────────────────────────────────────────────────────
+    // Explicitly flush settings to disk (QSettings caches changes in memory)
+    void syncToDisk() const;
+
     // ── Thumbnail Cache ──────────────────────────────────────────────────────
     bool thumbnailCacheEnabled() const;
     void setThumbnailCacheEnabled(bool enabled);

@@ -44,6 +44,8 @@ constexpr auto kSortAscendingKey         = "Sort/ascending";
 constexpr auto kFavoriteFoldersKey       = "Favorites/folders";
 constexpr int kMaxFavoriteFolders        = 10;
 
+constexpr auto kCategoriesToolbarVisibleKey = "Categories/toolbar_visible";
+
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
 constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
 
@@ -272,6 +274,25 @@ void SettingsManager::removeFavoriteFolder(const QString &folderPath)
 bool SettingsManager::isFavoriteFolder(const QString &folderPath) const
 {
     return favoriteFolders().contains(folderPath);
+}
+
+// ── Kategorie toolbar ────────────────────────────────────────────────────────
+
+bool SettingsManager::categoriesToolbarVisible() const
+{
+    return m_settings->value(kCategoriesToolbarVisibleKey, false).toBool();
+}
+
+void SettingsManager::setCategoriesToolbarVisible(bool visible)
+{
+    m_settings->setValue(kCategoriesToolbarVisibleKey, visible);
+}
+
+// ── Persistence ──────────────────────────────────────────────────────────────
+
+void SettingsManager::syncToDisk() const
+{
+    m_settings->sync();
 }
 
 // ── Thumbnail Cache ──────────────────────────────────────────────────────────
