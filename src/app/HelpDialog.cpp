@@ -78,6 +78,9 @@ void HelpDialog::showAbout(QWidget *parent)
         " Uložit nabídne přepsání originálu nebo uložení pod novým názvem;"
         " Uložit jako otevře dialog pro výběr názvu a cílové složky"
         " (originál nebo oblíbená složka)</li>"
+        "<li><b>Recyklace (♻)</b> — tlačítko vedle popelnic vrací soubory přesunuté do Delete"
+        " zpět do původní složky (LIFO — nejnovější přesunutý jako první);"
+        " aktivní jen pokud byl v&nbsp;tomto sezení přesunut alespoň jeden soubor</li>"
         "<li><b>Pamatování velikosti okna</b> — aplikace si pamatuje velikost a polohu okna;"
         " při změně monitoru (jiné rozlišení) se spustí v&nbsp;předvolené velikosti</li>"
         "</ul>"
@@ -206,6 +209,13 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.10</h3>"
+        "<ul>"
+        "<li><b>Recyklace (♻)</b> — třetí tlačítko u popelnic vrací soubory přesunuté do Delete"
+        " zpět do původní složky, v&nbsp;obráceném pořadí (nejnovější přesunutý jako první);"
+        " po obnovení se aplikace přepne na obnovenou složku a soubor;"
+        " tlačítko se deaktivuje, pokud nejsou žádné přesunuté soubory ke vrácení</li>"
+        "</ul>"
         "<h3>Verze 0.9</h3>"
         "<ul>"
         "<li><b>Uložit</b> — po ořezu nebo otočení obrázku se aktivuje tlačítko Uložit;"

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.7**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.10**.
 
 ## Funkce
 
@@ -12,15 +12,27 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Animované GIFy** přehrávané přes QMovie
 - Prohlížení PDF dokumentů s listováním stránek
 - Přibližování a posun obrázků (zoom, pan) + **indikátor zoomu** ve status baru
-- **Otočení obrázku** o 90° (vizuální)
+- **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
+- **Ořez obrázku** (✂) — výběr oblasti myší, zobrazení se ořízne na vybranou část
+- **Uložit / Uložit jako** — uložení upraveného obrázku (ořez, otočení) jako JPEG;
+  Uložit nabídne přepsání originálu nebo přejmenování; Uložit jako otevře dialog
+  pro výběr názvu a cílové složky (originál nebo oblíbená)
+- **Recyklace (♻)** — vrácení souborů přesunutých do Delete zpět do původní složky
+  (LIFO — nejnovější jako první)
 - Volba řazení souborů — podle názvu / data změny / velikosti, vzestupně i sestupně
 - **Drag & drop** složky nebo souboru do okna
 - **Kontextové menu** — Zobrazit ve Finderu, kopírovat obrázek / cestu
-- Slideshow s nastavitelným intervalem
+- Slideshow s nastavitelným intervalem (1–60 s)
 - Mazání a přejmenování souborů
+- **Kategorie obrázků** — až 5 barevných štítků na obrázek; filtrování složky;
+  správa (přejmenovat, změnit barvu, smazat) přes pravý klik
+- **Oblíbené složky** (⭐) — toolbar s barevnými tlačítky pro rychlé přepínání;
+  max 10 složek, klik otevře složku, pravý klik odebere
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
 - Přehrávání videí přes VLC
+- **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
+  obrazovky se spustí v předvolené velikosti
 - Jednotkové testy jádra (Qt Test)
 
 ## Buildování
@@ -102,7 +114,7 @@ cmake --build . --config Release --parallel
 |---|---|
 | `←` / `→` | Předchozí / další obrázek |
 | `↑` / `↓` | První / poslední obrázek |
-| `PageUp` / `PageDown` | Stránka PDF / další obrázek |
+| `PageUp` / `PageDown` | Předchozí / následující stránka PDF |
 | `S` | Spustit / zastavit slideshow |
 | `F` | Celá obrazovka |
 | `D` / `Delete` | Smazat nebo přesunout do Delete |
@@ -110,8 +122,8 @@ cmake --build . --config Release --parallel
 | `[` / `L` , `]` | Otočit doleva / doprava |
 | `G` | Přehrát video ve VLC |
 | `+` / `-` | Zoom |
-| `0` / `Space` | Originální velikost |
-| `Esc` | Konec fullscreenu / zavřít |
+| `0` / `Space` | Originální velikost / přizpůsobit oknu |
+| `Esc` | Konec fullscreenu / zrušit ořez |
 
 Pravým tlačítkem nad obrázkem se otevře kontextové menu (Zobrazit ve Finderu,
 kopírovat obrázek / cestu). Složku nebo soubor lze také přetáhnout do okna.
@@ -124,7 +136,7 @@ Konfigurace se ukládá v:
 - **macOS**: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini`
 - **Windows**: `%APPDATA%\JiriKrejci\PictureViewer\config.ini`
 
-Menu Nastavení přístupuje k:
+Menu Nastavení přistupuje k:
 - Vzhled aplikace (5 rozložení UI)
 - Řazení souborů (název / datum / velikost, vzestupně / sestupně)
 - Zapamatování poslední složky
@@ -138,13 +150,6 @@ Menu Nastavení přístupuje k:
 
 Detailní dokumentace: [docs/dokumentace.md](docs/dokumentace.md)  
 Náměty na vylepšení: [docs/TODO.md](docs/TODO.md)
-
----
-
-## Známé limity
-
-- Otočení obrázku je pouze vizuální — neukládá se zpět do souboru
-- EXIF data (clona, ISO, expozice) se zatím nečtou
 
 ---
 
