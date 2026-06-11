@@ -27,7 +27,7 @@ static constexpr const char *PredefinedColors[] = {
 
 NewCategoryDialog::NewCategoryDialog(QWidget *parent)
     : QDialog(parent)
-    , m_selectedColor(PredefinedColors[0])
+    , m_selectedColor()  // Inicializovat na invalidní — pokud uživatel nezvolí barvu, bude se vybrat náhodně
 {
     setWindowTitle(tr("Nová kategorie"));
     setModal(true);
@@ -78,11 +78,7 @@ void NewCategoryDialog::setupUI()
         colorLayout->addWidget(btn, i / 5, i % 5);
     }
 
-    // Zvýraznit výchozí barvu
-    m_colorButtons[0]->setStyleSheet(
-        QString("background-color: %1; border: 3px solid #333; border-radius: 4px;")
-            .arg(PredefinedColors[0])
-    );
+    // Neklikat žádnou barvu na začátku (m_selectedColor je invalidní)
 
     mainLayout->addWidget(colorWidget);
 
