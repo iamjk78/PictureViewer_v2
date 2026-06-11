@@ -1891,11 +1891,13 @@ void MainWindow::updateVideoMetadata(const QString &videoPath)
 
 void MainWindow::setupCategoriesToolbar()
 {
-    auto *toolbar = addToolBar(tr("Kategorie"));
-    toolbar->setMovable(false);
+    // Vytvořit sekundární toolbar pro kategorie (skrytý na začátku)
+    m_categoriesToolbar = addToolBar(tr("Kategorie"));
+    m_categoriesToolbar->setMovable(false);
+    m_categoriesToolbar->setVisible(false);  // Skrytá na začátku
 
     // Tlačítko [+ Nová kategorie]
-    QAction *newCatAction = toolbar->addAction(tr("[+ Nová]"));
+    QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
     newCatAction->setToolTip(tr("Vytvořit novou kategorii"));
     connect(newCatAction, &QAction::triggered, this, [this] {
         NewCategoryDialog dialog(this);
@@ -1907,22 +1909,30 @@ void MainWindow::setupCategoriesToolbar()
         }
     });
 
-    toolbar->addSeparator();
+    m_categoriesToolbar->addSeparator();
 
     // Tlačítko [Přiřadit]
-    QAction *assignAction = toolbar->addAction(tr("[Přiřadit]"));
+    QAction *assignAction = m_categoriesToolbar->addAction(tr("[Přiřadit]"));
     assignAction->setToolTip(tr("Přiřadit kategorie k obrázku"));
     connect(assignAction, &QAction::triggered, this, &MainWindow::onCategoryAssign);
 
     // Tlačítko [Odebrat vše]
-    QAction *removeAllAction = toolbar->addAction(tr("[Odebrat vše]"));
+    QAction *removeAllAction = m_categoriesToolbar->addAction(tr("[Odebrat vše]"));
     removeAllAction->setToolTip(tr("Smazat všechny kategorie z obrázku"));
     connect(removeAllAction, &QAction::triggered, this, &MainWindow::onCategoryRemoveAll);
 
-    toolbar->addSeparator();
+    m_categoriesToolbar->addSeparator();
 
-    // Filtr — dropdown se checkboxy (TODO: zjednoduššme na dropdown)
-    toolbar->addWidget(new QLabel(tr("Filtr:")));
+    // Filtr — label + placeholder (TODO: přidat kontrolu filtrování)
+    m_categoriesToolbar->addWidget(new QLabel(tr("Filtr:")));
+
+    // Přidat toggle tlačítko na HLAVNÍ toolbar
+    m_mainToolbar->addSeparator();
+    QAction *toggleCategoriesAction = m_mainToolbar->addAction(tr("🏷️ Kategorie"));
+    toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel kategorií"));
+    connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
+        m_categoriesToolbar->setVisible(!m_categoriesToolbar->isVisible());
+    });
 }
 
 void MainWindow::onCategoryAssign()

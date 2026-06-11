@@ -144,6 +144,7 @@ private:
     bool m_galleryGridActive = false;        // panel je v centrálním stacku (režim Galerie)
     QStackedWidget *m_centralStack = nullptr;
     QToolBar *m_mainToolbar = nullptr;
+    QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;
     QWidget *m_overlayToolbar = nullptr;
