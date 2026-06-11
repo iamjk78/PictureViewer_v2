@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.10**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.11**.
 
 ## Funkce
 
@@ -10,7 +10,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   Qt pluginů (JPG, PNG, GIF, BMP, WEBP, TIFF a podle prostředí i HEIC, HEIF,
   SVG, JP2…)
 - **Animované GIFy** přehrávané přes QMovie
-- Prohlížení PDF dokumentů s listováním stránek
+- Prohlížení PDF dokumentů s listováním stránek; **PDF toolbar** s tlačítky ◀/▶,
+  indikátorem strany, skokem na konkrétní stranu a snímkem stránky jako JPEG
 - Přibližování a posun obrázků (zoom, pan) + **indikátor zoomu** ve status baru
 - **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
 - **Ořez obrázku** (✂) — výběr oblasti myší, zobrazení se ořízne na vybranou část
