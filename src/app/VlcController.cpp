@@ -353,7 +353,7 @@ void VlcController::onProcessStarted()
     qDebug() << "VLC process started";
 }
 
-void VlcController::onProcessError(QProcess::ProcessError error)
+void VlcController::onProcessError(QProcess::ProcessError /*error*/)
 {
     if (m_state == VlcState::Stopped || m_state == VlcState::Idle)
         return;
@@ -423,7 +423,7 @@ void VlcController::onSocketConnected()
     qDebug() << "VLC RC socket connected";
 }
 
-void VlcController::onSocketError(QAbstractSocket::SocketError error)
+void VlcController::onSocketError(QAbstractSocket::SocketError /*error*/)
 {
     qWarning() << "VLC socket error:" << m_socket->errorString();
     emit connectionLost();

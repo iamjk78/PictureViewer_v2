@@ -101,6 +101,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_folderScanWorker(nullptr)
     , m_imageView(new ImageView(this))
     , m_settingsManager(new SettingsManager())
+    , m_vlcController(new VlcController(m_settingsManager, this))
     , m_thumbnailPanel(new ThumbnailPanel(this))
     , m_thumbnailDock(nullptr)
     , m_statusLabel(new QLabel(this))
@@ -123,7 +124,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_deleteFolderAction(new QAction(this))
     , m_deletePictureAction(new QAction(this))
     , m_renameImageAction(new QAction(this))
-    , m_vlcController(new VlcController(m_settingsManager, this))
 {
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
