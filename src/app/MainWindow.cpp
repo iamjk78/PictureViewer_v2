@@ -576,6 +576,9 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     // Uložit unfiltered paths pro filtr kategorií
     m_unfilteredImagePaths = paths;
 
+    // Obnovit tlačítka filtrů podle kategorií v této složce
+    updateCategoryFilterButtons();
+
     // Aplikovat filtr kategorií pokud je aktivní
     if (!m_categoryFilterIds.isEmpty()) {
         m_imagePaths = m_categoryManager->imagePathsWithAllCategories(m_categoryFilterIds);
@@ -1945,9 +1948,9 @@ void MainWindow::setupCategoriesToolbar()
 
     m_categoriesToolbar->addSeparator();
 
-    // Filtr — kontejner s tlačítky pro filtrování
+    // Filtr — kontejner s tlačítky pro filtrování (bude naplněn až po otevření složky)
     m_categoriesToolbar->addWidget(new QLabel(tr("Filtr:")));
-    updateCategoryFilterButtons();
+    // updateCategoryFilterButtons() se volá z onScanComplete() když máme m_unfilteredImagePaths
 
     // Tlačítko pro vyčistění filtru
     QAction *clearFiltersAction = m_categoriesToolbar->addAction(tr("[Vyčistit filtr]"));
