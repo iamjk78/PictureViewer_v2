@@ -18,10 +18,14 @@ class ImageCatalog
 public:
     // loadFolder: if includePdf=true, both images and PDFs are included.
     // sortKey + ascending určují pořadí výsledného seznamu.
+    // categoryIds: filtrování podle kategorií (AND logika). Prázdný = bez filtrování.
+    // categoryManager: potřebný pro filtrování; pokud nullptr, filtrování se přeskočí.
     QStringList loadFolder(const QString &folderPath,
                            bool includePdf = true,
                            SortKey sortKey = SortKey::Name,
-                           bool ascending = true) const;
+                           bool ascending = true,
+                           const QList<int> &categoryIds = {},
+                           class CategoryManager *categoryManager = nullptr) const;
     bool isSupported(const QFileInfo &fileInfo, bool includePdf = true) const;
 };
 

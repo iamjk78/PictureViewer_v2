@@ -111,6 +111,13 @@ private:
     void updateVideoMetadata(const QString &videoPath);
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
+    // ── Kategorie ────────────────────────────────────────────────────────────
+    void setupCategoriesToolbar();   // vytvořit toolbar pro kategorie
+    void onCategoryAssign();         // otevřít dialog pro přiřazení kategorií
+    void onCategoryRemoveAll();      // smazat všechny kategorie z obrázku
+    void onCategoryFilterChanged();  // filtrování podle vybraných kategorií
+    void updateStatusBarCategories(); // aktualizovat kategorie ve status baru
+
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
     QString m_requestedFile;
@@ -123,6 +130,7 @@ private:
     bool m_vlcActive = false;
     QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
+    QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
     FolderScanWorker *m_folderScanWorker;
     ImageLoader *m_imageLoader = nullptr;
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení

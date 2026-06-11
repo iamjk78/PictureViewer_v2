@@ -1,5 +1,6 @@
 #include "core/ImageCatalog.hpp"
 
+#include "app/CategoryManager.hpp"
 #include "core/ImageFormats.hpp"
 
 #include <QCollator>
@@ -14,7 +15,9 @@
 namespace pictureviewer {
 
 QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
-                                     SortKey sortKey, bool ascending) const
+                                     SortKey sortKey, bool ascending,
+                                     const QList<int> &categoryIds,
+                                     CategoryManager *categoryManager) const
 {
     const QDir directory(folderPath);
     if (!directory.exists()) {
@@ -26,14 +29,30 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
         QDir::Files | QDir::NoDotAndDotDot
     );
 
+    // Pokud máme filtrování podle kategorií, nejdřív získat seznam cest
+    QSet<QString> categoryFilteredPaths;
+    if (!categoryIds.isEmpty() && categoryManager) {
+        categoryFilteredPaths = QSet<QString>(
+            categoryManager->imagePathsWithAllCategories(categoryIds).begin(),
+            categoryManager->imagePathsWithAllCategories(categoryIds).end()
+        );
+    }
+
     // Pracujeme s QFileInfo, ať pro řazení podle data/velikosti nečteme stat
     // v komparátoru opakovaně.
     QFileInfoList supported;
     supported.reserve(entries.size());
     for (const QFileInfo &entry : entries) {
-        if (isSupported(entry, includePdf)) {
-            supported.append(entry);
+        if (!isSupported(entry, includePdf)) {
+            continue;
         }
+
+        // Pokud máme kategoriální filtr, ověřit že cesta je v seznamu
+        if (!categoryIds.isEmpty() && !categoryFilteredPaths.contains(entry.absoluteFilePath())) {
+            continue;
+        }
+
+        supported.append(entry);
     }
 
     // QCollator s numericMode řadí číselné úseky podle hodnoty (img2 < img10),
