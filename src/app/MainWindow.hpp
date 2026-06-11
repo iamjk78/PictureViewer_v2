@@ -124,7 +124,8 @@ private:
     void updateStatusBarCategories();      // aktualizovat kategorie ve status baru
 
     ImageMetadataReader m_imageMetadataReader;
-    QStringList m_imagePaths;
+    QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)
+    QStringList m_unfilteredImagePaths;  // všechny obrázky bez filtru
     QString m_requestedFile;
     QString m_currentFolder;   // poslední načtená složka (pro reload při změně řazení)
     int m_currentIndex = -1;

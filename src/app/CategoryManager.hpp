@@ -50,6 +50,10 @@ public:
     // Pokud categoryIds prázdný, vrátí všechny cesty
     QStringList imagePathsWithAllCategories(const QList<int> &categoryIds) const;
 
+    // Vrátí pouze kategorie, které jsou přiřazeny alespoň jednomu obrázku v seznamu
+    // Efektivní: jedním SQL dotazem místo volání categoriesForImage() pro každý obrázek
+    QList<Category> categoriesUsedInPaths(const QStringList &imagePaths) const;
+
 private:
     bool initializeDatabase();
     QColor pickRandomUnusedColor() const;

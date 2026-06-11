@@ -312,4 +312,50 @@ QStringList CategoryManager::imagePathsWithAllCategories(const QList<int> &categ
     return result;
 }
 
+QList<Category> CategoryManager::categoriesUsedInPaths(const QStringList &imagePaths) const
+{
+    QList<Category> result;
+    QSqlDatabase db = QSqlDatabase::database("categories");
+    if (!db.isOpen() || imagePaths.isEmpty()) {
+        return result;
+    }
+
+    // Vytvořit dotaz se placeholder pro všechny cesty
+    QStringList placeholders;
+    for (int i = 0; i < imagePaths.size(); ++i) {
+        placeholders.append("?");
+    }
+
+    QString sql = QString(
+        "SELECT DISTINCT c.id, c.name, c.color "
+        "FROM categories c "
+        "INNER JOIN image_categories ic ON c.id = ic.category_id "
+        "WHERE ic.image_path IN (%1) "
+        "ORDER BY c.name"
+    ).arg(placeholders.join(","));
+
+    QSqlQuery query(db);
+    query.prepare(sql);
+
+    // Vázat všechny cesty
+    for (const QString &path : imagePaths) {
+        query.addBindValue(path);
+    }
+
+    if (!query.exec()) {
+        qWarning() << "Chyba čtení použitých kategorií:" << query.lastError().text();
+        return result;
+    }
+
+    while (query.next()) {
+        Category cat;
+        cat.id = query.value(0).toInt();
+        cat.name = query.value(1).toString();
+        cat.color = QColor(query.value(2).toString());
+        result.append(cat);
+    }
+
+    return result;
+}
+
 } // namespace pictureviewer

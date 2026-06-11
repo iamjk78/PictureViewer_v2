@@ -564,6 +564,7 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
 
     if (paths.isEmpty()) {
         m_imagePaths.clear();
+        m_unfilteredImagePaths.clear();
         m_currentIndex = -1;
         m_requestedFile.clear();   // jinak zůstane viset pro další sken
         m_thumbnailPanel->clear();
@@ -571,6 +572,9 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_statusLabel->setText(tr("Ve složce nebyly nalezeny žádné obrázky."));
         return;
     }
+
+    // Uložit unfiltered paths pro filtr kategorií
+    m_unfilteredImagePaths = paths;
 
     // Aplikovat filtr kategorií pokud je aktivní
     if (!m_categoryFilterIds.isEmpty()) {
@@ -2159,8 +2163,8 @@ void MainWindow::updateCategoryFilterButtons()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    // Načíst všechny kategorie
-    QList<Category> allCategories = m_categoryManager->allCategories();
+    // Načíst pouze kategorie, které jsou skutečně použity v aktuální složce
+    QList<Category> allCategories = m_categoryManager->categoriesUsedInPaths(m_unfilteredImagePaths);
 
     // Pro každou kategorii vytvořit tlačítko na filtr
     for (const Category &cat : allCategories) {
