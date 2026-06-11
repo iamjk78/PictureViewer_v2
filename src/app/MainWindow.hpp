@@ -20,6 +20,7 @@ class QToolBar;
 
 namespace pictureviewer {
 
+class CategoryManager;
 class ImageLoader;
 class ImageView;
 class FolderScanWorker;
@@ -108,6 +109,7 @@ private:
     void enableImageBrowsing();
     void applyGrayscaleEffect(bool enable);
     void updateVideoMetadata(const QString &videoPath);
+    void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;
@@ -126,6 +128,7 @@ private:
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení
     ImageView *m_imageView;
     SettingsManager *m_settingsManager;
+    CategoryManager *m_categoryManager = nullptr;
     VlcController *m_vlcController;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;

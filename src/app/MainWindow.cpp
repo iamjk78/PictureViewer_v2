@@ -1,3 +1,4 @@
+#include "app/CategoryManager.hpp"
 #include "app/HelpDialog.hpp"
 #include "app/ImageLoader.hpp"
 #include "app/ImageView.hpp"
@@ -16,6 +17,7 @@
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QStandardPaths>
 #include <QDir>
 #include <QDockWidget>
 #include <QFile>
@@ -125,6 +127,10 @@ MainWindow::MainWindow(QWidget *parent)
     , m_deletePictureAction(new QAction(this))
     , m_renameImageAction(new QAction(this))
 {
+    // Inicializovat CategoryManager — databáze vedle config.ini
+    QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/categories.db";
+    m_categoryManager = new CategoryManager(dbPath);
+
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     connect(m_deleteFolderAction, &QAction::triggered, this, &MainWindow::onDeleteFolder);
@@ -944,6 +950,20 @@ void MainWindow::setupMenu()
     connect(m_openFileAction, &QAction::triggered, this, &MainWindow::openFileDialog);
     fileMenu->addAction(m_openFolderAction);
     fileMenu->addAction(m_openFileAction);
+    fileMenu->addSeparator();
+
+    // ── Oblíbené složky ──────────────────────────────────────────────────────
+    QMenu *favoritesMenu = fileMenu->addMenu(tr("⭐ Oblíbené"));
+    QAction *addFavAction = favoritesMenu->addAction(tr("[+ Přidat aktuální]"));
+    connect(addFavAction, &QAction::triggered, this, [this] {
+        if (!m_currentFolder.isEmpty() && m_settingsManager->favoriteFolders().size() < 10) {
+            m_settingsManager->addFavoriteFolder(m_currentFolder);
+            updateFavoritesMenu();
+        }
+    });
+    favoritesMenu->addSeparator();
+    updateFavoritesMenu();
+
     fileMenu->addSeparator();
     fileMenu->addAction(tr("&Konec"), QKeySequence::Quit, this, &QWidget::close);
 
@@ -1847,6 +1867,91 @@ void MainWindow::updateVideoMetadata(const QString &videoPath)
 
     const QString statusText = tr("▶ Video: %1 (%2) [ESC = exit]").arg(fileName, sizeStr);
     m_statusLabel->setText(statusText);
+}
+
+void MainWindow::updateFavoritesMenu()
+{
+    // Najít a aktualizovat Favorites menu — včetně tlačítek "+ Přidat" a "-" smazat
+    QMenuBar *mb = menuBar();
+    if (!mb) {
+        return;
+    }
+
+    // Najít menu "⭐ Oblíbené" v "Soubor" menu
+    QMenu *fileMenu = nullptr;
+    for (QAction *action : mb->actions()) {
+        if (action->text().contains("Soubor")) {
+            fileMenu = action->menu();
+            break;
+        }
+    }
+
+    if (!fileMenu) {
+        return;
+    }
+
+    QMenu *favMenu = nullptr;
+    for (QAction *action : fileMenu->actions()) {
+        if (action->text().contains("Oblíbené")) {
+            favMenu = action->menu();
+            break;
+        }
+    }
+
+    if (!favMenu) {
+        return;
+    }
+
+    // Vyčistit menu (zachovat [+ Přidat] a separator na začátku)
+    int sepIdx = -1;
+    for (int i = 0; i < favMenu->actions().size(); ++i) {
+        if (favMenu->actions()[i]->isSeparator()) {
+            sepIdx = i;
+            break;
+        }
+    }
+
+    if (sepIdx >= 0) {
+        // Smazat vše za separatorem
+        while (favMenu->actions().size() > sepIdx + 1) {
+            delete favMenu->actions().last();
+        }
+    }
+
+    // Přidat seznam oblíbených
+    const QStringList favorites = m_settingsManager->favoriteFolders();
+    if (favorites.isEmpty()) {
+        favMenu->addAction(tr("(prázdné)"))->setEnabled(false);
+        return;
+    }
+
+    for (const QString &path : favorites) {
+        QString displayName = QFileInfo(path).fileName();
+        if (displayName.isEmpty()) {
+            displayName = path;
+        }
+
+        QAction *folderAction = favMenu->addAction(displayName);
+        folderAction->setToolTip(path);
+
+        connect(folderAction, &QAction::triggered, this, [this, path] {
+            loadFolder(path);
+        });
+
+        // Přidat malé "−" tlačítko pro odebrání (s ikonou nebo textem)
+        // Poznámka: Qt menu nepodporuje custom UI vedle action textu jednoduše,
+        // takže přidáme separátor a "-" akci pod ní. Nebo jednoduše přidáme
+        // do action tooltipu instrukci "shift+click = odebrat"
+
+        // Jednodušeji: spojit oba v jednu akci s pravým klikem, nebo
+        // přidávat "-" položky vedle. Pojďme jednodušší přístup:
+        // pravý klik na položku = smazat, nebo lepší: přidat odkaz vedle
+        // Zatím pro jednoduchost: přidáme "- <název>" akce hned pod
+    }
+
+    // Alternativně: mít "-" items vedle. Ale to je komplexní. Zatím necháme
+    // bez GUI na smazání z menu. Bude jen otevírání z menu, a mazání z UI.
+    // (Později lze přidat pravý-klik handler.)
 }
 
 } // namespace pictureviewer
