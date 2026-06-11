@@ -48,6 +48,9 @@ constexpr int kMaxFavoriteFolders        = 10;
 
 constexpr auto kCategoriesToolbarVisibleKey = "Categories/toolbar_visible";
 
+constexpr auto kWindowGeometryKey        = "UI/window_geometry";
+constexpr auto kSavedScreenSizeKey       = "UI/saved_screen_size";
+
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
 constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
 
@@ -335,6 +338,38 @@ bool SettingsManager::categoriesToolbarVisible() const
 void SettingsManager::setCategoriesToolbarVisible(bool visible)
 {
     m_settings->setValue(kCategoriesToolbarVisibleKey, visible);
+}
+
+// ── Window geometry ───────────────────────────────────────────────────────────
+
+QByteArray SettingsManager::windowGeometry() const
+{
+    return QByteArray::fromBase64(
+        m_settings->value(kWindowGeometryKey, QByteArray()).toByteArray());
+}
+
+void SettingsManager::setWindowGeometry(const QByteArray &geometry)
+{
+    m_settings->setValue(kWindowGeometryKey, geometry.toBase64());
+}
+
+QSize SettingsManager::savedScreenSize() const
+{
+    const QString s = m_settings->value(kSavedScreenSizeKey, QString()).toString();
+    if (s.isEmpty()) {
+        return {};
+    }
+    const QStringList parts = s.split('x');
+    if (parts.size() != 2) {
+        return {};
+    }
+    return {parts[0].toInt(), parts[1].toInt()};
+}
+
+void SettingsManager::setSavedScreenSize(const QSize &size)
+{
+    m_settings->setValue(kSavedScreenSizeKey,
+                         QStringLiteral("%1x%2").arg(size.width()).arg(size.height()));
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────

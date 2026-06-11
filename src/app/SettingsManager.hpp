@@ -1,6 +1,8 @@
 #pragma once
 
+#include <QByteArray>
 #include <QDateTime>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 
@@ -79,6 +81,12 @@ public:
     // Pamatovat si, zda byl kategoriální toolbar viditelný při posledním vypnutí
     bool categoriesToolbarVisible() const;
     void setCategoriesToolbarVisible(bool visible);
+
+    // ── Window geometry ───────────────────────────────────────────────────────
+    QByteArray windowGeometry() const;
+    void setWindowGeometry(const QByteArray &geometry);
+    QSize savedScreenSize() const;
+    void setSavedScreenSize(const QSize &size);
 
     // ── Persistence ──────────────────────────────────────────────────────────
     // Explicitly flush settings to disk (QSettings caches changes in memory)

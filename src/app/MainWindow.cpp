@@ -35,6 +35,8 @@
 #endif
 #include <QActionGroup>
 #include <QClipboard>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QCursor>
 #include <QDesktopServices>
 #include <QDirIterator>
@@ -161,7 +163,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onVlcProcessCrashed);
 
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
-    resize(1200, 750);
+    resize(1200, 750);   // výchozí velikost; přepsána níže pokud rozlišení odpovídá
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
     setAcceptDrops(true);   // přetažení složky/souboru do okna
 
@@ -196,6 +198,16 @@ MainWindow::MainWindow(QWidget *parent)
     m_imageView->viewport()->installEventFilter(this);
 
     applyUiLayout(uiLayoutFromString(m_settingsManager->uiLayout()));
+
+    // Obnovit velikost okna — ale jen pokud se rozlišení nezměnilo
+    {
+        const QByteArray savedGeom = m_settingsManager->windowGeometry();
+        const QSize savedScreen    = m_settingsManager->savedScreenSize();
+        const QSize currentScreen  = QGuiApplication::primaryScreen()->size();
+        if (!savedGeom.isEmpty() && savedScreen == currentScreen) {
+            restoreGeometry(savedGeom);
+        }
+    }
 
     // Only restore last folder if no image file is being opened
     // This prevents race condition when opening image from Finder
@@ -257,6 +269,11 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (m_categoriesToolbar) {
         m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
     }
+
+    // Uložit geometrii okna + aktuální rozlišení obrazovky
+    m_settingsManager->setWindowGeometry(saveGeometry());
+    m_settingsManager->setSavedScreenSize(QGuiApplication::primaryScreen()->size());
+
     m_settingsManager->syncToDisk();
 
     cancelAllWorkers();
