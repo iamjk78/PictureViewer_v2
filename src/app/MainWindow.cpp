@@ -200,6 +200,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_imageView->viewport()->setMouseTracking(true);
     m_imageView->viewport()->installEventFilter(this);
 
+    // Panel náhledů (QListWidget) spotřebuje Space pro vlastní aktivaci itemu —
+    // event filter ho zachytí dřív a přesměruje na zoom v ImageView.
+    m_thumbnailPanel->installEventFilter(this);
+
     applyUiLayout(uiLayoutFromString(m_settingsManager->uiLayout()));
 
     // Obnovit velikost okna — ale jen pokud se rozlišení nezměnilo
@@ -354,6 +358,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 
     // ── Normal image browsing ────────────────────────────────────────────────
     switch (event->key()) {
+    case Qt::Key_Space:
+    case Qt::Key_0:
+        m_imageView->resetZoom();
+        event->accept();
+        return;
     case Qt::Key_Left:
         showPreviousImage();
         event->accept();
@@ -1558,6 +1567,17 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         && event->type() == QEvent::MouseMove) {
         showOverlayToolbar();
     }
+
+    // Panel náhledů (QListWidget) by Space/0 spotřeboval pro aktivaci itemu.
+    // Zachytíme ho dřív a přesměrujeme na zoom v ImageView.
+    if (watched == m_thumbnailPanel && event->type() == QEvent::KeyPress) {
+        const auto *ke = static_cast<QKeyEvent *>(event);
+        if (ke->key() == Qt::Key_Space || ke->key() == Qt::Key_0) {
+            m_imageView->resetZoom();
+            return true;   // event spotřebován — QListWidget ho neuvidí
+        }
+    }
+
     return QMainWindow::eventFilter(watched, event);
 }
 
