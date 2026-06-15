@@ -1089,49 +1089,7 @@ void MainWindow::setupMenu()
         });
     }
 
-    // ── Řazení souborů ────────────────────────────────────────────────────────
-    QMenu *sortMenu = settingsMenu->addMenu(tr("Řazení souborů"));
-
-    auto *sortKeyGroup = new QActionGroup(this);
-    sortKeyGroup->setExclusive(true);
-    const struct { int key; QString label; } sortKeys[] = {
-        { 0, tr("Podle názvu") },
-        { 1, tr("Podle data změny") },
-        { 2, tr("Podle velikosti") },
-    };
-    const int savedSortKey = m_settingsManager->sortKey();
-    for (const auto &entry : sortKeys) {
-        QAction *action = sortMenu->addAction(entry.label);
-        action->setCheckable(true);
-        action->setChecked(entry.key == savedSortKey);
-        sortKeyGroup->addAction(action);
-        const int key = entry.key;
-        connect(action, &QAction::triggered, this, [this, key] {
-            m_settingsManager->setSortKey(key);
-            reloadCurrentFolder();
-        });
-    }
-
-    sortMenu->addSeparator();
-
-    auto *sortOrderGroup = new QActionGroup(this);
-    sortOrderGroup->setExclusive(true);
-    const bool ascending = m_settingsManager->sortAscending();
-    const struct { bool asc; QString label; } sortOrders[] = {
-        { true,  tr("Vzestupně") },
-        { false, tr("Sestupně") },
-    };
-    for (const auto &entry : sortOrders) {
-        QAction *action = sortMenu->addAction(entry.label);
-        action->setCheckable(true);
-        action->setChecked(entry.asc == ascending);
-        sortOrderGroup->addAction(action);
-        const bool asc = entry.asc;
-        connect(action, &QAction::triggered, this, [this, asc] {
-            m_settingsManager->setSortAscending(asc);
-            reloadCurrentFolder();
-        });
-    }
+    // Řazení souborů je přesunuto do hlavního toolbaru (dropdown tlačítko).
 
     settingsMenu->addSeparator();
 
@@ -1290,6 +1248,61 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_toggleSlideshowAction);
     toolbar->addWidget(m_intervalSpinBox);
     toolbar->addSeparator();
+
+    // ── Řazení souborů ────────────────────────────────────────────────────────
+    m_sortButton = new QToolButton(toolbar);
+    m_sortButton->setPopupMode(QToolButton::InstantPopup);
+    m_sortButton->setToolTip(tr("Řazení souborů"));
+
+    auto *sortMenu = new QMenu(m_sortButton);
+
+    auto *sortKeyGroup = new QActionGroup(sortMenu);
+    sortKeyGroup->setExclusive(true);
+    const struct { int key; QString label; } sortKeys[] = {
+        { 0, tr("Podle názvu") },
+        { 1, tr("Podle data změny") },
+        { 2, tr("Podle velikosti") },
+    };
+    const int savedSortKey = m_settingsManager->sortKey();
+    for (const auto &entry : sortKeys) {
+        auto *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.key == savedSortKey);
+        sortKeyGroup->addAction(action);
+        const int key = entry.key;
+        connect(action, &QAction::triggered, this, [this, key] {
+            m_settingsManager->setSortKey(key);
+            reloadCurrentFolder();
+            updateSortButtonText();
+        });
+    }
+
+    sortMenu->addSeparator();
+
+    auto *sortOrderGroup = new QActionGroup(sortMenu);
+    sortOrderGroup->setExclusive(true);
+    const bool ascending = m_settingsManager->sortAscending();
+    const struct { bool asc; QString label; } sortOrders[] = {
+        { true,  tr("Vzestupně ↑") },
+        { false, tr("Sestupně ↓")  },
+    };
+    for (const auto &entry : sortOrders) {
+        auto *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.asc == ascending);
+        sortOrderGroup->addAction(action);
+        const bool asc = entry.asc;
+        connect(action, &QAction::triggered, this, [this, asc] {
+            m_settingsManager->setSortAscending(asc);
+            reloadCurrentFolder();
+            updateSortButtonText();
+        });
+    }
+
+    m_sortButton->setMenu(sortMenu);
+    toolbar->addWidget(m_sortButton);
+    toolbar->addSeparator();
+
     // Otočení obrázku — zkratky fungují v celém okně (na rozdíl od keyPressEvent,
     // který by klávesy nedostal, když má focus panel náhledů). Doleva: '['/'L',
     // doprava: ']'. ('R' je obsazené Přejmenováním.)
@@ -2261,6 +2274,17 @@ void MainWindow::setupCategoriesToolbar()
     applyStyle(m_saveAction,        bigIconStyle);
     applyStyle(m_saveAsAction,      bigIconStyle);
 
+    // Sort tlačítko — stejný styl jako ostatní textová tlačítka
+    if (m_sortButton) {
+        m_sortButton->setStyleSheet(
+            "QToolButton {"
+            "  font-size: 14px; font-weight: bold;"
+            "  min-height: 30px; padding: 2px 10px; border-radius: 4px;"
+            "}"
+            "QToolButton::menu-indicator { image: none; }");
+        updateSortButtonText();
+    }
+
     // Ikona přejmenování — zvětšit pouze rozměr ikony
     if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(m_renameImageAction))) {
         btn->setStyleSheet(bigIconStyle);
@@ -2811,6 +2835,21 @@ void MainWindow::onCategoryDelete(int categoryId)
     if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
         updateCategoryButtonStates();
     }
+}
+
+// ── Řazení — aktualizace popisku tlačítka ────────────────────────────────────
+
+void MainWindow::updateSortButtonText()
+{
+    if (!m_sortButton) {
+        return;
+    }
+    const int key = m_settingsManager->sortKey();
+    const bool asc = m_settingsManager->sortAscending();
+    const QString keyLabel = (key == 0) ? tr("Název")
+                           : (key == 1) ? tr("Datum")
+                                        : tr("Velikost");
+    m_sortButton->setText(keyLabel + (asc ? QStringLiteral(" ↑") : QStringLiteral(" ↓")));
 }
 
 // ── PDF toolbar ───────────────────────────────────────────────────────────────

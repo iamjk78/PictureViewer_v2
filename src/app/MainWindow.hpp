@@ -17,6 +17,7 @@ class QLabel;
 class QSpinBox;
 class QStackedWidget;
 class QToolBar;
+class QToolButton;
 
 namespace pictureviewer {
 
@@ -178,8 +179,11 @@ private:
     QTimer *m_overlayHideTimer = nullptr;
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
-    QLabel *m_zoomLabel = nullptr;   // indikátor zoomu vpravo ve status baru
+    QLabel *m_zoomLabel = nullptr;    // indikátor zoomu vpravo ve status baru
     QLabel *m_pdfPageLabel = nullptr; // indikátor "strana X / Y" v PDF toolbaru
+    QToolButton *m_sortButton = nullptr; // dropdown tlačítko řazení v toolbaru
+
+    void updateSortButtonText(); // aktualizuje popisek m_sortButton podle nastavení
     QSpinBox *m_intervalSpinBox;
     SlideshowController *m_slideshowController;
     QAction *m_openFolderAction;
