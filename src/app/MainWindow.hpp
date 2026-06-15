@@ -209,6 +209,7 @@ private:
     void onUndoDelete();
     void updateRecycleButtonState();
     QAction *m_renameImageAction;
+    QAction *m_reloadFolderAction = nullptr;
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;
     QAction *m_cropAction = nullptr;

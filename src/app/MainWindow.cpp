@@ -1242,6 +1242,14 @@ void MainWindow::setupToolbar()
         m_slideshowController->setInterval(seconds * 1000);
     });
 
+    m_reloadFolderAction = new QAction(QStringLiteral("🔄"), this);
+    m_reloadFolderAction->setToolTip(tr("Znovu načíst složku (F5)"));
+    m_reloadFolderAction->setShortcut(QKeySequence(Qt::Key_F5));
+    m_reloadFolderAction->setEnabled(false);
+    connect(m_reloadFolderAction, &QAction::triggered, this, &MainWindow::reloadCurrentFolder);
+    toolbar->addAction(m_reloadFolderAction);
+    toolbar->addSeparator();
+
     toolbar->addAction(m_previousImageAction);
     toolbar->addAction(m_nextImageAction);
     toolbar->addSeparator();
@@ -1953,6 +1961,7 @@ void MainWindow::disableImageBrowsing()
     m_enableMoveToDeleteAction->setEnabled(false);
     m_deletePictureAction->setEnabled(false);
     m_deleteFolderAction->setEnabled(false);
+    if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(false);
 
     m_slideshowController->stop();
 
@@ -1975,6 +1984,7 @@ void MainWindow::enableImageBrowsing()
     m_enableMoveToDeleteAction->setEnabled(true);
     m_deletePictureAction->setEnabled(!m_imagePaths.isEmpty());
     m_deleteFolderAction->setEnabled(!m_imagePaths.isEmpty());
+    if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(!m_currentFolder.isEmpty());
 
     if (m_thumbnailDock) {
         m_thumbnailDock->setEnabled(true);
@@ -2267,10 +2277,11 @@ void MainWindow::setupCategoriesToolbar()
             btn->setStyleSheet(style);
         }
     };
-    applyStyle(m_rotateLeftAction,  bigEmojiStyle);
-    applyStyle(m_rotateRightAction, bigEmojiStyle);
-    applyStyle(m_cropAction,        bigEmojiStyle);
-    applyStyle(m_recycleAction,     bigEmojiStyle);
+    applyStyle(m_reloadFolderAction, bigEmojiStyle);
+    applyStyle(m_rotateLeftAction,   bigEmojiStyle);
+    applyStyle(m_rotateRightAction,  bigEmojiStyle);
+    applyStyle(m_cropAction,         bigEmojiStyle);
+    applyStyle(m_recycleAction,      bigEmojiStyle);
     applyStyle(m_saveAction,        bigIconStyle);
     applyStyle(m_saveAsAction,      bigIconStyle);
 
