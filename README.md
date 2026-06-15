@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.11**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.12**.
 
 ## Funkce
 
@@ -20,7 +20,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   pro výběr názvu a cílové složky (originál nebo oblíbená)
 - **Recyklace (♻)** — vrácení souborů přesunutých do Delete zpět do původní složky
   (LIFO — nejnovější jako první)
-- Volba řazení souborů — podle názvu / data změny / velikosti, vzestupně i sestupně
+- **Obnovit složku (🔄 / F5)** — znovu naskenuje složku a zobrazí přidané/odebrané soubory
+- **Řazení v toolbaru** — dropdown tlačítko (název / datum / velikost, ↑/↓)
 - **Drag & drop** složky nebo souboru do okna
 - **Kontextové menu** — Zobrazit ve Finderu, kopírovat obrázek / cestu
 - Slideshow s nastavitelným intervalem (1–60 s)
@@ -120,6 +121,7 @@ cmake --build . --config Release --parallel
 | `F` | Celá obrazovka |
 | `D` / `Delete` | Smazat nebo přesunout do Delete |
 | `R` | Přejmenovat soubor |
+| `F5` | Znovu načíst složku |
 | `[` / `L` , `]` | Otočit doleva / doprava |
 | `G` | Přehrát video ve VLC |
 | `+` / `-` | Zoom |
