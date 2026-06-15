@@ -3,9 +3,41 @@
 
 #include <QEvent>
 #include <QFileOpenEvent>
+#include <QPainter>
+#include <QPixmap>
 #include <QProcess>
+#include <QProxyStyle>
 #include <QTimer>
 #include <QDebug>
+
+// On macOS 26 (Tahoe) the SF Symbol used for the QToolBarExtension (">>")
+// button crashes inside NSImageSymbolRepProvider when QStyleSheetStyle is
+// active. Override standardIcon so both extension-button variants return a
+// plain drawn pixmap and never go through QAppleIconEngine.
+namespace {
+class ToolbarExtensionStyle : public QProxyStyle
+{
+public:
+    using QProxyStyle::QProxyStyle;
+
+    QIcon standardIcon(StandardPixmap sp,
+                       const QStyleOption *opt = nullptr,
+                       const QWidget *widget = nullptr) const override
+    {
+        if (sp == QStyle::SP_ToolBarHorizontalExtensionButton ||
+            sp == QStyle::SP_ToolBarVerticalExtensionButton) {
+            QPixmap pm(12, 12);
+            pm.fill(Qt::transparent);
+            QPainter p(&pm);
+            p.setPen(Qt::black);
+            p.setFont(QFont("Arial", 7, QFont::Bold));
+            p.drawText(pm.rect(), Qt::AlignCenter, ">>");
+            return QIcon(pm);
+        }
+        return QProxyStyle::standardIcon(sp, opt, widget);
+    }
+};
+} // namespace
 
 namespace pictureviewer {
 
@@ -56,6 +88,10 @@ Application::Application(int &argc, char **argv)
     m_qtApplication->setApplicationVersion("0.13");
     m_qtApplication->setOrganizationName("JiriKrejci");
     m_qtApplication->setOrganizationDomain("com.jk78");
+
+    // Workaround for macOS 26 crash: NSImageSymbolRepProvider crashes when
+    // QStyleSheetStyle requests the SF Symbol for the toolbar extension button.
+    m_qtApplication->setStyle(new ToolbarExtensionStyle(m_qtApplication->style()));
 
     m_mainWindow = std::make_unique<MainWindow>();
     m_qtApplication->setMainWindow(m_mainWindow.get());

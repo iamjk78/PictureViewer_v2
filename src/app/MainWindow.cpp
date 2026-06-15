@@ -2065,15 +2065,17 @@ void MainWindow::setupFavoritesToolbar()
 
     m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
     m_favoritesToolbar->setMovable(false);
-    m_favoritesToolbar->setStyleSheet(
-        "QToolButton { font-size: 14px; font-weight: bold;"
-        "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
-        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
 
     // Tlačítko [+ Přidat aktuální složku]
     QAction *addAction = m_favoritesToolbar->addAction(tr("[+ Přidat]"));
     addAction->setToolTip(tr("Přidat aktuální složku do oblíbených"));
     connect(addAction, &QAction::triggered, this, &MainWindow::onAddCurrentFolderToFavorites);
+    if (auto *btn = qobject_cast<QToolButton *>(m_favoritesToolbar->widgetForAction(addAction))) {
+        btn->setStyleSheet(
+            "QToolButton { font-size: 14px; font-weight: bold;"
+            "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
+            "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
+    }
 
     m_favoritesToolbar->addSeparator();
 
@@ -2196,10 +2198,15 @@ void MainWindow::setupCategoriesToolbar()
     // Vytvořit sekundární toolbar pro kategorie (na novém řádku, skrytý na začátku)
     m_categoriesToolbar = addToolBar(tr("Kategorie"));
     m_categoriesToolbar->setMovable(false);
-    m_categoriesToolbar->setStyleSheet(
+
+    const QString catBtnStyle =
         "QToolButton { font-size: 14px; font-weight: bold;"
         "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
-        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
+        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }";
+    auto applyTbStyle = [&](QAction *action) {
+        if (auto *btn = qobject_cast<QToolButton *>(m_categoriesToolbar->widgetForAction(action)))
+            btn->setStyleSheet(catBtnStyle);
+    };
 
     // Tlačítko [+ Nová kategorie]
     QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
@@ -2209,11 +2216,12 @@ void MainWindow::setupCategoriesToolbar()
         if (dialog.exec() == QDialog::Accepted) {
             Category cat = m_categoryManager->addCategory(dialog.categoryName(), dialog.selectedColor());
             if (cat.id > 0) {
-                refreshCategoryButtons();  // Přidám nové tlačítko po vytvoření
-                updateCategoryFilterButtons();  // Přidám nový filtr tlačítko
+                refreshCategoryButtons();
+                updateCategoryFilterButtons();
             }
         }
     });
+    applyTbStyle(newCatAction);
 
     m_categoriesToolbar->addSeparator();
 
@@ -2226,6 +2234,7 @@ void MainWindow::setupCategoriesToolbar()
     QAction *removeAllAction = m_categoriesToolbar->addAction(tr("[Odebrat vše]"));
     removeAllAction->setToolTip(tr("Smazat všechny kategorie z obrázku"));
     connect(removeAllAction, &QAction::triggered, this, &MainWindow::onCategoryRemoveAll);
+    applyTbStyle(removeAllAction);
 
     m_categoriesToolbar->addSeparator();
 
@@ -2237,6 +2246,7 @@ void MainWindow::setupCategoriesToolbar()
     QAction *clearFiltersAction = m_categoriesToolbar->addAction(tr("[Vyčistit filtr]"));
     clearFiltersAction->setToolTip(tr("Odebrat všechny kategorie z filtru"));
     connect(clearFiltersAction, &QAction::triggered, this, &MainWindow::clearFilters);
+    applyTbStyle(clearFiltersAction);
 
     // Přidat toggle tlačítko na HLAVNÍ toolbar
     m_mainToolbar->addSeparator();
