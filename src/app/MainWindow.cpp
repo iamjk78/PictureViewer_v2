@@ -56,6 +56,7 @@
 #include <QLineEdit>
 #include <QRandomGenerator>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QToolButton>
 #include <QPushButton>
 #include <QKeySequence>
@@ -1242,6 +1243,9 @@ void MainWindow::setupToolbar()
     connect(m_intervalSpinBox, &QSpinBox::valueChanged, this, [this](int seconds) {
         m_slideshowController->setInterval(seconds * 1000);
     });
+
+    m_openFolderAction->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    toolbar->addAction(m_openFolderAction);
 
     m_reloadFolderAction = new QAction(QStringLiteral("🔄"), this);
     m_reloadFolderAction->setToolTip(tr("Znovu načíst složku (F5)"));
