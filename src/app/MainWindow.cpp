@@ -200,10 +200,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_imageView->viewport()->setMouseTracking(true);
     m_imageView->viewport()->installEventFilter(this);
 
-    // Panel náhledů (QListWidget) spotřebuje Space pro vlastní aktivaci itemu —
-    // event filter ho zachytí dřív a přesměruje na zoom v ImageView.
-    m_thumbnailPanel->installEventFilter(this);
-
     applyUiLayout(uiLayoutFromString(m_settingsManager->uiLayout()));
 
     // Obnovit velikost okna — ale jen pokud se rozlišení nezměnilo
@@ -1568,16 +1564,6 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         showOverlayToolbar();
     }
 
-    // Panel náhledů (QListWidget) by Space/0 spotřeboval pro aktivaci itemu.
-    // Zachytíme ho dřív a přesměrujeme na zoom v ImageView.
-    if (watched == m_thumbnailPanel && event->type() == QEvent::KeyPress) {
-        const auto *ke = static_cast<QKeyEvent *>(event);
-        if (ke->key() == Qt::Key_Space || ke->key() == Qt::Key_0) {
-            m_imageView->resetZoom();
-            return true;   // event spotřebován — QListWidget ho neuvidí
-        }
-    }
-
     return QMainWindow::eventFilter(watched, event);
 }
 
@@ -2079,6 +2065,10 @@ void MainWindow::setupFavoritesToolbar()
 
     m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
     m_favoritesToolbar->setMovable(false);
+    m_favoritesToolbar->setStyleSheet(
+        "QToolButton { font-size: 14px; font-weight: bold;"
+        "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
+        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
 
     // Tlačítko [+ Přidat aktuální složku]
     QAction *addAction = m_favoritesToolbar->addAction(tr("[+ Přidat]"));
@@ -2129,7 +2119,6 @@ void MainWindow::refreshFavoriteButtons()
 
         QPushButton *btn = new QPushButton(displayName);
         btn->setFlat(false);
-        btn->setMaximumHeight(24);
         btn->setToolTip(path);
 
         QColor color(colorHex);
@@ -2142,7 +2131,8 @@ void MainWindow::refreshFavoriteButtons()
             "  border-radius: 4px;"
             "  padding: 2px 8px;"
             "  font-weight: bold;"
-            "  font-size: 11px;"
+            "  font-size: 14px;"
+            "  min-height: 30px;"
             "}"
             "QPushButton:pressed {"
             "  border: 3px solid #333;"
@@ -2206,6 +2196,10 @@ void MainWindow::setupCategoriesToolbar()
     // Vytvořit sekundární toolbar pro kategorie (na novém řádku, skrytý na začátku)
     m_categoriesToolbar = addToolBar(tr("Kategorie"));
     m_categoriesToolbar->setMovable(false);
+    m_categoriesToolbar->setStyleSheet(
+        "QToolButton { font-size: 14px; font-weight: bold;"
+        "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
+        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
 
     // Tlačítko [+ Nová kategorie]
     QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
@@ -2383,7 +2377,6 @@ void MainWindow::refreshCategoryButtons()
         QPushButton *btn = new QPushButton(cat.name);
         btn->setCheckable(true);
         btn->setFlat(false);
-        btn->setMaximumHeight(24);
 
         // Nastavit barvu pozadí
         QString colorStr = cat.color.name();
@@ -2398,7 +2391,8 @@ void MainWindow::refreshCategoryButtons()
             "  border-radius: 4px;"
             "  padding: 2px 6px;"
             "  font-weight: bold;"
-            "  font-size: 11px;"
+            "  font-size: 14px;"
+            "  min-height: 30px;"
             "}"
             "QPushButton:checked, QPushButton:pressed {"
             "  border: 3px solid #333;"
@@ -2553,7 +2547,6 @@ void MainWindow::updateCategoryFilterButtons()
         QPushButton *btn = new QPushButton(cat.name);
         btn->setCheckable(true);
         btn->setFlat(false);
-        btn->setMaximumHeight(24);
         btn->setToolTip(tr("Filtrovat podle: %1").arg(cat.name));
 
         // Nastavit barvu pozadí (stejně jako assignment tlačítka)
@@ -2569,7 +2562,8 @@ void MainWindow::updateCategoryFilterButtons()
             "  border-radius: 4px;"
             "  padding: 2px 6px;"
             "  font-weight: bold;"
-            "  font-size: 11px;"
+            "  font-size: 14px;"
+            "  min-height: 30px;"
             "}"
             "QPushButton:checked, QPushButton:pressed {"
             "  border: 3px solid #333;"
@@ -2895,6 +2889,7 @@ void MainWindow::setupPdfToolbar()
     m_pdfToolbar = new QToolBar(tr("PDF"), this);
     m_pdfToolbar->setObjectName("pdfToolbar");
     m_pdfToolbar->setMovable(false);
+    addToolBarBreak(Qt::TopToolBarArea);
     addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
     m_pdfToolbar->hide();
 

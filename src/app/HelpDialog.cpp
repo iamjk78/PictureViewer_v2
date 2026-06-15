@@ -223,6 +223,15 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.13</h3>"
+        "<ul>"
+        "<li><b>PDF toolbar na vlastním řádku</b> — PDF lišta se nyní zobrazuje pod toolbarem"
+        " kategorií a nikdy ji nepřekryje; oba toolbary mohou být aktivní současně</li>"
+        "<li><b>Jednotná výška a písmo toolbarů</b> — všechny lišty (Oblíbené, Kategorie, PDF)"
+        " mají stejnou výšku a font jako hlavní toolbar (14 px tučné, výška 30 px)</li>"
+        "<li><b>Oprava klávesy Mezerník v panelu náhledů</b> — zoom reset (Mezerník / 0)"
+        " nyní funguje spolehlivě i&nbsp;při aktivním panelu náhledů; panel si klávesy neponechává</li>"
+        "</ul>"
         "<h3>Verze 0.12</h3>"
         "<ul>"
         "<li><b>Obnovit složku (🔄 / F5)</b> — nové tlačítko na začátku toolbaru;"

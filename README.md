@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.12**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.13**.
 
 ## Funkce
 
@@ -35,6 +35,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - Přehrávání videí přes VLC
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
   obrazovky se spustí v předvolené velikosti
+- **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Kategorie, PDF) mají
+  stejnou výšku a font jako hlavní toolbar
 - Jednotkové testy jádra (Qt Test)
 
 ## Buildování

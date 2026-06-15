@@ -10,6 +10,7 @@
 #include <QPixmap>
 #include <QSize>
 #include <QStyledItemDelegate>
+#include <QKeyEvent>
 #include <QThreadPool>
 
 namespace {
@@ -212,6 +213,17 @@ void ThumbnailPanel::updateImagePath(const QString &oldPath, const QString &newP
         m_pathToItem.remove(oldPath);
         m_pathToItem[newPath] = target;
     }
+}
+
+void ThumbnailPanel::keyPressEvent(QKeyEvent *event)
+{
+    // Let Space and 0 propagate to MainWindow for zoom reset instead of
+    // being consumed by QListWidget's item-activation behavior.
+    if (event->key() == Qt::Key_Space || event->key() == Qt::Key_0) {
+        event->ignore();
+        return;
+    }
+    QListWidget::keyPressEvent(event);
 }
 
 void ThumbnailPanel::onItemClicked(QListWidgetItem *item)

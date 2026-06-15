@@ -41,6 +41,9 @@ public:
     // emit into a widget that is about to be destroyed.
     void shutdown();
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 signals:
     void imageSelected(int index);
 
