@@ -739,6 +739,7 @@ void MainWindow::loadFolder(const QString &folderPath)
 
     m_currentFolder = folderPath;
     ++m_scanGeneration;
+    if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(true);
     m_statusLabel->setText(tr("Načítám složku…"));
 
     // Když uživatel otvírá konkrétní soubor, zobrazit ho hned — nečekat,
