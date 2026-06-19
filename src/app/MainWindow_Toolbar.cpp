@@ -1,0 +1,731 @@
+// MainWindow_Toolbar.cpp — toolbars, VLC, PDF, favorites, sort
+// QPushButton must be included BEFORE MainWindow.hpp to resolve the
+// elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
+#include <QPushButton>
+#include "app/MainWindow.hpp"
+
+#include "app/ImageView.hpp"
+#include "app/ScreenCapture.hpp"
+#include "app/SettingsManager.hpp"
+#include "app/SlideshowController.hpp"
+#include "app/ThumbnailPanel.hpp"
+#include "app/VlcController.hpp"
+
+#include <QAction>
+#include <QActionGroup>
+#include <QColor>
+#include <QCursor>
+#include <QDir>
+#include <QDockWidget>
+#include <QFileInfo>
+#include <QHBoxLayout>
+#include <QIcon>
+#include <QInputDialog>
+#include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QRandomGenerator>
+#include <QSpinBox>
+#include <QStatusBar>
+#include <QStyle>
+#include <QTimer>
+#include <QToolBar>
+#include <QToolButton>
+#include <QVBoxLayout>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+namespace pictureviewer {
+
+void MainWindow::setupToolbar()
+{
+    auto *toolbar = addToolBar(tr("Navigace"));
+    toolbar->setMovable(false);
+    m_mainToolbar = toolbar;
+
+    m_previousImageAction->setShortcut(QKeySequence(Qt::Key_Left));
+    m_nextImageAction->setShortcut(QKeySequence(Qt::Key_Right));
+    m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
+    m_intervalSpinBox->setRange(1, 60);
+    m_intervalSpinBox->setValue(m_slideshowController->intervalMs() / 1000);
+    m_intervalSpinBox->setSuffix(tr(" s"));
+
+    connect(m_previousImageAction, &QAction::triggered, this, &MainWindow::showPreviousImage);
+    connect(m_nextImageAction, &QAction::triggered, this, &MainWindow::showNextImage);
+    connect(m_toggleSlideshowAction, &QAction::triggered, this, &MainWindow::toggleSlideshow);
+    connect(m_intervalSpinBox, &QSpinBox::valueChanged, this, [this](int seconds) {
+        m_slideshowController->setInterval(seconds * 1000);
+    });
+
+    m_openFolderAction->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    toolbar->addAction(m_openFolderAction);
+
+    m_reloadFolderAction = new QAction(QStringLiteral("🔄"), this);
+    m_reloadFolderAction->setToolTip(tr("Znovu načíst složku (F5)"));
+    m_reloadFolderAction->setShortcut(QKeySequence(Qt::Key_F5));
+    m_reloadFolderAction->setEnabled(false);
+    connect(m_reloadFolderAction, &QAction::triggered, this, &MainWindow::reloadCurrentFolder);
+    toolbar->addAction(m_reloadFolderAction);
+
+    m_screenshotAction = new QAction(QStringLiteral("📷"), this);
+    m_screenshotAction->setToolTip(tr("Snímek výřezu obrazovky — označte oblast myší (i mimo aplikaci)"));
+    connect(m_screenshotAction, &QAction::triggered, this, &MainWindow::onScreenshotCapture);
+    toolbar->addAction(m_screenshotAction);
+    toolbar->addSeparator();
+
+    toolbar->addAction(m_previousImageAction);
+    toolbar->addAction(m_nextImageAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_toggleSlideshowAction);
+    toolbar->addWidget(m_intervalSpinBox);
+    toolbar->addSeparator();
+
+    // Sort button
+    m_sortButton = new QToolButton(toolbar);
+    m_sortButton->setPopupMode(QToolButton::InstantPopup);
+    m_sortButton->setToolTip(tr("Řazení souborů"));
+
+    auto *sortMenu = new QMenu(m_sortButton);
+
+    auto *sortKeyGroup = new QActionGroup(sortMenu);
+    sortKeyGroup->setExclusive(true);
+    const struct { int key; QString label; } sortKeys[] = {
+        { 0, tr("Podle názvu") },
+        { 1, tr("Podle data změny") },
+        { 2, tr("Podle velikosti") },
+    };
+    const int savedSortKey = m_settingsManager->sortKey();
+    for (const auto &entry : sortKeys) {
+        auto *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.key == savedSortKey);
+        sortKeyGroup->addAction(action);
+        const int key = entry.key;
+        connect(action, &QAction::triggered, this, [this, key] {
+            m_settingsManager->setSortKey(key);
+            reloadCurrentFolder();
+            updateSortButtonText();
+        });
+    }
+
+    sortMenu->addSeparator();
+
+    auto *sortOrderGroup = new QActionGroup(sortMenu);
+    sortOrderGroup->setExclusive(true);
+    const bool ascending = m_settingsManager->sortAscending();
+    const struct { bool asc; QString label; } sortOrders[] = {
+        { true,  tr("Vzestupně ↑") },
+        { false, tr("Sestupně ↓")  },
+    };
+    for (const auto &entry : sortOrders) {
+        auto *action = sortMenu->addAction(entry.label);
+        action->setCheckable(true);
+        action->setChecked(entry.asc == ascending);
+        sortOrderGroup->addAction(action);
+        const bool asc = entry.asc;
+        connect(action, &QAction::triggered, this, [this, asc] {
+            m_settingsManager->setSortAscending(asc);
+            reloadCurrentFolder();
+            updateSortButtonText();
+        });
+    }
+
+    m_sortButton->setMenu(sortMenu);
+    toolbar->addWidget(m_sortButton);
+    toolbar->addSeparator();
+
+    m_rotateLeftAction = new QAction(QStringLiteral("⟲"), this);
+    m_rotateLeftAction->setToolTip(tr("Otočit doleva ([ nebo L)"));
+    m_rotateLeftAction->setShortcuts({QKeySequence(Qt::Key_BracketLeft), QKeySequence(Qt::Key_L)});
+    connect(m_rotateLeftAction, &QAction::triggered, m_imageView, &ImageView::rotateLeft);
+
+    m_rotateRightAction = new QAction(QStringLiteral("⟳"), this);
+    m_rotateRightAction->setToolTip(tr("Otočit doprava (])"));
+    m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
+    connect(m_rotateRightAction, &QAction::triggered, m_imageView, &ImageView::rotateRight);
+
+    toolbar->addAction(m_renameImageAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_rotateLeftAction);
+    toolbar->addAction(m_rotateRightAction);
+    toolbar->addSeparator();
+
+    m_cropAction = new QAction(QStringLiteral("✂"), this);
+    m_cropAction->setToolTip(tr("Ořez obrázku — označte oblast myší"));
+    m_cropAction->setCheckable(true);
+    connect(m_cropAction, &QAction::toggled, this, [this](bool checked) {
+        m_imageView->setCropMode(checked);
+    });
+    connect(m_imageView, &ImageView::cropModeChanged, this, [this](bool active) {
+        m_cropAction->setChecked(active);
+    });
+    toolbar->addAction(m_cropAction);
+    toolbar->addSeparator();
+
+    m_saveAction = new QAction(tr("Uložit"), this);
+    m_saveAction->setToolTip(tr("Uložit upravenou kopii (přepsat originál)"));
+    m_saveAction->setEnabled(false);
+    connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveImage);
+
+    m_saveAsAction = new QAction(tr("Uložit jako"), this);
+    m_saveAsAction->setToolTip(tr("Uložit jako nový soubor JPEG"));
+    m_saveAsAction->setEnabled(false);
+    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAsImage);
+
+    toolbar->addAction(m_saveAction);
+    toolbar->addAction(m_saveAsAction);
+    toolbar->addSeparator();
+
+    connect(m_imageView, &ImageView::imageModified, this, [this]() {
+        m_imageModified = true;
+        updateSaveButtonStates();
+    });
+
+    toolbar->addAction(m_deletePictureAction);
+    toolbar->addAction(m_deleteFolderAction);
+
+    m_recycleAction = new QAction(QStringLiteral("♻"), this);
+    m_recycleAction->setToolTip(tr("Vrátit poslední přesunutý soubor zpět do původní složky"));
+    m_recycleAction->setEnabled(false);
+    connect(m_recycleAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
+    toolbar->addAction(m_recycleAction);
+}
+
+void MainWindow::setupStatusBar()
+{
+    statusBar()->addWidget(m_statusLabel);
+    m_statusLabel->setText(tr("Vyber složku s obrázky."));
+
+    m_zoomLabel = new QLabel(this);
+    m_zoomLabel->hide();
+    statusBar()->addPermanentWidget(m_zoomLabel);
+    connect(m_imageView, &ImageView::zoomChanged, this, [this](double percent) {
+        if (percent <= 0.0) {
+            m_zoomLabel->hide();
+        } else {
+            m_zoomLabel->setText(tr("Zoom: %1 %").arg(qRound(percent)));
+            m_zoomLabel->show();
+        }
+    });
+}
+
+// ── 20 predefined favorite colors ────────────────────────────────────────────
+static constexpr const char *FavPredefinedColors[] = {
+    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8",
+    "#F7DC6F", "#BB8FCE", "#85C1E2", "#F8B88B", "#A9DFBF",
+    "#F5B7B1", "#D7BDE2", "#F9E79F", "#AED6F1", "#F8B4B8",
+    "#B7E8D6", "#FDBFED", "#D4EFDF", "#FADBD8", "#EBD5B4"
+};
+static constexpr int FavPredefinedColorCount = 20;
+
+QString MainWindow::pickRandomUnusedFavoriteColor() const
+{
+    QStringList usedColors = m_settingsManager->favoriteFolderColors();
+
+    for (int attempt = 0; attempt < FavPredefinedColorCount; ++attempt) {
+        int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
+        QString colorHex = FavPredefinedColors[idx];
+        if (!usedColors.contains(colorHex)) {
+            return colorHex;
+        }
+    }
+    int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
+    return FavPredefinedColors[idx];
+}
+
+void MainWindow::setupFavoritesToolbar()
+{
+    addToolBarBreak();
+
+    m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
+    m_favoritesToolbar->setMovable(false);
+
+    QAction *addAction = m_favoritesToolbar->addAction(tr("[+ Přidat]"));
+    addAction->setToolTip(tr("Přidat aktuální složku do oblíbených"));
+    connect(addAction, &QAction::triggered, this, &MainWindow::onAddCurrentFolderToFavorites);
+
+    if (auto *btn = qobject_cast<QToolButton *>(m_favoritesToolbar->widgetForAction(addAction))) {
+        btn->setStyleSheet(
+            "QToolButton { font-size: 14px; font-weight: bold;"
+            "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
+            "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
+    }
+
+    m_favoritesToolbar->addSeparator();
+
+    refreshFavoriteButtons();
+
+    m_mainToolbar->addSeparator();
+    QAction *toggleFavoritesAction = m_mainToolbar->addAction(tr("⭐ Oblíbené"));
+    toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
+    connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
+        m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
+    });
+
+    m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+}
+
+void MainWindow::refreshFavoriteButtons()
+{
+    while (m_favoritesToolbar->actions().size() > 2) {
+        QAction *last = m_favoritesToolbar->actions().last();
+        m_favoritesToolbar->removeAction(last);
+        delete last;
+    }
+
+    const QStringList folders = m_settingsManager->favoriteFolders();
+    const QStringList colors  = m_settingsManager->favoriteFolderColors();
+
+    for (int i = 0; i < folders.size(); ++i) {
+        const QString &path = folders.at(i);
+        QString colorHex = (i < colors.size() && !colors.at(i).isEmpty())
+                           ? colors.at(i)
+                           : QStringLiteral("#4ECDC4");
+
+        QString displayName = QDir(path).dirName();
+        if (displayName.isEmpty()) {
+            displayName = path;
+        }
+
+        QPushButton *btn = new QPushButton(displayName);
+        btn->setFlat(false);
+        btn->setToolTip(path);
+
+        QColor color(colorHex);
+        QString textColor = color.lightness() > 128 ? "#000000" : "#FFFFFF";
+        btn->setStyleSheet(QString(
+            "QPushButton {"
+            "  background-color: %1;"
+            "  color: %2;"
+            "  border: 2px solid #ccc;"
+            "  border-radius: 4px;"
+            "  padding: 2px 8px;"
+            "  font-weight: bold;"
+            "  font-size: 14px;"
+            "  min-height: 30px;"
+            "}"
+            "QPushButton:pressed {"
+            "  border: 3px solid #333;"
+            "}"
+        ).arg(colorHex, textColor));
+
+        connect(btn, &QPushButton::clicked, this, [this, path] {
+            loadFolder(path);
+        });
+
+        btn->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn, &QWidget::customContextMenuRequested, this, [this, path]() {
+            QMenu menu;
+            menu.addAction(tr("Odebrat z oblíbených"), this, [this, path] {
+                onFavoriteRemove(path);
+            });
+            menu.exec(QCursor::pos());
+        });
+
+        m_favoritesToolbar->addWidget(btn);
+    }
+}
+
+void MainWindow::onAddCurrentFolderToFavorites()
+{
+    if (m_currentFolder.isEmpty()) {
+        return;
+    }
+
+    if (m_settingsManager->isFavoriteFolder(m_currentFolder)) {
+        return;
+    }
+
+    QString color = pickRandomUnusedFavoriteColor();
+    if (!m_settingsManager->addFavoriteFolder(m_currentFolder, color)) {
+        QMessageBox::warning(this, tr("Limit oblíbených"),
+            tr("Byl dosažen maximální počet oblíbených složek (10).\n"
+               "Před přidáním nové složky odeberte některou stávající\n"
+               "(pravý klik na tlačítko složky → Odebrat z oblíbených)."));
+        return;
+    }
+
+    refreshFavoriteButtons();
+    updateFavoritesMenu();
+}
+
+void MainWindow::onFavoriteRemove(const QString &folderPath)
+{
+    m_settingsManager->removeFavoriteFolder(folderPath);
+    refreshFavoriteButtons();
+    updateFavoritesMenu();
+}
+
+void MainWindow::updateFavoritesMenu()
+{
+    QMenuBar *mb = menuBar();
+    if (!mb) {
+        return;
+    }
+
+    QMenu *fileMenu = nullptr;
+    for (QAction *action : mb->actions()) {
+        if (action->text().contains("Soubor")) {
+            fileMenu = action->menu();
+            break;
+        }
+    }
+
+    if (!fileMenu) {
+        return;
+    }
+
+    QMenu *favMenu = nullptr;
+    for (QAction *action : fileMenu->actions()) {
+        if (action->text().contains("Oblíbené")) {
+            favMenu = action->menu();
+            break;
+        }
+    }
+
+    if (!favMenu) {
+        return;
+    }
+
+    int sepIdx = -1;
+    for (int i = 0; i < favMenu->actions().size(); ++i) {
+        if (favMenu->actions()[i]->isSeparator()) {
+            sepIdx = i;
+            break;
+        }
+    }
+
+    if (sepIdx >= 0) {
+        while (favMenu->actions().size() > sepIdx + 1) {
+            delete favMenu->actions().last();
+        }
+    }
+
+    const QStringList favorites = m_settingsManager->favoriteFolders();
+    if (favorites.isEmpty()) {
+        favMenu->addAction(tr("(prázdné)"))->setEnabled(false);
+        return;
+    }
+
+    for (const QString &path : favorites) {
+        QString displayName = QDir(path).dirName();
+        if (displayName.isEmpty()) {
+            displayName = path;
+        }
+
+        QAction *folderAction = favMenu->addAction(displayName);
+        folderAction->setToolTip(path);
+
+        connect(folderAction, &QAction::triggered, this, [this, path] {
+            loadFolder(path);
+        });
+    }
+}
+
+void MainWindow::updateSortButtonText()
+{
+    if (!m_sortButton) {
+        return;
+    }
+    const int key = m_settingsManager->sortKey();
+    const bool asc = m_settingsManager->sortAscending();
+    const QString keyLabel = (key == 0) ? tr("Název")
+                           : (key == 1) ? tr("Datum")
+                                        : tr("Velikost");
+    m_sortButton->setText(keyLabel + (asc ? QStringLiteral(" ↑") : QStringLiteral(" ↓")));
+}
+
+void MainWindow::setupPdfToolbar()
+{
+    m_pdfToolbar = new QToolBar(tr("PDF"), this);
+    m_pdfToolbar->setObjectName("pdfToolbar");
+    m_pdfToolbar->setMovable(false);
+    addToolBarBreak(Qt::TopToolBarArea);
+    addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
+    m_pdfToolbar->hide();
+
+    auto *prevAction = new QAction(QStringLiteral("◀"), m_pdfToolbar);
+    prevAction->setToolTip(tr("Předchozí stránka (PgUp)"));
+    connect(prevAction, &QAction::triggered, this, [this]() { m_imageView->previousPage(); });
+
+    auto *nextAction = new QAction(QStringLiteral("▶"), m_pdfToolbar);
+    nextAction->setToolTip(tr("Další stránka (PgDn)"));
+    connect(nextAction, &QAction::triggered, this, [this]() { m_imageView->nextPage(); });
+
+    m_pdfPageLabel = new QLabel(QStringLiteral("  -  "), m_pdfToolbar);
+    m_pdfPageLabel->setAlignment(Qt::AlignCenter);
+    m_pdfPageLabel->setMinimumWidth(70);
+
+    auto *gotoAction = new QAction(tr("Přejít na stranu"), m_pdfToolbar);
+    gotoAction->setToolTip(tr("Zadat číslo stránky a přejít na ni"));
+    connect(gotoAction, &QAction::triggered, this, &MainWindow::onPdfGoToPage);
+
+    auto *screenshotAction = new QAction(tr("Screenshot"), m_pdfToolbar);
+    screenshotAction->setToolTip(tr("Uložit aktuální stránku jako obrázek (JPEG) — pak použijte Uložit jako"));
+    connect(screenshotAction, &QAction::triggered, this, &MainWindow::onPdfScreenshot);
+
+    m_pdfToolbar->addAction(prevAction);
+    m_pdfToolbar->addWidget(m_pdfPageLabel);
+    m_pdfToolbar->addAction(nextAction);
+    m_pdfToolbar->addSeparator();
+    m_pdfToolbar->addAction(gotoAction);
+    m_pdfToolbar->addSeparator();
+    m_pdfToolbar->addAction(screenshotAction);
+
+    const QString style =
+        "QToolButton {"
+        "  font-size: 14px; font-weight: bold;"
+        "  min-height: 30px; padding: 2px 10px; border-radius: 4px;"
+        "}";
+    m_pdfToolbar->setStyleSheet(style);
+}
+
+void MainWindow::updatePdfToolbarVisibility(bool isPdf)
+{
+    if (!m_pdfToolbar) {
+        return;
+    }
+    if (isPdf) {
+        m_pdfToolbar->show();
+    } else {
+        m_pdfToolbar->hide();
+        if (m_pdfPageLabel) {
+            m_pdfPageLabel->setText(QStringLiteral("  -  "));
+        }
+    }
+}
+
+void MainWindow::onPdfGoToPage()
+{
+    if (!m_imageView->isPdfLoaded()) {
+        return;
+    }
+    const int total = m_imageView->pdfPageCount();
+    bool ok = false;
+    const int page = QInputDialog::getInt(
+        this,
+        tr("Přejít na stranu"),
+        tr("Číslo strany (1 – %1):").arg(total),
+        m_imageView->currentPdfPage() + 1,
+        1, total, 1, &ok
+    );
+    if (ok) {
+        m_imageView->goToPage(page - 1);
+    }
+}
+
+void MainWindow::onPdfScreenshot()
+{
+    if (!m_imageView->isPdfLoaded()) {
+        return;
+    }
+    const QImage img = m_imageView->displayedImage();
+    if (img.isNull()) {
+        return;
+    }
+    m_imageView->setImage(img);
+    m_imageModified = true;
+    updateSaveButtonStates();
+    updatePdfToolbarVisibility(false);
+    m_statusLabel->setText(tr("Stránka PDF zachycena jako obrázek — použijte Uložit jako pro uložení."));
+}
+
+void MainWindow::onScreenshotCapture()
+{
+    const ScreenCaptureResult result = captureScreenRegion(this);
+
+    if (result.image.isNull()) {
+        m_statusLabel->setText(
+            tr("Snímek zrušen. Pokud jste právě povolili Screen Recording, "
+               "restartujte aplikaci a zkuste znovu."));
+        return;
+    }
+
+    if (result.tempPath.isEmpty()) {
+        m_imageView->setImage(result.image);
+        m_imageModified = true;
+        updateSaveButtonStates();
+        m_statusLabel->setText(tr("Výřez zachycen — soubor nelze uložit, použijte Uložit jako."));
+        return;
+    }
+
+    openFile(result.tempPath);
+    m_statusLabel->setText(
+        tr("Výřez obrazovky zachycen (%1×%2) — použijte Uložit jako pro trvalé uložení.")
+            .arg(result.image.width())
+            .arg(result.image.height()));
+}
+
+void MainWindow::onPlayVideo()
+{
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+
+    const QString imagePath = m_imagePaths.at(m_currentIndex);
+    QString videoPath;
+
+    if (!VlcController::findVideoFile(imagePath, videoPath)) {
+        m_statusLabel->setText(tr("Video se stejným názvem neexistuje."));
+        return;
+    }
+
+    QString errorMsg;
+    if (!m_vlcController->initialize(videoPath, errorMsg)) {
+        QMessageBox::critical(this, tr("Chyba VLC"), errorMsg);
+        m_statusLabel->setText(tr("Nepodařilo se spustit VLC."));
+        return;
+    }
+}
+
+void MainWindow::onVlcStatusChanged(int vlcState)
+{
+    const auto state = static_cast<VlcState>(vlcState);
+
+    switch (state) {
+    case VlcState::Running:
+        m_vlcActive = true;
+        disableImageBrowsing();
+        applyGrayscaleEffect(true);
+        updateVideoMetadata(m_imagePaths.at(m_currentIndex));
+        if (!m_vlcKeyPollTimer) {
+            m_vlcKeyPollTimer = new QTimer(this);
+            connect(m_vlcKeyPollTimer, &QTimer::timeout, this, &MainWindow::pollVlcKeys);
+        }
+        m_vlcKeyPollTimer->start(80);
+        break;
+
+    case VlcState::Stopped:
+    case VlcState::Error:
+        m_vlcActive = false;
+        if (m_vlcKeyPollTimer)
+            m_vlcKeyPollTimer->stop();
+        enableImageBrowsing();
+        applyGrayscaleEffect(false);
+        m_statusLabel->setText(tr("Vyber složku s obrázky."));
+        break;
+
+    default:
+        break;
+    }
+}
+
+void MainWindow::onVlcConnectionLost()
+{
+    QMessageBox::warning(this, tr("Chyba"), tr("Spojení s VLC bylo ztraceno."));
+    m_vlcActive = false;
+    enableImageBrowsing();
+    applyGrayscaleEffect(false);
+}
+
+void MainWindow::onVlcProcessCrashed()
+{
+    const QString logPath = m_vlcController->lastLogPath();
+    QString msg = tr("VLC se nečekaně ukončil.");
+    if (!logPath.isEmpty())
+        msg += tr("\n\nDiagnostický log:\n%1").arg(logPath);
+    QMessageBox::critical(this, tr("Chyba VLC"), msg);
+    m_vlcActive = false;
+    enableImageBrowsing();
+    applyGrayscaleEffect(false);
+}
+
+void MainWindow::pollVlcKeys()
+{
+#ifdef Q_OS_WIN
+    auto pressed = [](int vk) { return (GetAsyncKeyState(vk) & 0x8001) == 0x8001; };
+
+    if (pressed(VK_ESCAPE)) {
+        m_vlcController->stop();
+        return;
+    }
+    if (pressed(VK_SPACE))
+        m_vlcController->sendCommand("pause");
+    if (pressed(VK_LEFT))
+        m_vlcController->sendCommand("seek -10");
+    if (pressed(VK_RIGHT))
+        m_vlcController->sendCommand("seek +10");
+    if (pressed(VK_ADD) || pressed(0xBB))
+        m_vlcController->sendCommand("volup");
+    if (pressed(VK_SUBTRACT) || pressed(0xBD))
+        m_vlcController->sendCommand("voldown");
+#endif
+}
+
+void MainWindow::disableImageBrowsing()
+{
+    m_openFolderAction->setEnabled(false);
+    m_openFileAction->setEnabled(false);
+    m_previousImageAction->setEnabled(false);
+    m_nextImageAction->setEnabled(false);
+    m_toggleSlideshowAction->setEnabled(false);
+    m_fitToWindowAction->setEnabled(false);
+    m_resetZoomAction->setEnabled(false);
+    m_fullscreenAction->setEnabled(false);
+    m_enableDeleteImageAction->setEnabled(false);
+    m_enableMoveToDeleteAction->setEnabled(false);
+    m_deletePictureAction->setEnabled(false);
+    m_deleteFolderAction->setEnabled(false);
+    if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(false);
+
+    m_slideshowController->stop();
+
+    if (m_thumbnailDock) {
+        m_thumbnailDock->setEnabled(false);
+    }
+}
+
+void MainWindow::enableImageBrowsing()
+{
+    m_openFolderAction->setEnabled(true);
+    m_openFileAction->setEnabled(true);
+    m_previousImageAction->setEnabled(!m_imagePaths.isEmpty());
+    m_nextImageAction->setEnabled(!m_imagePaths.isEmpty());
+    m_toggleSlideshowAction->setEnabled(!m_imagePaths.isEmpty());
+    m_fitToWindowAction->setEnabled(!m_imagePaths.isEmpty());
+    m_resetZoomAction->setEnabled(!m_imagePaths.isEmpty());
+    m_fullscreenAction->setEnabled(!m_imagePaths.isEmpty());
+    m_enableDeleteImageAction->setEnabled(true);
+    m_enableMoveToDeleteAction->setEnabled(true);
+    m_deletePictureAction->setEnabled(!m_imagePaths.isEmpty());
+    m_deleteFolderAction->setEnabled(!m_imagePaths.isEmpty());
+    if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(!m_currentFolder.isEmpty());
+
+    if (m_thumbnailDock) {
+        m_thumbnailDock->setEnabled(true);
+    }
+
+    updateConfirmationActionState();
+}
+
+void MainWindow::applyGrayscaleEffect(bool enable)
+{
+    if (enable) {
+        setWindowOpacity(0.6);
+    } else {
+        setWindowOpacity(1.0);
+    }
+}
+
+void MainWindow::updateVideoMetadata(const QString &videoPath)
+{
+    const QFileInfo fileInfo(videoPath);
+    const QString fileName = fileInfo.fileName();
+    const qint64 fileSize = fileInfo.size();
+
+    QString sizeStr;
+    if (fileSize > 1024 * 1024) {
+        sizeStr = QString::number(fileSize / (1024.0 * 1024.0), 'f', 1) + " MB";
+    } else {
+        sizeStr = QString::number(fileSize / 1024.0, 'f', 1) + " KB";
+    }
+
+    const QString statusText = tr("▶ Video: %1 (%2) [ESC = exit]").arg(fileName, sizeStr);
+    m_statusLabel->setText(statusText);
+}
+
+} // namespace pictureviewer

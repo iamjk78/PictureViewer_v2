@@ -12,6 +12,10 @@ set(APP_SOURCES
     ImageLoader.cpp
     MainWindow.hpp
     MainWindow.cpp
+    MainWindow_FileOps.cpp
+    MainWindow_Labels.cpp
+    MainWindow_Layout.cpp
+    MainWindow_Toolbar.cpp
     MetadataPanel.hpp
     MetadataPanel.cpp
     ImageView.hpp
