@@ -1008,7 +1008,7 @@ void MainWindow::updateStatus(const QString &path)
                 catNames.append("...");
             }
             if (!catNames.isEmpty()) {
-                categoryStr = tr("   |   Kategorie: ") + catNames.join(", ");
+                categoryStr = tr("   |   Štítky: ") + catNames.join(", ");
             }
         }
 
@@ -2213,7 +2213,7 @@ void MainWindow::setupCategoriesToolbar()
     addToolBarBreak();
 
     // Vytvořit sekundární toolbar pro kategorie (na novém řádku, skrytý na začátku)
-    m_categoriesToolbar = addToolBar(tr("Kategorie"));
+    m_categoriesToolbar = addToolBar(tr("Štítky"));
     m_categoriesToolbar->setMovable(false);
 
     const QString catBtnStyle =
@@ -2227,7 +2227,7 @@ void MainWindow::setupCategoriesToolbar()
 
     // Tlačítko [+ Nová kategorie]
     QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
-    newCatAction->setToolTip(tr("Vytvořit novou kategorii"));
+    newCatAction->setToolTip(tr("Vytvořit nový štítek"));
     connect(newCatAction, &QAction::triggered, this, [this] {
         NewCategoryDialog dialog(this);
         if (dialog.exec() == QDialog::Accepted) {
@@ -2249,7 +2249,7 @@ void MainWindow::setupCategoriesToolbar()
 
     // Tlačítko [Odebrat vše]
     QAction *removeAllAction = m_categoriesToolbar->addAction(tr("[Odebrat vše]"));
-    removeAllAction->setToolTip(tr("Smazat všechny kategorie z obrázku"));
+    removeAllAction->setToolTip(tr("Odebrat všechny štítky z obrázku"));
     connect(removeAllAction, &QAction::triggered, this, &MainWindow::onCategoryRemoveAll);
     applyTbStyle(removeAllAction);
 
@@ -2261,14 +2261,14 @@ void MainWindow::setupCategoriesToolbar()
 
     // Tlačítko pro vyčistění filtru
     QAction *clearFiltersAction = m_categoriesToolbar->addAction(tr("[Vyčistit filtr]"));
-    clearFiltersAction->setToolTip(tr("Odebrat všechny kategorie z filtru"));
+    clearFiltersAction->setToolTip(tr("Odebrat všechny štítky z filtru"));
     connect(clearFiltersAction, &QAction::triggered, this, &MainWindow::clearFilters);
     applyTbStyle(clearFiltersAction);
 
     // Přidat toggle tlačítko na HLAVNÍ toolbar
     m_mainToolbar->addSeparator();
-    QAction *toggleCategoriesAction = m_mainToolbar->addAction(tr("🏷️ Kategorie"));
-    toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel kategorií"));
+    QAction *toggleCategoriesAction = m_mainToolbar->addAction(tr("🏷️ Štítky"));
+    toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel štítků"));
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         bool willBeVisible = !m_categoriesToolbar->isVisible();
         m_categoriesToolbar->setVisible(willBeVisible);
@@ -2491,7 +2491,7 @@ void MainWindow::onCategoryButtonToggled(int categoryId)
         // Přidat kategorii (pokud je místo)
         if (currentCategories.size() >= 5) {
             QMessageBox::warning(this, tr("Upozornění"),
-                tr("Nelze přiřadit více než 5 kategorií jednomu obrázku."));
+                tr("Nelze přiřadit více než 5 štítků jednomu obrázku."));
             btn->setChecked(false);
             return;
         }
@@ -2790,7 +2790,7 @@ void MainWindow::onCategoryRename(int categoryId)
 
     bool ok;
     QString newName = QInputDialog::getText(this,
-        tr("Přejmenovat kategorii"),
+        tr("Přejmenovat štítek"),
         tr("Nové jméno:"),
         QLineEdit::Normal,
         currentCategory.name,
@@ -2802,7 +2802,7 @@ void MainWindow::onCategoryRename(int categoryId)
 
     if (!m_categoryManager->updateCategory(categoryId, newName.trimmed(), QColor())) {
         QMessageBox::warning(this, tr("Chyba"),
-            tr("Nelze přejmenovat kategorii. Možná kategorie s tímto jménem již existuje."));
+            tr("Nelze přejmenovat štítek. Možná štítek s tímto jménem již existuje."));
         return;
     }
 
@@ -2840,7 +2840,7 @@ void MainWindow::onCategoryChangeColor(int categoryId)
 
     if (!m_categoryManager->updateCategory(categoryId, QString(), newColor)) {
         QMessageBox::warning(this, tr("Chyba"),
-            tr("Nelze změnit barvu kategorie."));
+            tr("Nelze změnit barvu štítku."));
         return;
     }
 
@@ -2871,8 +2871,8 @@ void MainWindow::onCategoryDelete(int categoryId)
 
     int result = QMessageBox::warning(this,
         tr("Potvrzení smazání"),
-        tr("Opravdu chcete smazat kategorii '%1'?\n"
-           "Tím se odebere ze všech obrázků, které ji mají přiřazenu.").arg(categoryToDelete.name),
+        tr("Opravdu chcete smazat štítek '%1'?\n"
+           "Tím se odebere ze všech obrázků, které ho mají přiřazený.").arg(categoryToDelete.name),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
 

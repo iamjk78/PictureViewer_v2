@@ -29,7 +29,7 @@ NewCategoryDialog::NewCategoryDialog(QWidget *parent)
     : QDialog(parent)
     , m_selectedColor()  // Inicializovat na invalidní — pokud uživatel nezvolí barvu, bude se vybrat náhodně
 {
-    setWindowTitle(tr("Nová kategorie"));
+    setWindowTitle(tr("Nový štítek"));
     setModal(true);
     setMinimumWidth(500);
     setupUI();
@@ -40,7 +40,7 @@ void NewCategoryDialog::setupUI()
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     // Jméno kategorie
-    mainLayout->addWidget(new QLabel(tr("Jméno kategorie:")));
+    mainLayout->addWidget(new QLabel(tr("Jméno štítku:")));
     m_nameEdit = new QLineEdit();
     m_nameEdit->setPlaceholderText(tr("Např. Dovolená"));
     mainLayout->addWidget(m_nameEdit);
@@ -91,7 +91,7 @@ void NewCategoryDialog::setupUI()
 
     connect(okBtn, &QPushButton::clicked, this, [this] {
         if (m_nameEdit->text().trimmed().isEmpty()) {
-            QMessageBox::warning(this, tr("Chyba"), tr("Zadejte jméno kategorie"));
+            QMessageBox::warning(this, tr("Chyba"), tr("Zadejte jméno štítku"));
             return;
         }
         accept();
@@ -125,7 +125,7 @@ AssignCategoriesDialog::AssignCategoriesDialog(
 )
     : QDialog(parent)
 {
-    setWindowTitle(tr("Přiřadit kategorie"));
+    setWindowTitle(tr("Přiřadit štítky"));
     setModal(true);
     setMinimumWidth(400);
 
@@ -137,7 +137,7 @@ AssignCategoriesDialog::AssignCategoriesDialog(
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    mainLayout->addWidget(new QLabel(tr("Vyberte kategorie (max 5):")));
+    mainLayout->addWidget(new QLabel(tr("Vyberte štítky (max 5):")));
 
     QWidget *scrollWidget = new QWidget();
     QVBoxLayout *listLayout = new QVBoxLayout(scrollWidget);
@@ -168,7 +168,7 @@ AssignCategoriesDialog::AssignCategoriesDialog(
             if (chk->isChecked()) ++count;
         }
         if (count > 5) {
-            QMessageBox::warning(this, tr("Chyba"), tr("Lze vybrat maximálně 5 kategorií"));
+            QMessageBox::warning(this, tr("Chyba"), tr("Lze vybrat maximálně 5 štítků"));
             return;
         }
         accept();

@@ -31,7 +31,7 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Kontextové menu** — Zobrazit ve Finderu, kopírovat obrázek / cestu
 - Slideshow s nastavitelným intervalem (1–60 s)
 - Mazání a přejmenování souborů
-- **Kategorie obrázků** — až 5 barevných štítků na obrázek; filtrování složky;
+- **Štítky obrázků** — až 5 barevných štítků na obrázek; filtrování složky;
   správa (přejmenovat, změnit barvu, smazat) přes pravý klik
 - **Oblíbené složky** (⭐) — toolbar s barevnými tlačítky pro rychlé přepínání;
   max 10 složek, klik otevře složku, pravý klik odebere
@@ -40,7 +40,7 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - Přehrávání videí přes VLC
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
   obrazovky se spustí v předvolené velikosti
-- **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Kategorie, PDF) mají
+- **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Štítky, PDF) mají
   stejnou výšku a font jako hlavní toolbar
 - Jednotkové testy jádra (Qt Test)
 
