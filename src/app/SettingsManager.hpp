@@ -85,6 +85,9 @@ public:
     // ── Window geometry ───────────────────────────────────────────────────────
     QByteArray windowGeometry() const;
     void setWindowGeometry(const QByteArray &geometry);
+    // Stav doků a toolbarů (QMainWindow::saveState / restoreState).
+    QByteArray windowState() const;
+    void setWindowState(const QByteArray &state);
     QSize savedScreenSize() const;
     void setSavedScreenSize(const QSize &size);
 

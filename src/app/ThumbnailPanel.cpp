@@ -11,6 +11,7 @@
 #include <QSize>
 #include <QStyledItemDelegate>
 #include <QKeyEvent>
+#include <QResizeEvent>
 #include <QThreadPool>
 
 namespace {
@@ -33,7 +34,8 @@ public:
         QIcon icon = qvariant_cast<QIcon>(data);
         // Požádat o pixmapu v menší velikosti (72px) a pak ji sami škálujeme
         // Tím zabráníme Qt v deformaci aspect ratio
-        QPixmap pixmap = icon.pixmap(72);
+        const int maxSize = option.decorationSize.width();
+        QPixmap pixmap = icon.pixmap(maxSize);
 
         if (pixmap.isNull()) {
             QStyledItemDelegate::paint(painter, option, index);
@@ -45,12 +47,10 @@ public:
             painter->fillRect(option.rect, option.palette.highlight());
         }
 
-        // Pokud je pixmap větší než 96, škálovat na max 96x96 s aspect ratio
-        // Tímto si jistíme, že se vejde do buňky
-        if (pixmap.width() > kThumbnailSize || pixmap.height() > kThumbnailSize) {
-            pixmap = pixmap.scaledToWidth(kThumbnailSize, Qt::SmoothTransformation);
-            if (pixmap.height() > kThumbnailSize) {
-                pixmap = pixmap.scaledToHeight(kThumbnailSize, Qt::SmoothTransformation);
+        if (pixmap.width() > maxSize || pixmap.height() > maxSize) {
+            pixmap = pixmap.scaledToWidth(maxSize, Qt::SmoothTransformation);
+            if (pixmap.height() > maxSize) {
+                pixmap = pixmap.scaledToHeight(maxSize, Qt::SmoothTransformation);
             }
         }
 
@@ -104,7 +104,10 @@ void ThumbnailPanel::setDisplayMode(DisplayMode mode)
         setWrapping(false);
         setResizeMode(QListWidget::Adjust);
         setSpacing(8);
-        setFixedWidth(kThumbnailSize + 24);
+        // Šířka je volná — uživatel ji táhne za pravý okraj docku.
+        // Miniatury se přizpůsobí v resizeEvent.
+        setMinimumWidth(32 + 24);
+        setMaximumWidth(256 + 24);
         break;
     case DisplayMode::Horizontal:
         setViewMode(QListWidget::ListMode);
@@ -170,7 +173,7 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         item->setData(Qt::UserRole, path);
         item->setTextAlignment(Qt::AlignCenter);
         // Nastavit fixní velikost položky - zabraňuje přesahu portrait obrázků
-        item->setSizeHint(QSize(96, 96));
+        item->setSizeHint(QSize(m_thumbSize, m_thumbSize));
         addItem(item);
         m_pathToItem[path] = item;
     }
@@ -273,6 +276,34 @@ void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)
     });
     m_currentWorker = worker;
     QThreadPool::globalInstance()->start(worker);
+}
+
+void ThumbnailPanel::applyThumbSize(int size)
+{
+    m_thumbSize = size;
+    setIconSize(QSize(size, size));
+    for (int i = 0; i < count(); ++i) {
+        item(i)->setSizeHint(QSize(size, size));
+    }
+}
+
+void ThumbnailPanel::resizeEvent(QResizeEvent *event)
+{
+    QListWidget::resizeEvent(event);
+    if (m_displayMode == DisplayMode::Vertical) {
+        const int newSize = qBound(32, width() - 24, 256);
+        if (newSize != m_thumbSize) {
+            applyThumbSize(newSize);
+        }
+    }
+}
+
+QSize ThumbnailPanel::sizeHint() const
+{
+    if (m_displayMode == DisplayMode::Vertical) {
+        return QSize(m_thumbSize + 24, 200);
+    }
+    return QListWidget::sizeHint();
 }
 
 } // namespace pictureviewer

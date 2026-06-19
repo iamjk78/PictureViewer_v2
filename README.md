@@ -18,6 +18,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Snímek výřezu obrazovky** (📷) — funguje i mimo aplikaci a napříč všemi monitory;
   označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky).
   macOS používá systémový `screencapture`, ostatní platformy vlastní overlay
+- **Přizpůsobitelná šířka panelu náhledů** — táhněte pravý okraj panelu doleva/doprava;
+  miniatury se automaticky přizpůsobí šířce; nastavení se pamatuje mezi spuštěními
 - **Uložit / Uložit jako** — uložení upraveného obrázku (ořez, otočení) jako JPEG;
   Uložit nabídne přepsání originálu nebo přejmenování; Uložit jako otevře dialog
   pro výběr názvu a cílové složky (originál nebo oblíbená)

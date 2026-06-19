@@ -41,8 +41,14 @@ public:
     // emit into a widget that is about to be destroyed.
     void shutdown();
 
+    // Aktuální velikost miniatury v pixelech (= šířka docku − 24).
+    // V Horizontal/Grid režimu vrací výchozí hodnotu.
+    int thumbSize() const { return m_thumbSize; }
+
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    QSize sizeHint() const override;
 
 signals:
     void imageSelected(int index);
@@ -54,11 +60,13 @@ private slots:
 
 private:
     void startThumbnailLoader(const QStringList &paths);
+    void applyThumbSize(int size);
 
     ThumbnailWorker *m_currentWorker;
     int m_generation;
     bool m_shuttingDown = false;
     DisplayMode m_displayMode = DisplayMode::Vertical;
+    int m_thumbSize = 96;
     bool m_diskCacheEnabled = true;
     QString m_diskCacheDir;
     // O(1) lookup by path. Stores item pointers (stable across index shifts on

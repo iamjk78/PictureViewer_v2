@@ -49,6 +49,7 @@ constexpr int kMaxFavoriteFolders        = 10;
 constexpr auto kCategoriesToolbarVisibleKey = "Categories/toolbar_visible";
 
 constexpr auto kWindowGeometryKey        = "UI/window_geometry";
+constexpr auto kWindowStateKey           = "UI/window_state";
 constexpr auto kSavedScreenSizeKey       = "UI/saved_screen_size";
 
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
@@ -351,6 +352,17 @@ QByteArray SettingsManager::windowGeometry() const
 void SettingsManager::setWindowGeometry(const QByteArray &geometry)
 {
     m_settings->setValue(kWindowGeometryKey, geometry.toBase64());
+}
+
+QByteArray SettingsManager::windowState() const
+{
+    return QByteArray::fromBase64(
+        m_settings->value(kWindowStateKey, QByteArray()).toByteArray());
+}
+
+void SettingsManager::setWindowState(const QByteArray &state)
+{
+    m_settings->setValue(kWindowStateKey, state.toBase64());
 }
 
 QSize SettingsManager::savedScreenSize() const

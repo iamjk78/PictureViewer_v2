@@ -212,6 +212,12 @@ MainWindow::MainWindow(QWidget *parent)
             restoreGeometry(savedGeom);
         }
     }
+    {
+        const QByteArray savedState = m_settingsManager->windowState();
+        if (!savedState.isEmpty()) {
+            restoreState(savedState);
+        }
+    }
 
     // Only restore last folder if no image file is being opened
     // This prevents race condition when opening image from Finder
@@ -274,8 +280,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
         m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
     }
 
-    // Uložit geometrii okna + aktuální rozlišení obrazovky
+    // Uložit geometrii okna + stav doků + aktuální rozlišení obrazovky
     m_settingsManager->setWindowGeometry(saveGeometry());
+    m_settingsManager->setWindowState(saveState());
     m_settingsManager->setSavedScreenSize(QGuiApplication::primaryScreen()->size());
 
     m_settingsManager->syncToDisk();
