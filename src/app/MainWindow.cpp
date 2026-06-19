@@ -2226,7 +2226,7 @@ void MainWindow::setupCategoriesToolbar()
     };
 
     // Tlačítko [+ Nová kategorie]
-    QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nová]"));
+    QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nový]"));
     newCatAction->setToolTip(tr("Vytvořit nový štítek"));
     connect(newCatAction, &QAction::triggered, this, [this] {
         NewCategoryDialog dialog(this);
