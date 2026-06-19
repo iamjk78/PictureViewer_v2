@@ -5,6 +5,7 @@
 #include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
 #include "app/MetadataPanel.hpp"
+#include "app/ScreenCapture.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
@@ -489,8 +490,11 @@ void MainWindow::openFile(const QString &filePath)
         qDebug() << "Converted file URL to local path:" << cleanPath;
     }
 
-    m_requestedFile = cleanPath;
-    const QString folderPath = cleanPath.section('/', 0, -2);
+    // Kanonizovat cestu — na macOS /var je symlink na /private/var; FolderScanWorker
+    // vrací kanonické cesty, takže musí souhlasit s m_requestedFile.
+    const QString canonical = QFileInfo(cleanPath).canonicalFilePath();
+    m_requestedFile = canonical.isEmpty() ? cleanPath : canonical;
+    const QString folderPath = m_requestedFile.section('/', 0, -2);
     qDebug() << "Extracted folder path:" << folderPath;
     loadFolder(folderPath);
 }
@@ -1258,6 +1262,12 @@ void MainWindow::setupToolbar()
     m_reloadFolderAction->setEnabled(false);
     connect(m_reloadFolderAction, &QAction::triggered, this, &MainWindow::reloadCurrentFolder);
     toolbar->addAction(m_reloadFolderAction);
+
+    // Snímek výřezu obrazovky — funguje i mimo aplikaci (přes všechny monitory).
+    m_screenshotAction = new QAction(QStringLiteral("📷"), this);
+    m_screenshotAction->setToolTip(tr("Snímek výřezu obrazovky — označte oblast myší (i mimo aplikaci)"));
+    connect(m_screenshotAction, &QAction::triggered, this, &MainWindow::onScreenshotCapture);
+    toolbar->addAction(m_screenshotAction);
     toolbar->addSeparator();
 
     toolbar->addAction(m_previousImageAction);
@@ -2989,6 +2999,40 @@ void MainWindow::onPdfScreenshot()
     updateSaveButtonStates();
     updatePdfToolbarVisibility(false);
     m_statusLabel->setText(tr("Stránka PDF zachycena jako obrázek — použijte Uložit jako pro uložení."));
+}
+
+// ── Snímek obrazovky ─────────────────────────────────────────────────────────
+
+void MainWindow::onScreenshotCapture()
+{
+    const ScreenCaptureResult result = captureScreenRegion(this);
+
+    if (result.image.isNull()) {
+        // Soubor nevznikl: Esc, nebo screencapture nemá oprávnění.
+        // macOS ukáže dialog pro PictureViewer při prvním pokusu —
+        // poté je nutné aplikaci restartovat (TCC se projeví po restartu).
+        m_statusLabel->setText(
+            tr("Snímek zrušen. Pokud jste právě povolili Screen Recording, "
+               "restartujte aplikaci a zkuste znovu."));
+        return;
+    }
+
+    if (result.tempPath.isEmpty()) {
+        // Zachycen ale zápis souboru selhal — zobrazit přímo z paměti.
+        m_imageView->setImage(result.image);
+        m_imageModified = true;
+        updateSaveButtonStates();
+        m_statusLabel->setText(tr("Výřez zachycen — soubor nelze uložit, použijte Uložit jako."));
+        return;
+    }
+
+    // Otevřít přes openFile → loadFolder → plná podpora zoomu, Uložit jako,
+    // kopírování i listování mezi pořízenými snímky ve stejné temp složce.
+    openFile(result.tempPath);
+    m_statusLabel->setText(
+        tr("Výřez obrazovky zachycen (%1×%2) — použijte Uložit jako pro trvalé uložení.")
+            .arg(result.image.width())
+            .arg(result.image.height()));
 }
 
 // ── Recyklace (Undo přesunu do Delete) ───────────────────────────────────────

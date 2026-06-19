@@ -16,6 +16,8 @@ set(APP_SOURCES
     MetadataPanel.cpp
     ImageView.hpp
     ImageView.cpp
+    ScreenCapture.hpp
+    ScreenCapture.cpp
     ThumbnailPanel.hpp
     ThumbnailPanel.cpp
     SlideshowController.hpp
@@ -29,8 +31,8 @@ set(APP_SOURCES
 )
 
 if(APPLE)
-    list(APPEND APP_SOURCES ClipboardHelper_mac.mm)
-    set_source_files_properties(ClipboardHelper_mac.mm PROPERTIES
+    list(APPEND APP_SOURCES ClipboardHelper_mac.mm ScreenCapture_mac.mm)
+    set_source_files_properties(ClipboardHelper_mac.mm ScreenCapture_mac.mm PROPERTIES
         COMPILE_FLAGS "-x objective-c++"
     )
 else()

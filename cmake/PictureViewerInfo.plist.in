@@ -193,6 +193,12 @@
 		</dict>
 	</array>
 
+	<!-- Screen Recording permission description (macOS 11+) — required for TCC to
+	     properly store the permission for this app's bundle ID. Without this key,
+	     macOS cannot associate the screen-recording grant with the app. -->
+	<key>NSScreenCaptureDescription</key>
+	<string>PictureViewer potřebuje přístup k záznamu obrazovky pro funkci výřezu screenshotu.</string>
+
 	<!-- High resolution support -->
 	<key>NSHighResolutionCapable</key>
 	<true/>

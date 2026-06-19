@@ -80,6 +80,7 @@ private slots:
     void onVlcProcessCrashed();
     void pollVlcKeys();
     void showImageContextMenu(const QPoint &globalPos);
+    void onScreenshotCapture();   // zachytit výřez obrazovky a zobrazit ho v aplikaci
 
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
@@ -210,6 +211,7 @@ private:
     void updateRecycleButtonState();
     QAction *m_renameImageAction;
     QAction *m_reloadFolderAction = nullptr;
+    QAction *m_screenshotAction = nullptr;
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;
     QAction *m_cropAction = nullptr;
