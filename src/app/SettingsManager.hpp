@@ -82,6 +82,12 @@ public:
     bool categoriesToolbarVisible() const;
     void setCategoriesToolbarVisible(bool visible);
 
+    // ── Settings version ─────────────────────────────────────────────────────
+    // Zvyšte kCurrentSettingsVersion při každé změně formátu nastavení
+    // a přidejte migraci do SettingsManager konstruktoru.
+    static constexpr int kCurrentSettingsVersion = 1;
+    int settingsVersion() const;
+
     // ── Window geometry ───────────────────────────────────────────────────────
     QByteArray windowGeometry() const;
     void setWindowGeometry(const QByteArray &geometry);

@@ -20,6 +20,7 @@ namespace {
 //   update_check_interval_days=1
 //   last_update_check=
 
+constexpr auto kSettingsVersionKey       = "General/settings_version";
 constexpr auto kRememberLastFolderKey    = "General/remember_last_folder";
 constexpr auto kLastFolderKey            = "General/last_folder";
 
@@ -80,6 +81,14 @@ SettingsManager::SettingsManager()
     // Ensure the directory exists before handing the path to QSettings.
     QDir().mkpath(QFileInfo(path).absolutePath());
     m_settings = new QSettings(path, QSettings::IniFormat);
+
+    // Při prvním spuštění (nebo po ruční editaci) zapsat verzi schématu nastavení.
+    // Šablona pro budoucí migrace:
+    //   int ver = settingsVersion();
+    //   if (ver < 2) { /* migrate */ m_settings->setValue(kSettingsVersionKey, 2); }
+    if (!m_settings->contains(kSettingsVersionKey)) {
+        m_settings->setValue(kSettingsVersionKey, kCurrentSettingsVersion);
+    }
 }
 
 SettingsManager::~SettingsManager()
@@ -339,6 +348,13 @@ bool SettingsManager::categoriesToolbarVisible() const
 void SettingsManager::setCategoriesToolbarVisible(bool visible)
 {
     m_settings->setValue(kCategoriesToolbarVisibleKey, visible);
+}
+
+// ── Settings version ─────────────────────────────────────────────────────────
+
+int SettingsManager::settingsVersion() const
+{
+    return m_settings->value(kSettingsVersionKey, 0).toInt();
 }
 
 // ── Window geometry ───────────────────────────────────────────────────────────

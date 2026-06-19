@@ -219,6 +219,16 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
+    // Varování pokud je uložená cesta k VLC neplatná (VLC bylo odinstalováno apod.)
+    {
+        const QString savedVlc = m_settingsManager->vlcPath();
+        if (!savedVlc.isEmpty() && !VlcUtils::isValidVlcPath(savedVlc)) {
+            m_statusLabel->setText(
+                tr("VLC nebylo nalezeno na uložené cestě (%1). "
+                   "Přehrávání videa (G) vyžádá nový výběr.").arg(savedVlc));
+        }
+    }
+
     // Only restore last folder if no image file is being opened
     // This prevents race condition when opening image from Finder
     if (qApp->arguments().size() <= 1) {
@@ -2235,6 +2245,9 @@ void MainWindow::setupCategoriesToolbar()
             if (cat.id > 0) {
                 refreshCategoryButtons();
                 updateCategoryFilterButtons();
+            } else if (!m_categoryManager->lastError().isEmpty()) {
+                m_statusLabel->setText(tr("Chyba při vytváření štítku: %1")
+                    .arg(m_categoryManager->lastError()));
             }
         }
     });
@@ -2881,6 +2894,11 @@ void MainWindow::onCategoryDelete(int categoryId)
     }
 
     m_categoryManager->deleteCategory(categoryId);
+    if (!m_categoryManager->lastError().isEmpty()) {
+        m_statusLabel->setText(tr("Chyba při mazání štítku: %1")
+            .arg(m_categoryManager->lastError()));
+        return;
+    }
 
     // Obnovit tlačítka
     refreshCategoryButtons();

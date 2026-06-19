@@ -4,6 +4,8 @@
 #include <QList>
 #include <QString>
 
+class QSqlDatabase;
+
 namespace pictureviewer {
 
 struct Category {
@@ -49,6 +51,10 @@ public:
     // Vrátí kategorie přiřazené obrázku
     QList<Category> categoriesForImage(const QString &imagePath) const;
 
+    // Popis poslední chyby DB operace; prázdný řetězec = žádná chyba.
+    QString lastError() const { return m_lastError; }
+    void clearLastError() { m_lastError.clear(); }
+
     // Vrátí cesty obrázků, které mají **všechny** z categoryIds (AND logika)
     // Pokud categoryIds prázdný, vrátí všechny cesty
     QStringList imagePathsWithAllCategories(const QList<int> &categoryIds) const;
@@ -59,9 +65,12 @@ public:
 
 private:
     bool initializeDatabase();
+    void migrateSchema(QSqlDatabase &db);
+    int  currentSchemaVersion(QSqlDatabase &db) const;
     QColor pickRandomUnusedColor() const;
 
     QString m_dbPath;
+    mutable QString m_lastError;
     static constexpr int MaxCategoriesPerImage = 5;
     static constexpr int PredefinedColorCount = 20;
 };

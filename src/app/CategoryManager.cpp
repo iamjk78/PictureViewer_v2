@@ -25,13 +25,17 @@ CategoryManager::CategoryManager(const QString &dbPath)
     db.setDatabaseName(dbPath);
 
     if (!db.open()) {
-        qWarning() << "Nelze otevřít databázi kategorií:" << db.lastError().text();
+        m_lastError = db.lastError().text();
+        qWarning() << "Nelze otevřít databázi kategorií:" << m_lastError;
     } else {
         initializeDatabase();
     }
 }
 
 CategoryManager::~CategoryManager() = default;
+
+// Aktuální verze schématu databáze. Zvyšte při každé strukturální změně.
+static constexpr int kCurrentSchemaVersion = 1;
 
 bool CategoryManager::initializeDatabase()
 {
@@ -67,7 +71,51 @@ bool CategoryManager::initializeDatabase()
         return false;
     }
 
+    // Tabulka verzování schématu — jeden řádek s aktuální verzí
+    if (!query.exec(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+        )) {
+        qWarning() << "Chyba vytvoření tabulky schema_version:" << query.lastError().text();
+        return false;
+    }
+
+    // Inicializovat verzi pro nové databáze
+    if (!query.exec("SELECT COUNT(*) FROM schema_version") || !query.next()
+            || query.value(0).toInt() == 0) {
+        QSqlQuery insert(db);
+        insert.prepare("INSERT INTO schema_version (version) VALUES (?)");
+        insert.addBindValue(kCurrentSchemaVersion);
+        insert.exec();
+    }
+
+    migrateSchema(db);
     return true;
+}
+
+int CategoryManager::currentSchemaVersion(QSqlDatabase &db) const
+{
+    QSqlQuery q(db);
+    if (q.exec("SELECT version FROM schema_version") && q.next()) {
+        return q.value(0).toInt();
+    }
+    return 0;
+}
+
+void CategoryManager::migrateSchema(QSqlDatabase &db)
+{
+    int ver = currentSchemaVersion(db);
+
+    // Šablona pro budoucí migrace:
+    // if (ver < 2) {
+    //     QSqlQuery(db).exec("ALTER TABLE categories ADD COLUMN ...");
+    //     QSqlQuery(db).exec("UPDATE schema_version SET version = 2");
+    //     ver = 2;
+    // }
+
+    if (ver != kCurrentSchemaVersion) {
+        qWarning() << "Neznámá verze schématu databáze:" << ver
+                   << "(očekáváno" << kCurrentSchemaVersion << ")";
+    }
 }
 
 QList<Category> CategoryManager::allCategories() const
@@ -125,9 +173,11 @@ QColor CategoryManager::pickRandomUnusedColor() const
 
 Category CategoryManager::addCategory(const QString &name, const QColor &color)
 {
+    m_lastError.clear();
     Category result{-1, "", QColor()};
     QSqlDatabase db = QSqlDatabase::database("categories");
     if (!db.isOpen()) {
+        m_lastError = QStringLiteral("Databáze není dostupná.");
         return result;
     }
 
@@ -139,7 +189,8 @@ Category CategoryManager::addCategory(const QString &name, const QColor &color)
     query.addBindValue(finalColor.name());
 
     if (!query.exec()) {
-        qWarning() << "Chyba vytvoření kategorie:" << query.lastError().text();
+        m_lastError = query.lastError().text();
+        qWarning() << "Chyba vytvoření kategorie:" << m_lastError;
         return result;
     }
 
@@ -152,8 +203,10 @@ Category CategoryManager::addCategory(const QString &name, const QColor &color)
 
 void CategoryManager::deleteCategory(int categoryId)
 {
+    m_lastError.clear();
     QSqlDatabase db = QSqlDatabase::database("categories");
     if (!db.isOpen()) {
+        m_lastError = QStringLiteral("Databáze není dostupná.");
         return;
     }
 
@@ -162,7 +215,8 @@ void CategoryManager::deleteCategory(int categoryId)
     query.addBindValue(categoryId);
 
     if (!query.exec()) {
-        qWarning() << "Chyba smazání kategorie:" << query.lastError().text();
+        m_lastError = query.lastError().text();
+        qWarning() << "Chyba smazání kategorie:" << m_lastError;
     }
 }
 
@@ -253,7 +307,8 @@ void CategoryManager::assignCategory(const QString &imagePath, int categoryId)
     query.addBindValue(categoryId);
 
     if (!query.exec()) {
-        qWarning() << "Chyba přiřazení kategorie:" << query.lastError().text();
+        m_lastError = query.lastError().text();
+        qWarning() << "Chyba přiřazení kategorie:" << m_lastError;
     }
 }
 
