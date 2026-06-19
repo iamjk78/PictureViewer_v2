@@ -2,9 +2,16 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 
+#include "app/CategoryManager.hpp"
 #include "app/ImageLoader.hpp"
+#include "app/SettingsManager.hpp"
+#include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
@@ -266,6 +273,381 @@ private slots:
         ThumbnailCacheManager::cleanupIfNeeded(dir.path());
 
         QVERIFY(QFile::exists(dir.filePath("keep.png")));
+    }
+
+    // ── ImageCatalog: hraniční případy ──────────────────────────────────────
+    void catalog_emptyFolderReturnsEmpty()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        ImageCatalog catalog;
+        const QStringList result = catalog.loadFolder(dir.path(), true);
+        QVERIFY(result.isEmpty());
+    }
+
+    void catalog_singleFileReturnsOne()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("only.jpg"), 1));
+
+        ImageCatalog catalog;
+        const QStringList result = catalog.loadFolder(dir.path(), true);
+        QCOMPARE(result.size(), 1);
+        QCOMPARE(QFileInfo(result.first()).fileName(), QString("only.jpg"));
+    }
+
+    void catalog_unsupportedFilesIgnored()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("image.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("document.txt"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("binary.exe"), 1));
+
+        ImageCatalog catalog;
+        const QStringList result = catalog.loadFolder(dir.path(), false);
+        QCOMPARE(result.size(), 1);
+    }
+
+    // ── CategoryManager ──────────────────────────────────────────────────────
+    // Po každém testu odstraníme pojmenované DB spojení, aby příští test
+    // začínal s čistým stavem (CategoryManager vždy otevírá spojení "categories").
+    void categoryManager_cleanup()
+    {
+        QSqlDatabase::removeDatabase(QStringLiteral("categories"));
+    }
+
+    void categoryManager_createAndRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        QVERIFY(mgr.lastError().isEmpty());
+        QVERIFY(mgr.allCategories().isEmpty());
+
+        const Category cat = mgr.addCategory(QStringLiteral("Práce"), QColor("#FF0000"));
+        QVERIFY(cat.id > 0);
+        QCOMPARE(cat.name, QStringLiteral("Práce"));
+        QCOMPARE(cat.color, QColor("#FF0000"));
+        QVERIFY(mgr.lastError().isEmpty());
+
+        const QList<Category> all = mgr.allCategories();
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().name, QStringLiteral("Práce"));
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_duplicateNameFails()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        QVERIFY(mgr.addCategory(QStringLiteral("Dovolená")).id > 0);
+        // Druhé vložení se stejným jménem musí selhat
+        const Category dup = mgr.addCategory(QStringLiteral("Dovolená"));
+        QCOMPARE(dup.id, -1);
+        QVERIFY(!mgr.lastError().isEmpty());
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_delete()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Dočasný"));
+        QVERIFY(cat.id > 0);
+
+        mgr.deleteCategory(cat.id);
+        QVERIFY(mgr.lastError().isEmpty());
+        QVERIFY(mgr.allCategories().isEmpty());
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_rename()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Starý název"));
+        QVERIFY(mgr.updateCategory(cat.id, QStringLiteral("Nový název"), QColor()));
+
+        const QList<Category> all = mgr.allCategories();
+        QCOMPARE(all.first().name, QStringLiteral("Nový název"));
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_renameToDuplicateFails()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        mgr.addCategory(QStringLiteral("A"));
+        const Category b = mgr.addCategory(QStringLiteral("B"));
+        // Přejmenovat B → A musí selhat
+        QVERIFY(!mgr.updateCategory(b.id, QStringLiteral("A"), QColor()));
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_assignAndRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Štítek"));
+        const QString img = QStringLiteral("/tmp/foto.jpg");
+
+        mgr.assignCategory(img, cat.id);
+        QVERIFY(mgr.lastError().isEmpty());
+
+        const QList<Category> assigned = mgr.categoriesForImage(img);
+        QCOMPARE(assigned.size(), 1);
+        QCOMPARE(assigned.first().id, cat.id);
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_maxFiveLabels()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const QString img = QStringLiteral("/tmp/foto.jpg");
+        // Vytvořit a přiřadit 6 štítků; 6. musí být tiše ignorováno
+        for (int i = 1; i <= 6; ++i) {
+            const Category cat = mgr.addCategory(QString("Label%1").arg(i));
+            QVERIFY(cat.id > 0);
+            mgr.assignCategory(img, cat.id);
+        }
+
+        const QList<Category> assigned = mgr.categoriesForImage(img);
+        QCOMPARE(assigned.size(), 5);   // max 5
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_unassignAll()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const QString img = QStringLiteral("/tmp/foto.jpg");
+        for (int i = 1; i <= 3; ++i) {
+            const Category cat = mgr.addCategory(QString("L%1").arg(i));
+            mgr.assignCategory(img, cat.id);
+        }
+        QCOMPARE(mgr.categoriesForImage(img).size(), 3);
+
+        mgr.unassignAll(img);
+        QVERIFY(mgr.categoriesForImage(img).isEmpty());
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_deleteCascadesToAssignments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Dočasný"));
+        const QString img = QStringLiteral("/tmp/foto.jpg");
+        mgr.assignCategory(img, cat.id);
+        QCOMPARE(mgr.categoriesForImage(img).size(), 1);
+
+        mgr.deleteCategory(cat.id);
+        // Kaskádové smazání — přiřazení musí zmizet
+        QVERIFY(mgr.categoriesForImage(img).isEmpty());
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_filterByCategory()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category red = mgr.addCategory(QStringLiteral("Červená"), QColor("#FF0000"));
+        const Category blue = mgr.addCategory(QStringLiteral("Modrá"), QColor("#0000FF"));
+
+        const QString img1 = QStringLiteral("/tmp/a.jpg");
+        const QString img2 = QStringLiteral("/tmp/b.jpg");
+        mgr.assignCategory(img1, red.id);
+        mgr.assignCategory(img2, blue.id);
+        mgr.assignCategory(img2, red.id);   // img2 má oba štítky
+
+        // Filtr na červenou → img1 + img2
+        const QStringList byRed = mgr.imagePathsWithAllCategories({red.id});
+        QCOMPARE(byRed.size(), 2);
+
+        // Filtr na oba → jen img2
+        const QStringList byBoth = mgr.imagePathsWithAllCategories({red.id, blue.id});
+        QCOMPARE(byBoth.size(), 1);
+        QCOMPARE(byBoth.first(), img2);
+
+        // Prázdný filtr → všechny cesty
+        const QStringList all = mgr.imagePathsWithAllCategories({});
+        QVERIFY(all.size() >= 2);
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_schemaVersionIsOne()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        int version = 0;
+        {
+            // QSqlQuery musí být zničen před removeDatabase (jinak Qt varuje)
+            QSqlDatabase db = QSqlDatabase::database(QStringLiteral("categories"));
+            QVERIFY(db.isOpen());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("SELECT version FROM schema_version"));
+            QVERIFY(q.next());
+            version = q.value(0).toInt();
+        }
+        QCOMPARE(version, 1);
+
+        categoryManager_cleanup();
+    }
+
+    // ── SettingsManager ──────────────────────────────────────────────────────
+    // Testy používají jedinečné jméno aplikace → vlastní INI soubor,
+    // který po sobě uklidí v cleanup.
+    void settingsManager_setup()
+    {
+        qApp->setApplicationName(QStringLiteral("PictureViewerTest"));
+        qApp->setOrganizationName(QStringLiteral("PictureViewerTestOrg"));
+    }
+
+    void settingsManager_versionIsOne()
+    {
+        settingsManager_setup();
+        SettingsManager mgr;
+        QCOMPARE(mgr.settingsVersion(), SettingsManager::kCurrentSettingsVersion);
+        QFile::remove(SettingsManager::configFilePath());
+    }
+
+    void settingsManager_lastFolderRoundtrip()
+    {
+        settingsManager_setup();
+        SettingsManager mgr;
+        const QString folder = QStringLiteral("/Users/test/photos");
+        mgr.setLastFolder(folder);
+        QCOMPARE(mgr.lastFolder(), folder);
+        QFile::remove(SettingsManager::configFilePath());
+    }
+
+    void settingsManager_sortKeyRoundtrip()
+    {
+        settingsManager_setup();
+        SettingsManager mgr;
+        mgr.setSortKey(2);
+        QCOMPARE(mgr.sortKey(), 2);
+        mgr.setSortKey(0);
+        QCOMPARE(mgr.sortKey(), 0);
+        QFile::remove(SettingsManager::configFilePath());
+    }
+
+    void settingsManager_boolDefaults()
+    {
+        settingsManager_setup();
+        SettingsManager mgr;
+        // Výchozí hodnoty nesmí způsobit crash ani vrátit nesmyslný výsledek
+        QVERIFY(mgr.sortAscending());             // výchozí: vzestupně
+        QVERIFY(mgr.thumbnailCacheEnabled());     // výchozí: cache zapnutá
+        QFile::remove(SettingsManager::configFilePath());
+    }
+
+    void settingsManager_windowGeometryRoundtrip()
+    {
+        settingsManager_setup();
+        SettingsManager mgr;
+        const QByteArray geom = QByteArray::fromHex("deadbeef");
+        mgr.setWindowGeometry(geom);
+        QCOMPARE(mgr.windowGeometry(), geom);
+        QFile::remove(SettingsManager::configFilePath());
+    }
+
+    // ── SlideshowController ──────────────────────────────────────────────────
+    void slideshow_initiallyNotRunning()
+    {
+        SlideshowController ctrl;
+        QVERIFY(!ctrl.isRunning());
+        QCOMPARE(ctrl.intervalMs(), SlideshowController::DefaultIntervalMs);
+    }
+
+    void slideshow_startStop()
+    {
+        SlideshowController ctrl;
+        ctrl.start();
+        QVERIFY(ctrl.isRunning());
+        ctrl.stop();
+        QVERIFY(!ctrl.isRunning());
+    }
+
+    void slideshow_toggle()
+    {
+        SlideshowController ctrl;
+        QVERIFY(!ctrl.isRunning());
+        ctrl.toggle();
+        QVERIFY(ctrl.isRunning());
+        ctrl.toggle();
+        QVERIFY(!ctrl.isRunning());
+    }
+
+    void slideshow_setIntervalClampsToMinimum()
+    {
+        SlideshowController ctrl;
+        ctrl.setInterval(10);   // pod minimem (500 ms)
+        QVERIFY(ctrl.intervalMs() >= SlideshowController::MinimumIntervalMs);
+    }
+
+    void slideshow_setIntervalValid()
+    {
+        SlideshowController ctrl;
+        ctrl.setInterval(5000);
+        QCOMPARE(ctrl.intervalMs(), 5000);
+    }
+
+    void slideshow_signalEmittedWhenRunning()
+    {
+        SlideshowController ctrl;
+        QSignalSpy spy(&ctrl, &SlideshowController::nextImageRequested);
+        ctrl.setInterval(50);   // velmi krátký interval pro test
+        ctrl.start();
+        // QTRY_VERIFY opakovaně volí event loop, dokud podmínka není splněna
+        // nebo nevyprší 2 s timeout — robustnější než pevný qWait.
+        QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 2000);
+        ctrl.stop();
+    }
+
+    void slideshow_noSignalWhenStopped()
+    {
+        SlideshowController ctrl;
+        QSignalSpy spy(&ctrl, &SlideshowController::nextImageRequested);
+        ctrl.setInterval(50);
+        // Záměrně nespustit — žádný signál nesmí přijít
+        QTest::qWait(200);
+        QCOMPARE(spy.count(), 0);
     }
 };
 
