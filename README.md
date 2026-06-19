@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.13**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.14**.
 
 ## Funkce
 
@@ -15,6 +15,9 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - Přibližování a posun obrázků (zoom, pan) + **indikátor zoomu** ve status baru
 - **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
 - **Ořez obrázku** (✂) — výběr oblasti myší, zobrazení se ořízne na vybranou část
+- **Snímek výřezu obrazovky** (📷) — funguje i mimo aplikaci a napříč všemi monitory;
+  označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky).
+  macOS používá systémový `screencapture`, ostatní platformy vlastní overlay
 - **Uložit / Uložit jako** — uložení upraveného obrázku (ořez, otočení) jako JPEG;
   Uložit nabídne přepsání originálu nebo přejmenování; Uložit jako otevře dialog
   pro výběr názvu a cílové složky (originál nebo oblíbená)

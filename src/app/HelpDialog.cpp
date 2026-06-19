@@ -223,6 +223,13 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.14</h3>"
+        "<ul>"
+        "<li><b>Snímek výřezu obrazovky (📷)</b> — nové tlačítko v hlavním toolbaru;"
+        " funguje i mimo aplikaci a napříč všemi monitory. Označte oblast myší"
+        " (Esc zruší) a výřez se otevře přímo v aplikaci. Dočasně se uloží do"
+        " systémové temp složky — pro trvalé uložení použijte Uložit jako</li>"
+        "</ul>"
         "<h3>Verze 0.13</h3>"
         "<ul>"
         "<li><b>PDF toolbar na vlastním řádku</b> — PDF lišta se nyní zobrazuje pod toolbarem"
