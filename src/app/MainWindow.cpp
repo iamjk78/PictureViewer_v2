@@ -456,25 +456,30 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 
 void MainWindow::showImageContextMenu(const QPoint &globalPos)
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0
-        || m_currentIndex >= m_imagePaths.size()) {
+    const bool hasFile = !m_imagePaths.isEmpty() && m_currentIndex >= 0
+                         && m_currentIndex < m_imagePaths.size();
+    const bool hasImage = !m_imageView->displayedImage().isNull();
+
+    if (!hasFile && !hasImage) {
         return;
     }
-    const QString currentPath = m_imagePaths.at(m_currentIndex);
+
+    const QString currentPath = hasFile ? m_imagePaths.at(m_currentIndex) : QString();
 
     QMenu menu(this);
 
-    QAction *revealAction = menu.addAction(tr("Zobrazit ve Finderu"));
-    connect(revealAction, &QAction::triggered, this, [currentPath] {
+    if (hasFile) {
+        QAction *revealAction = menu.addAction(tr("Zobrazit ve Finderu"));
+        connect(revealAction, &QAction::triggered, this, [currentPath] {
 #if defined(Q_OS_MACOS)
-        QProcess::startDetached("open", {"-R", currentPath});
+            QProcess::startDetached("open", {"-R", currentPath});
 #elif defined(Q_OS_WIN)
-        QProcess::startDetached("explorer", {"/select,", QDir::toNativeSeparators(currentPath)});
+            QProcess::startDetached("explorer", {"/select,", QDir::toNativeSeparators(currentPath)});
 #else
-        // Linux/ostatní: otevřít obsahující složku
-        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(currentPath).absolutePath()));
+            QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(currentPath).absolutePath()));
 #endif
-    });
+        });
+    }
 
     QAction *copyImageAction = menu.addAction(tr("Kopírovat obrázek"));
     connect(copyImageAction, &QAction::triggered, this, [this] {
@@ -482,8 +487,8 @@ void MainWindow::showImageContextMenu(const QPoint &globalPos)
         if (image.isNull()) {
             return;
         }
-        if (m_imageView->hasCrop()) {
-            // Uložit výřez jako dočasný JPEG soubor a vložit soubor do schránky
+        // Screenshot nebo výřez: uložit jako JPEG soubor a vložit URL do schránky
+        if (m_isScreenshot || m_imageView->hasCrop()) {
             QString configDir = QFileInfo(SettingsManager::configFilePath()).absolutePath();
             QString tempPath  = configDir + "/picture.jpg";
             if (image.save(tempPath, "JPEG", 90)) {
@@ -496,10 +501,12 @@ void MainWindow::showImageContextMenu(const QPoint &globalPos)
         }
     });
 
-    QAction *copyPathAction = menu.addAction(tr("Kopírovat cestu k souboru"));
-    connect(copyPathAction, &QAction::triggered, this, [currentPath] {
-        QApplication::clipboard()->setText(QDir::toNativeSeparators(currentPath));
-    });
+    if (hasFile) {
+        QAction *copyPathAction = menu.addAction(tr("Kopírovat cestu k souboru"));
+        connect(copyPathAction, &QAction::triggered, this, [currentPath] {
+            QApplication::clipboard()->setText(QDir::toNativeSeparators(currentPath));
+        });
+    }
 
     menu.exec(globalPos);
 }

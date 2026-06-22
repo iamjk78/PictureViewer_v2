@@ -218,6 +218,7 @@ private:
     QAction *m_saveAction = nullptr;
     QAction *m_saveAsAction = nullptr;
     bool m_imageModified = false;
+    bool m_isScreenshot  = false;  // setImage() bez souboru — kopírovat jako JPEG
 
     // ── Ukládání obrázku ─────────────────────────────────────────────────────
     void onSaveImage();

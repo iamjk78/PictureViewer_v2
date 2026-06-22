@@ -528,6 +528,7 @@ void MainWindow::onPdfScreenshot()
         return;
     }
     m_imageView->setImage(img);
+    m_isScreenshot  = true;
     m_imageModified = true;
     updateSaveButtonStates();
     updatePdfToolbarVisibility(false);
@@ -545,15 +546,10 @@ void MainWindow::onScreenshotCapture()
         return;
     }
 
-    if (result.tempPath.isEmpty()) {
-        m_imageView->setImage(result.image);
-        m_imageModified = true;
-        updateSaveButtonStates();
-        m_statusLabel->setText(tr("Výřez zachycen — soubor nelze uložit, použijte Uložit jako."));
-        return;
-    }
-
-    openFile(result.tempPath);
+    m_imageView->setImage(result.image);
+    m_isScreenshot  = true;
+    m_imageModified = true;
+    updateSaveButtonStates();
     m_statusLabel->setText(
         tr("Výřez obrazovky zachycen (%1×%2) — použijte Uložit jako pro trvalé uložení.")
             .arg(result.image.width())

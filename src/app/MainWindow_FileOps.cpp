@@ -285,6 +285,7 @@ void MainWindow::showImage(int index)
     if (index < 0 || index >= imagePaths.size()) {
         return;
     }
+    m_isScreenshot = false;
 
     const QString path = imagePaths.at(index);
 #ifdef Q_OS_MACOS
