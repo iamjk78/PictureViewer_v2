@@ -651,5 +651,5 @@ private slots:
     }
 };
 
-QTEST_MAIN(TestCore)
+QTEST_GUILESS_MAIN(TestCore)
 #include "test_core.moc"

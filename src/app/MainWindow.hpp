@@ -14,6 +14,7 @@ class QDragEnterEvent;
 class QDropEvent;
 class QGraphicsColorizeEffect;
 class QLabel;
+class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 class QToolBar;
@@ -155,9 +156,9 @@ private:
     QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
-    QMap<int, class QPushButton*> m_categoryButtons;  // mapa: categoryId → assignment button widget
-    QMap<int, class QPushButton*> m_categoryFilterButtons;  // mapa: categoryId → filter button widget
-    class QWidget *m_filterButtonsContainer = nullptr;  // kontejner pro filtr tlačítka
+    QMap<int, QPushButton*> m_categoryButtons;  // mapa: categoryId → assignment button widget
+    QMap<int, QPushButton*> m_categoryFilterButtons;  // mapa: categoryId → filter button widget
+    QWidget *m_filterButtonsContainer = nullptr;  // kontejner pro filtr tlačítka
     FolderScanWorker *m_folderScanWorker;
     ImageLoader *m_imageLoader = nullptr;
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení
