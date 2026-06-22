@@ -56,9 +56,10 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
     }
 
     // QCollator s numericMode řadí číselné úseky podle hodnoty (img2 < img10),
-    // ne lexikograficky. Použije se pro řazení podle názvu i jako rozhodčí při
-    // shodě data/velikosti, aby bylo pořadí stabilní a předvídatelné.
-    QCollator collator;
+    // ne lexikograficky. Explicitní locale "en" zajistí numeric mode i na
+    // systémech bez nastaveného LANG (Linux CI s LANG=C).
+    QLocale enLocale(QLocale::English);
+    QCollator collator(enLocale);
     collator.setNumericMode(true);
     collator.setCaseSensitivity(Qt::CaseInsensitive);
 
