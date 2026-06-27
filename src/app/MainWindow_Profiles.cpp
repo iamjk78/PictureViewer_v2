@@ -9,6 +9,7 @@
 #include "app/CategoryManager.hpp"
 #include "app/ImageView.hpp"
 #include "app/SettingsManager.hpp"
+#include "workers/FolderScanWorker.hpp"
 
 #include <QApplication>
 #include <QDialog>
@@ -96,9 +97,15 @@ void MainWindow::switchProfile(const QString &profileName)
     m_settingsManager->setWindowState(saveState());
     m_settingsManager->syncToDisk();
 
-    // Zastavit běžící úlohy nad starou složkou, aby neukládaly do nové DB.
-    cancelAllWorkers();
-    m_shuttingDown = false;   // cancelAllWorkers nastaví true; pokračujeme dál
+    // Zrušit probíhající skenování složky — nechceme výsledky starého profilu.
+    // cancelAllWorkers() se NESMÍ použít: nastavuje shutdown příznak i na
+    // ThumbnailPanel a ImageLoader, které pak odmítají novou práci.
+    ++m_scanGeneration;
+    if (m_folderScanWorker != nullptr) {
+        m_folderScanWorker->cancel();
+        disconnect(m_folderScanWorker, nullptr, this, nullptr);
+        m_folderScanWorker = nullptr;
+    }
 
     // Přepnout profil.
     m_profileManager->setActiveProfile(profileName);
