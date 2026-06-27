@@ -76,8 +76,12 @@ QString SettingsManager::configFilePath()
 }
 
 SettingsManager::SettingsManager()
+    : SettingsManager(configFilePath())
 {
-    const QString path = configFilePath();
+}
+
+SettingsManager::SettingsManager(const QString &path)
+{
     // Ensure the directory exists before handing the path to QSettings.
     QDir().mkpath(QFileInfo(path).absolutePath());
     m_settings = new QSettings(path, QSettings::IniFormat);

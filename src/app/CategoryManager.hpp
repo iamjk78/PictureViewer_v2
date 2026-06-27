@@ -70,6 +70,7 @@ private:
     QColor pickRandomUnusedColor() const;
 
     QString m_dbPath;
+    QString m_connectionName;   // unikátní název SQL připojení (umožňuje více instancí / přepínání profilů)
     mutable QString m_lastError;
     static constexpr int MaxCategoriesPerImage = 5;
     static constexpr int PredefinedColorCount = 20;

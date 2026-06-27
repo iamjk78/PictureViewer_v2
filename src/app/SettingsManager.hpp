@@ -14,6 +14,8 @@ class SettingsManager
 {
 public:
     SettingsManager();
+    // Nový — pro profily: explicitní cesta k config.ini
+    explicit SettingsManager(const QString &configFilePath);
     ~SettingsManager();
 
     // Returns the absolute path to config.ini (useful for diagnostics).

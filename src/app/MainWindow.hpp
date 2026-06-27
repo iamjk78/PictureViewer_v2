@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/ProfileManager.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageMetadataReader.hpp"
 
@@ -14,6 +15,7 @@ class QDragEnterEvent;
 class QDropEvent;
 class QGraphicsColorizeEffect;
 class QLabel;
+class QMenu;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -114,6 +116,16 @@ private:
     void updateVideoMetadata(const QString &videoPath);
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
+    // ── Profily ────────────────────────────────────────────────────────────────
+    void setupProfileMenu(QMenu *parentMenu);
+    void switchProfile(const QString &profileName);
+    void refreshProfileMenu();
+    void manageProfiles();
+    // Vytvoří ProfileManager, provede migraci a vrátí SettingsManager pro aktivní
+    // profil. Volá se z member-initializer listu (proto vrací pointer).
+    SettingsManager *createProfileAndSettings();
+    QMenu *m_profileMenu = nullptr;
+
     // ── Oblíbené složky toolbar ──────────────────────────────────────────────
     void setupFavoritesToolbar();          // vytvořit toolbar pro oblíbené složky
     void refreshFavoriteButtons();         // znovu vytvořit tlačítka oblíbených
@@ -163,6 +175,9 @@ private:
     ImageLoader *m_imageLoader = nullptr;
     QString m_pendingDisplayPath;   // cesta, jejíž dekódování čeká na zobrazení
     ImageView *m_imageView;
+    // Pozn.: m_profileManager MUSÍ být deklarován před m_settingsManager —
+    // pořadí inicializace v konstruktoru odpovídá pořadí deklarace zde.
+    ProfileManager *m_profileManager = nullptr;
     SettingsManager *m_settingsManager;
     CategoryManager *m_categoryManager = nullptr;
     VlcController *m_vlcController;

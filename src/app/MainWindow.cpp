@@ -102,7 +102,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_folderScanWorker(nullptr)
     , m_imageView(new ImageView(this))
-    , m_settingsManager(new SettingsManager())
+    , m_settingsManager(createProfileAndSettings())
     , m_vlcController(new VlcController(m_settingsManager, this))
     , m_thumbnailPanel(new ThumbnailPanel(this))
     , m_thumbnailDock(nullptr)
@@ -127,9 +127,10 @@ MainWindow::MainWindow(QWidget *parent)
     , m_deletePictureAction(new QAction(this))
     , m_renameImageAction(new QAction(this))
 {
-    // Inicializovat CategoryManager — databáze vedle config.ini
-    QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/categories.db";
-    m_categoryManager = new CategoryManager(dbPath);
+    // Inicializovat CategoryManager — databáze v adresáři aktivního profilu.
+    // (ProfileManager a SettingsManager jsou již vytvořeny v init-listu.)
+    m_categoryManager = new CategoryManager(
+        m_profileManager->dbPath(m_profileManager->activeProfile()));
 
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
@@ -781,6 +782,9 @@ void MainWindow::setupMenu()
     viewMenu->addAction(m_resetZoomAction);
     viewMenu->addSeparator();
     viewMenu->addAction(m_togglePanelAction);
+
+    // ── Profily ──────────────────────────────────────────────────────────────
+    setupProfileMenu(menuBar()->addMenu(tr("&Profily")));
 
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Nastavení"));
 

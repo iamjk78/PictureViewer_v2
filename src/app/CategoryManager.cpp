@@ -21,7 +21,12 @@ static constexpr const char *PredefinedColors[] = {
 CategoryManager::CategoryManager(const QString &dbPath)
     : m_dbPath(dbPath)
 {
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "categories");
+    // Unikátní název připojení — umožňuje souběžné/přepínané instance bez kolize
+    // (Qt varuje, pokud se znovu zaregistruje stejný connection name).
+    static quint64 s_counter = 0;
+    m_connectionName = QStringLiteral("categories_%1").arg(++s_counter);
+
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
     db.setDatabaseName(dbPath);
 
     if (!db.open()) {
@@ -32,14 +37,24 @@ CategoryManager::CategoryManager(const QString &dbPath)
     }
 }
 
-CategoryManager::~CategoryManager() = default;
+CategoryManager::~CategoryManager()
+{
+    // Uvolnit připojení, aby šel název znovu použít a soubor DB uvolnit.
+    {
+        QSqlDatabase db = QSqlDatabase::database(m_connectionName, /*open=*/false);
+        if (db.isValid() && db.isOpen()) {
+            db.close();
+        }
+    }
+    QSqlDatabase::removeDatabase(m_connectionName);
+}
 
 // Aktuální verze schématu databáze. Zvyšte při každé strukturální změně.
 static constexpr int kCurrentSchemaVersion = 1;
 
 bool CategoryManager::initializeDatabase()
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return false;
     }
@@ -121,7 +136,7 @@ void CategoryManager::migrateSchema(QSqlDatabase &db)
 QList<Category> CategoryManager::allCategories() const
 {
     QList<Category> result;
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return result;
     }
@@ -145,7 +160,7 @@ QList<Category> CategoryManager::allCategories() const
 
 QColor CategoryManager::pickRandomUnusedColor() const
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QList<QString> usedColors;
 
     if (db.isOpen()) {
@@ -175,7 +190,7 @@ Category CategoryManager::addCategory(const QString &name, const QColor &color)
 {
     m_lastError.clear();
     Category result{-1, "", QColor()};
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         m_lastError = QStringLiteral("Databáze není dostupná.");
         return result;
@@ -204,7 +219,7 @@ Category CategoryManager::addCategory(const QString &name, const QColor &color)
 void CategoryManager::deleteCategory(int categoryId)
 {
     m_lastError.clear();
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         m_lastError = QStringLiteral("Databáze není dostupná.");
         return;
@@ -222,7 +237,7 @@ void CategoryManager::deleteCategory(int categoryId)
 
 bool CategoryManager::updateCategory(int categoryId, const QString &newName, const QColor &newColor)
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return false;
     }
@@ -280,7 +295,7 @@ bool CategoryManager::updateCategory(int categoryId, const QString &newName, con
 
 void CategoryManager::assignCategory(const QString &imagePath, int categoryId)
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return;
     }
@@ -314,7 +329,7 @@ void CategoryManager::assignCategory(const QString &imagePath, int categoryId)
 
 void CategoryManager::unassignCategory(const QString &imagePath, int categoryId)
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return;
     }
@@ -331,7 +346,7 @@ void CategoryManager::unassignCategory(const QString &imagePath, int categoryId)
 
 void CategoryManager::unassignAll(const QString &imagePath)
 {
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return;
     }
@@ -348,7 +363,7 @@ void CategoryManager::unassignAll(const QString &imagePath)
 QList<Category> CategoryManager::categoriesForImage(const QString &imagePath) const
 {
     QList<Category> result;
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return result;
     }
@@ -381,7 +396,7 @@ QList<Category> CategoryManager::categoriesForImage(const QString &imagePath) co
 QStringList CategoryManager::imagePathsWithAllCategories(const QList<int> &categoryIds) const
 {
     QStringList result;
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen()) {
         return result;
     }
@@ -428,7 +443,7 @@ QStringList CategoryManager::imagePathsWithAllCategories(const QList<int> &categ
 QList<Category> CategoryManager::categoriesUsedInPaths(const QStringList &imagePaths) const
 {
     QList<Category> result;
-    QSqlDatabase db = QSqlDatabase::database("categories");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.isOpen() || imagePaths.isEmpty()) {
         return result;
     }

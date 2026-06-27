@@ -312,11 +312,10 @@ private slots:
     }
 
     // ── CategoryManager ──────────────────────────────────────────────────────
-    // Po každém testu odstraníme pojmenované DB spojení, aby příští test
-    // začínal s čistým stavem (CategoryManager vždy otevírá spojení "categories").
+    // CategoryManager si od přidání profilů spravuje vlastní unikátní název
+    // spojení a uvolní ho ve svém destruktoru, takže není potřeba zde nic uklízet.
     void categoryManager_cleanup()
     {
-        QSqlDatabase::removeDatabase(QStringLiteral("categories"));
     }
 
     void categoryManager_createAndRead()
@@ -512,21 +511,28 @@ private slots:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        CategoryManager mgr(dir.filePath("labels.db"));
+        const QString dbPath = dir.filePath("labels.db");
+        CategoryManager mgr(dbPath);
 
         int version = 0;
         {
-            // QSqlQuery musí být zničen před removeDatabase (jinak Qt varuje)
-            QSqlDatabase db = QSqlDatabase::database(QStringLiteral("categories"));
-            QVERIFY(db.isOpen());
-            QSqlQuery q(db);
-            QVERIFY(q.exec("SELECT version FROM schema_version"));
-            QVERIFY(q.next());
-            version = q.value(0).toInt();
+            // CategoryManager používá interní unikátní název spojení; otevřeme
+            // proto vlastní nezávislé spojení ke stejnému souboru DB.
+            // QSqlQuery musí být zničen před removeDatabase (jinak Qt varuje).
+            const QString conn = QStringLiteral("schema_version_probe");
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+            db.setDatabaseName(dbPath);
+            QVERIFY(db.open());
+            {
+                QSqlQuery q(db);
+                QVERIFY(q.exec("SELECT version FROM schema_version"));
+                QVERIFY(q.next());
+                version = q.value(0).toInt();
+            }
+            db.close();
+            QSqlDatabase::removeDatabase(conn);
         }
         QCOMPARE(version, 1);
-
-        categoryManager_cleanup();
     }
 
     // ── SettingsManager ──────────────────────────────────────────────────────
