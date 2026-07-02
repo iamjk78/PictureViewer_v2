@@ -55,7 +55,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $deployDir | Out-Null
           Copy-Item "build\Release\PictureViewer.exe" "$deployDir\"
           & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --no-translations `
-              --no-system-d3d-compiler "$deployDir\PictureViewer.exe"
+              --no-system-d3d-compiler --compiler-runtime "$deployDir\PictureViewer.exe"
           Compress-Archive -Path $deployDir -DestinationPath "PictureViewer-Windows.zip"
 
       - name: Upload artifact (Windows)
