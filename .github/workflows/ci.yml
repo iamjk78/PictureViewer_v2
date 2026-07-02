@@ -59,11 +59,9 @@ jobs:
               if (Test-Path $src) { Copy-Item $src "$deployDir\" }
           }
 
-          Compress-Archive -Path $deployDir -DestinationPath "PictureViewer-Windows.zip"
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PictureViewer-Windows
-          path: PictureViewer-Windows.zip
+          path: dist\PictureViewer
           retention-days: 30
