@@ -95,7 +95,9 @@ private:
     QLabel             *m_timeLabel      = nullptr;
     QLabel             *m_bufferOverlay  = nullptr;   // překryv "Načítám… X %"
     QTimer             *m_resizeTimer    = nullptr;
-    bool                m_dragging       = false;
+    bool                m_dragging         = false;
+    // Příznak pro stopQuietly() — potlačí emit stopped() v onPlaybackStateChanged.
+    bool                m_stoppingQuietly  = false;
 
     // Zoom: 1.0 = přizpůsobeno oknu, >1 = zvětšeno, <1 = zmenšeno.
     double  m_zoomMultiplier = 1.0;
@@ -103,6 +105,9 @@ private:
     bool    m_firstZoomOp    = true;
     // Vizuální rotace videa v násobcích 90°.
     int     m_rotationDeg    = 0;
+
+    // Timeout pro případ zaseknutého/poškozeného souboru (15 s).
+    QTimer *m_loadTimeoutTimer = nullptr;
 };
 
 } // namespace pictureviewer

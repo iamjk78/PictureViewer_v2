@@ -73,6 +73,15 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
         positionOverlay();
     });
 
+    // Timeout pro poškozené/zaseknuté soubory — 15 s od playFile() do načtení.
+    m_loadTimeoutTimer = new QTimer(this);
+    m_loadTimeoutTimer->setSingleShot(true);
+    m_loadTimeoutTimer->setInterval(15000);
+    connect(m_loadTimeoutTimer, &QTimer::timeout, this, [this] {
+        m_bufferOverlay->hide();
+        stopPlayback();
+    });
+
     // ── Overlay pro stav bufferu ──────────────────────────────────────────────
     // Zobrazuje se přes m_view při načítání/stallování ze sítě.
     m_bufferOverlay = new QLabel(this);
@@ -198,11 +207,13 @@ void VideoPlayer::playFile(const QString &path)
     m_player->setSource(QUrl::fromLocalFile(path));
     m_player->play();
     m_playPauseBtn->setText(QStringLiteral("⏸"));
+    m_loadTimeoutTimer->start();
     setFocus();
 }
 
 void VideoPlayer::stopPlayback()
 {
+    m_loadTimeoutTimer->stop();
     m_player->stop();
     m_player->setSource(QUrl());
     emit stopped();
@@ -210,9 +221,11 @@ void VideoPlayer::stopPlayback()
 
 void VideoPlayer::stopQuietly()
 {
+    m_loadTimeoutTimer->stop();
+    m_stoppingQuietly = true;
     m_player->stop();
     m_player->setSource(QUrl());
-    // Záměrně neemujteme stopped() — volající sám přepne na jiný soubor/view.
+    m_stoppingQuietly = false;
 }
 
 bool VideoPlayer::findVideoFile(const QString &imagePath, QString &outVideoPath)
@@ -366,8 +379,11 @@ void VideoPlayer::onPlaybackStateChanged(int state)
         m_playPauseBtn->setText(QStringLiteral("▶"));
         break;
     case QMediaPlayer::StoppedState:
+        m_loadTimeoutTimer->stop();
         m_player->setSource(QUrl());
-        emit stopped();
+        if (!m_stoppingQuietly) {
+            emit stopped();
+        }
         break;
     }
 }
@@ -419,6 +435,7 @@ void VideoPlayer::onMediaStatusChanged(int status)
     }
     case QMediaPlayer::LoadedMedia:
     case QMediaPlayer::BufferedMedia:
+        m_loadTimeoutTimer->stop();
         m_bufferOverlay->hide();
         emitVideoMeta();
         break;
