@@ -123,6 +123,7 @@ private:
     void switchProfile(const QString &profileName);
     void refreshProfileMenu();
     void manageProfiles();
+    void showProfileStartupSettings();
     // Vytvoří ProfileManager, provede migraci a vrátí SettingsManager pro aktivní
     // profil. Volá se z member-initializer listu (proto vrací pointer).
     SettingsManager *createProfileAndSettings();

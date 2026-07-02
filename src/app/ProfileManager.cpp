@@ -7,8 +7,10 @@
 
 namespace {
 
-constexpr auto kActiveKey       = "General/active";
-constexpr auto kNamesKey        = "Profiles/names";
+constexpr auto kActiveKey        = "General/active";
+constexpr auto kNamesKey         = "Profiles/names";
+constexpr auto kStartupModeKey   = "Startup/mode";
+constexpr auto kStartupProfileKey= "Startup/profile";
 
 constexpr int  kMaxNameLength   = 50;
 const QString  kInvalidChars    = QStringLiteral("/\\:*?\"<>|");
@@ -69,6 +71,11 @@ void ProfileManager::load()
     m_activeProfile = ini.value(kActiveKey).toString();
     m_profiles      = ini.value(kNamesKey).toStringList();
 
+    const QString modeStr = ini.value(kStartupModeKey, QStringLiteral("remember_last")).toString();
+    m_startupMode    = (modeStr == QLatin1String("fixed")) ? StartupMode::FixedProfile
+                                                           : StartupMode::RememberLast;
+    m_startupProfile = ini.value(kStartupProfileKey).toString();
+
     // Sanity — nikdy nezůstat bez profilu.
     if (m_profiles.isEmpty()) {
         m_profiles = {QString::fromUtf8(kDefaultProfileName)};
@@ -87,6 +94,11 @@ void ProfileManager::save()
     QSettings ini(m_profilesIniPath, QSettings::IniFormat);
     ini.setValue(kActiveKey, m_activeProfile);
     ini.setValue(kNamesKey, m_profiles);
+    ini.setValue(kStartupModeKey,
+                 m_startupMode == StartupMode::FixedProfile
+                     ? QStringLiteral("fixed")
+                     : QStringLiteral("remember_last"));
+    ini.setValue(kStartupProfileKey, m_startupProfile);
     ini.sync();
 }
 
@@ -319,6 +331,18 @@ void ProfileManager::setActiveProfile(const QString &name)
     }
     m_activeProfile = name;
     QDir().mkpath(profileDir(m_activeProfile));
+    save();
+}
+
+void ProfileManager::setStartupMode(StartupMode mode)
+{
+    m_startupMode = mode;
+    save();
+}
+
+void ProfileManager::setStartupProfile(const QString &name)
+{
+    m_startupProfile = name;
     save();
 }
 

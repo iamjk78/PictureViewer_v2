@@ -8,6 +8,8 @@ class ProfileManager {
 public:
     explicit ProfileManager(const QString &appConfigDir);
 
+    enum class StartupMode { RememberLast, FixedProfile };
+
     // Přístup k profilům
     QStringList profiles() const;
     QString activeProfile() const;
@@ -24,6 +26,12 @@ public:
     bool duplicateProfile(const QString &srcName, const QString &newName);
     void setActiveProfile(const QString &name);
 
+    // Nastavení spuštění
+    StartupMode startupMode() const { return m_startupMode; }
+    QString startupProfile() const  { return m_startupProfile; }
+    void setStartupMode(StartupMode mode);
+    void setStartupProfile(const QString &name);
+
     QString lastError() const { return m_lastError; }
 
     // Migrace ze staré ploché struktury (config.ini + categories.db → profiles/Výchozí/)
@@ -37,12 +45,14 @@ private:
     bool nameIsValid(const QString &name) const;
     bool copyDir(const QString &src, const QString &dst) const;
 
-    QString m_appConfigDir;
-    QString m_profilesIniPath;
-    QString m_profilesDir;
-    QString m_activeProfile;
+    QString     m_appConfigDir;
+    QString     m_profilesIniPath;
+    QString     m_profilesDir;
+    QString     m_activeProfile;
     QStringList m_profiles;
-    QString m_lastError;
+    QString     m_lastError;
+    StartupMode m_startupMode   = StartupMode::RememberLast;
+    QString     m_startupProfile;
 };
 
 } // namespace pictureviewer

@@ -14,6 +14,7 @@
 #include "workers/VideoThumbnailWorker.hpp"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileInfo>
@@ -25,6 +26,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QStandardPaths>
 #include <QVBoxLayout>
 
@@ -56,6 +58,14 @@ SettingsManager *MainWindow::createProfileAndSettings()
     m_profileManager = new ProfileManager(appConfigDir);
     m_profileManager->migrateIfNeeded();
 
+    // Při režimu pevného profilu přepnout na něj hned při startu.
+    if (m_profileManager->startupMode() == ProfileManager::StartupMode::FixedProfile) {
+        const QString fixed = m_profileManager->startupProfile();
+        if (!fixed.isEmpty() && m_profileManager->profiles().contains(fixed)) {
+            m_profileManager->setActiveProfile(fixed);
+        }
+    }
+
     const QString active = m_profileManager->activeProfile();
     return new SettingsManager(m_profileManager->configPath(active), active);
 }
@@ -84,6 +94,7 @@ void MainWindow::refreshProfileMenu()
     }
     m_profileMenu->addSeparator();
     m_profileMenu->addAction(tr("Spravovat profily…"), this, &MainWindow::manageProfiles);
+    m_profileMenu->addAction(tr("Nastavení spuštění…"), this, &MainWindow::showProfileStartupSettings);
 }
 
 // ── Přepnutí ────────────────────────────────────────────────────────────────
@@ -312,6 +323,69 @@ void MainWindow::manageProfiles()
     });
 
     dialog.exec();
+}
+
+// ── Nastavení spuštění profilu ────────────────────────────────────────────────
+
+void MainWindow::showProfileStartupSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Nastavení spuštění profilu"));
+    dialog.setMinimumWidth(380);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(
+        tr("Který profil se má aktivovat při spuštění aplikace?"), &dialog));
+    layout->addSpacing(8);
+
+    auto *rememberRadio = new QRadioButton(
+        tr("Zapamatovat poslední použitý profil"), &dialog);
+    auto *fixedRadio = new QRadioButton(
+        tr("Vždy spustit s profilem:"), &dialog);
+
+    const bool isFixed =
+        (m_profileManager->startupMode() == ProfileManager::StartupMode::FixedProfile);
+    rememberRadio->setChecked(!isFixed);
+    fixedRadio->setChecked(isFixed);
+
+    layout->addWidget(rememberRadio);
+
+    auto *fixedRow = new QHBoxLayout();
+    fixedRow->setContentsMargins(24, 0, 0, 0);
+    fixedRow->addWidget(fixedRadio);
+    auto *profileCombo = new QComboBox(&dialog);
+    for (const QString &name : m_profileManager->profiles()) {
+        profileCombo->addItem(name);
+    }
+    const QString currentFixed = m_profileManager->startupProfile();
+    const QString preselect = (!currentFixed.isEmpty()
+                               && m_profileManager->profiles().contains(currentFixed))
+                              ? currentFixed
+                              : m_profileManager->activeProfile();
+    profileCombo->setCurrentIndex(profileCombo->findText(preselect));
+    profileCombo->setEnabled(isFixed);
+    fixedRow->addWidget(profileCombo, 1);
+    layout->addLayout(fixedRow);
+
+    connect(fixedRadio, &QRadioButton::toggled, profileCombo, &QComboBox::setEnabled);
+
+    layout->addSpacing(12);
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    if (rememberRadio->isChecked()) {
+        m_profileManager->setStartupMode(ProfileManager::StartupMode::RememberLast);
+    } else {
+        m_profileManager->setStartupMode(ProfileManager::StartupMode::FixedProfile);
+        m_profileManager->setStartupProfile(profileCombo->currentText());
+    }
 }
 
 } // namespace pictureviewer
