@@ -44,8 +44,8 @@ void MainWindow::setupToolbar()
     toolbar->setMovable(false);
     m_mainToolbar = toolbar;
 
-    m_previousImageAction->setShortcut(QKeySequence(Qt::Key_Left));
-    m_nextImageAction->setShortcut(QKeySequence(Qt::Key_Right));
+    m_previousImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Left));
+    m_nextImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Right));
     m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
     m_intervalSpinBox->setRange(1, 60);
     m_intervalSpinBox->setValue(m_slideshowController->intervalMs() / 1000);
