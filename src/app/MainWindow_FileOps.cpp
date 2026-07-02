@@ -316,12 +316,25 @@ void MainWindow::showImage(int index)
     const bool isGif   = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
 
     if (isVideo) {
+        // Pokud již přehráváme jiné video v auto-play režimu, zastavíme ho tiše.
+        if (m_centralStack->currentWidget() == m_videoPlayer
+            && m_previousImageAction->isEnabled()) {
+            m_videoPlayer->stopQuietly();
+        }
         m_currentIndex = index;
         m_thumbnailPanel->setCurrentIndex(index);
-        disableImageBrowsing();
+        // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
         m_centralStack->setCurrentWidget(m_videoPlayer);
         m_videoPlayer->playFile(path);
+        updateStatus(path);
         return;
+    }
+
+    // Přechod z videa (auto-play) zpět na obrázek/PDF.
+    if (m_centralStack->currentWidget() == m_videoPlayer
+        && m_previousImageAction->isEnabled()) {
+        m_videoPlayer->stopQuietly();
+        m_centralStack->setCurrentWidget(m_imageView);
     }
 
     if (isPdf) {

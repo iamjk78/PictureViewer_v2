@@ -363,6 +363,20 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             event->accept();
             return;
         }
+        // V auto-play režimu (procházení není zakázáno) šipky navigují mezi soubory.
+        // V G-key režimu (disableImageBrowsing) se šipky předají VideoPlayeru pro seek.
+        if (m_previousImageAction->isEnabled()) {
+            if (event->key() == Qt::Key_Left) {
+                showPreviousImage();
+                event->accept();
+                return;
+            }
+            if (event->key() == Qt::Key_Right) {
+                showNextImage();
+                event->accept();
+                return;
+            }
+        }
         event->ignore();
         return;
     }

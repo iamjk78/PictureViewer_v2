@@ -45,6 +45,9 @@ public:
     // Zastaví přehrávání a emituje stopped().
     void stopPlayback();
 
+    // Zastaví přehrávání BEZ emitu stopped() — pro navigaci na jiný soubor.
+    void stopQuietly();
+
     // Vizuální rotace o 90° (nepíše do souboru).
     void rotateLeft();
     void rotateRight();

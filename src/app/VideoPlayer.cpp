@@ -208,6 +208,13 @@ void VideoPlayer::stopPlayback()
     emit stopped();
 }
 
+void VideoPlayer::stopQuietly()
+{
+    m_player->stop();
+    m_player->setSource(QUrl());
+    // Záměrně neemujteme stopped() — volající sám přepne na jiný soubor/view.
+}
+
 bool VideoPlayer::findVideoFile(const QString &imagePath, QString &outVideoPath)
 {
     const QFileInfo imageFile(imagePath);

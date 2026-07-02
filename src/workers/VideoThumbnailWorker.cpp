@@ -37,6 +37,7 @@ VideoThumbnailWorker::~VideoThumbnailWorker() = default;
 
 void VideoThumbnailWorker::enqueue(const QStringList &paths)
 {
+    m_cancelled = false;   // reset po cancel() – bez toho processNext() hned vrátí
     m_queue.append(paths);
     if (m_state == State::Idle) {
         processNext();
