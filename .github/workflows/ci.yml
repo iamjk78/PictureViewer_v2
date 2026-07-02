@@ -54,7 +54,7 @@ jobs:
           $crtDir  = Get-ChildItem "$vsPath\VC\Redist\MSVC\*\x64\*CRT" |
                        Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
           Write-Host "CRT dir: $crtDir"
-          foreach ($dll in @("msvcp140.dll","vcruntime140.dll","vcruntime140_1.dll")) {
+          foreach ($dll in @("msvcp140.dll","msvcp140_1.dll","vcruntime140.dll","vcruntime140_1.dll")) {
               $src = Join-Path $crtDir $dll
               if (Test-Path $src) { Copy-Item $src "$deployDir\" }
           }
