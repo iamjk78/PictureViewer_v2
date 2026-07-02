@@ -35,6 +35,9 @@ constexpr auto kAskConfirmationDeleteKey = "FileHandling/ask_confirmation_delete
 constexpr auto kVlcPathKey               = "VLC/vlc_path";
 constexpr auto kVlcTimeoutMsKey          = "VLC/vlc_timeout_ms";
 
+constexpr auto kVideoVolumeKey           = "Video/volume";
+constexpr int  kDefaultVideoVolume       = 50;
+
 constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
 
 constexpr auto kUiLayoutKey              = "UI/layout";
@@ -215,6 +218,16 @@ int SettingsManager::vlcTimeoutMs() const
 void SettingsManager::setVlcTimeoutMs(int ms)
 {
     m_settings->setValue(kVlcTimeoutMsKey, ms);
+}
+
+int SettingsManager::videoVolume() const
+{
+    return m_settings->value(kVideoVolumeKey, kDefaultVideoVolume).toInt();
+}
+
+void SettingsManager::setVideoVolume(int volume)
+{
+    m_settings->setValue(kVideoVolumeKey, qBound(0, volume, 100));
 }
 
 // ── PDF Settings ─────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/ThumbnailPanel.hpp"
-#include "app/VlcController.hpp"
+#include "app/VideoPlayer.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
 
@@ -103,7 +103,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_folderScanWorker(nullptr)
     , m_imageView(new ImageView(this))
     , m_settingsManager(createProfileAndSettings())
-    , m_vlcController(new VlcController(m_settingsManager, this))
     , m_thumbnailPanel(new ThumbnailPanel(this))
     , m_thumbnailDock(nullptr)
     , m_statusLabel(new QLabel(this))
@@ -145,24 +144,60 @@ MainWindow::MainWindow(QWidget *parent)
     m_renameImageAction->setShortcut(QKeySequence("R"));
     connect(m_renameImageAction, &QAction::triggered, this, &MainWindow::renameCurrentImage);
 
-    // Connect VLC signals
-    connect(m_vlcController, &VlcController::statusChanged,
-            this, [this](VlcState state) { onVlcStatusChanged(static_cast<int>(state)); });
-    connect(m_vlcController, &VlcController::connectionLost,
-            this, &MainWindow::onVlcConnectionLost);
-    connect(m_vlcController, &VlcController::processCrashed,
-            this, &MainWindow::onVlcProcessCrashed);
-
     setWindowTitle("PictureViewer v." + QCoreApplication::applicationVersion());
     resize(1200, 750);   // výchozí velikost; přepsána níže pokud rozlišení odpovídá
     setWindowIcon(QIcon(":/icons/eye_icon.ico"));
     setAcceptDrops(true);   // přetažení složky/souboru do okna
 
-    // Centrální stack: index 0 = ImageView; v režimu Galerie se sem dočasně
-    // přesouvá ThumbnailPanel jako mřížka přes celé okno.
+    // Centrální stack:
+    //   index 0 = ImageView (obrázky)
+    //   index 1 = VideoPlayer (přehrávání videa inline)
+    // V režimu Galerie se dočasně přidá ThumbnailPanel jako index 2.
     m_centralStack = new QStackedWidget(this);
+    m_videoPlayer  = new VideoPlayer(m_settingsManager, this);
     m_centralStack->addWidget(m_imageView);
+    m_centralStack->addWidget(m_videoPlayer);
     setCentralWidget(m_centralStack);
+
+    connect(m_videoPlayer, &VideoPlayer::stopped,
+            this, &MainWindow::onVideoStopped);
+    connect(m_videoPlayer, &VideoPlayer::fullscreenToggleRequested,
+            this, &MainWindow::toggleFullscreen);
+    connect(m_videoPlayer, &VideoPlayer::videoMetadataReady,
+            this, [this](const VideoMeta &meta) {
+                const QFileInfo fi(meta.path);
+                const double mb = meta.fileSizeBytes / (1024.0 * 1024.0);
+                QString text = tr("Přehrávám: %1   |   %2 MB")
+                    .arg(fi.fileName())
+                    .arg(mb, 0, 'f', 1);
+                if (meta.resolution.isValid())
+                    text += tr("   |   %1×%2")
+                        .arg(meta.resolution.width())
+                        .arg(meta.resolution.height());
+                if (meta.durationMs > 0) {
+                    const int s = static_cast<int>(meta.durationMs / 1000);
+                    text += tr("   |   %1:%2")
+                        .arg(s / 60)
+                        .arg(s % 60, 2, 10, QChar('0'));
+                }
+                if (meta.fileSizeBytes > 0 && meta.durationMs > 0) {
+                    const double mbitps = (meta.fileSizeBytes * 8.0)
+                                          / (meta.durationMs / 1000.0)
+                                          / 1'000'000.0;
+                    text += tr("   |   %1 Mbit/s").arg(mbitps, 0, 'f', 1);
+                }
+                if (!meta.videoCodec.isEmpty())
+                    text += tr("   |   %1").arg(meta.videoCodec);
+                if (meta.videoBitRate > 0) {
+                    if (meta.videoBitRate >= 1'000'000)
+                        text += tr("   |   %1 Mb/s").arg(meta.videoBitRate / 1'000'000.0, 0, 'f', 1);
+                    else
+                        text += tr("   |   %1 kb/s").arg(meta.videoBitRate / 1000);
+                }
+                if (meta.frameRate > 0.0)
+                    text += tr("   |   %1 fps").arg(meta.frameRate, 0, 'f', 2);
+                m_statusLabel->setText(text);
+            });
 
     m_imageLoader = new ImageLoader(this);
     connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
@@ -204,16 +239,6 @@ MainWindow::MainWindow(QWidget *parent)
         const QByteArray savedState = m_settingsManager->windowState();
         if (!savedState.isEmpty()) {
             restoreState(savedState);
-        }
-    }
-
-    // Varování pokud je uložená cesta k VLC neplatná (VLC bylo odinstalováno apod.)
-    {
-        const QString savedVlc = m_settingsManager->vlcPath();
-        if (!savedVlc.isEmpty() && !VlcUtils::isValidVlcPath(savedVlc)) {
-            m_statusLabel->setText(
-                tr("VLC nebylo nalezeno na uložené cestě (%1). "
-                   "Přehrávání videa (G) vyžádá nový výběr.").arg(savedVlc));
         }
     }
 
@@ -310,52 +335,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    // ── VLC se právě spouští ─────────────────────────────────────────────────
-    // initialize() blokuje (waitForStarted, případně modální dialog výběru VLC)
-    // a po tu dobu může event loop doručit klávesy. m_vlcActive je ale stále
-    // false (nastaví se až na Running), takže by klávesy spadly do normální
-    // navigace a např. druhé 'g' by spustilo druhou inicializaci. Polkneme je.
-    if (m_vlcController->state() == VlcState::Starting) {
-        event->accept();
+    // Klávesy při přehrávání videa zpracovává VideoPlayer::keyPressEvent přímo
+    // (má focus nastavený v playFile()). Sem se dostanou jen při prohlížení obrázků.
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        event->ignore();
         return;
-    }
-
-    // ── VLC playback active ──────────────────────────────────────────────────
-    if (m_vlcActive) {
-        switch (event->key()) {
-        case Qt::Key_Escape:
-            m_vlcController->stop();
-            event->accept();
-            return;
-        case Qt::Key_Space:
-            m_vlcController->sendCommand("pause");
-            event->accept();
-            return;
-        case Qt::Key_Left:
-            m_vlcController->sendCommand("seek -10");
-            event->accept();
-            return;
-        case Qt::Key_Right:
-            m_vlcController->sendCommand("seek +10");
-            event->accept();
-            return;
-        case Qt::Key_F:
-            m_vlcController->sendCommand("f");
-            event->accept();
-            return;
-        case Qt::Key_Plus:
-        case Qt::Key_Equal:
-            m_vlcController->sendCommand("volup");
-            event->accept();
-            return;
-        case Qt::Key_Minus:
-            m_vlcController->sendCommand("voldown");
-            event->accept();
-            return;
-        default:
-            event->ignore();
-            return;
-        }
     }
 
     // ── Normal image browsing ────────────────────────────────────────────────
@@ -743,7 +727,7 @@ QString MainWindow::runSaveAsDialog(const QString &originalPath)
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (m_uiLayout == UiLayout::Immersive
-        && !m_vlcActive
+        && m_centralStack->currentWidget() == m_imageView
         && watched == m_imageView->viewport()
         && event->type() == QEvent::MouseMove) {
         showOverlayToolbar();

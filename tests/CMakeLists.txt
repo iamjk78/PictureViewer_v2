@@ -1,7 +1,7 @@
 # Jednotkové testy (Qt Test). Spuštění: ctest --test-dir build  nebo přímo
 # ./build/tests/picture_viewer_tests
 
-find_package(Qt6 REQUIRED COMPONENTS Test Sql)
+find_package(Qt6 REQUIRED COMPONENTS Test Sql Multimedia MultimediaWidgets)
 
 qt_add_executable(picture_viewer_tests
     test_core.cpp
@@ -25,6 +25,8 @@ target_link_libraries(picture_viewer_tests
         Qt6::Network
         Qt6::Pdf
         Qt6::Sql
+        Qt6::Multimedia
+        Qt6::MultimediaWidgets
 )
 
 add_test(NAME core_tests COMMAND picture_viewer_tests)

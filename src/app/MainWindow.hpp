@@ -32,7 +32,7 @@ class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
 class ThumbnailPanel;
-class VlcController;
+class VideoPlayer;
 
 class MainWindow : public QMainWindow
 {
@@ -78,10 +78,7 @@ private slots:
     void onDeleteFolder();
     void onImageDecoded(const QString &path, const QImage &image);
     void onPlayVideo();
-    void onVlcStatusChanged(int vlcState);
-    void onVlcConnectionLost();
-    void onVlcProcessCrashed();
-    void pollVlcKeys();
+    void onVideoStopped();
     void showImageContextMenu(const QPoint &globalPos);
     void onScreenshotCapture();   // zachytit výřez obrazovky a zobrazit ho v aplikaci
 
@@ -164,8 +161,6 @@ private:
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
-    bool m_vlcActive = false;
-    QTimer *m_vlcKeyPollTimer = nullptr;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
     QMap<int, QPushButton*> m_categoryButtons;  // mapa: categoryId → assignment button widget
@@ -180,7 +175,7 @@ private:
     ProfileManager *m_profileManager = nullptr;
     SettingsManager *m_settingsManager;
     CategoryManager *m_categoryManager = nullptr;
-    VlcController *m_vlcController;
+    VideoPlayer *m_videoPlayer = nullptr;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;
     UiLayout m_uiLayout = UiLayout::Classic;

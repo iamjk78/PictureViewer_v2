@@ -50,6 +50,11 @@ public:
     int vlcTimeoutMs() const;
     void setVlcTimeoutMs(int ms);
 
+    // ── Video Settings ───────────────────────────────────────────────────────
+    // Hlasitost videa v rozsahu 0–100 (default 50).
+    int videoVolume() const;
+    void setVideoVolume(int volume);
+
     // ── PDF Settings ─────────────────────────────────────────────────────────
     bool enablePdfProcessing() const;
     void setEnablePdfProcessing(bool enabled);

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.14**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.15**.
 
 ## Funkce
 
@@ -37,7 +37,9 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   max 10 složek, klik otevře složku, pravý klik odebere
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
-- Přehrávání videí přes VLC
+- **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;
+  zoom (+/-), posun myší, fullscreen, vyhledávání šipkami, hlasitost, buffer overlay;
+  metadata (velikost, rozlišení, délka, datový tok) ve status baru
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
   obrazovky se spustí v předvolené velikosti
 - **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Štítky, PDF) mají
@@ -121,8 +123,8 @@ cmake --build . --config Release --parallel
 
 | Klávesa | Akce |
 |---|---|
-| `←` / `→` | Předchozí / další obrázek |
-| `↑` / `↓` | První / poslední obrázek |
+| `←` / `→` | Předchozí / další obrázek; seek ±10 % (ve videu) |
+| `↑` / `↓` | První / poslední obrázek; začátek / stop (ve videu) |
 | `PageUp` / `PageDown` | Předchozí / následující stránka PDF |
 | `S` | Spustit / zastavit slideshow |
 | `F` | Celá obrazovka |
@@ -130,8 +132,9 @@ cmake --build . --config Release --parallel
 | `R` | Přejmenovat soubor |
 | `F5` | Znovu načíst složku |
 | `[` / `L` , `]` | Otočit doleva / doprava |
-| `G` | Přehrát video ve VLC |
-| `+` / `-` | Zoom |
+| `V` | Spustit video |
+| `Space` | Přehrát / pauza (ve videu) |
+| `+` / `-` | Zoom (obrázky i video) |
 | `0` / `Space` | Originální velikost / přizpůsobit oknu |
 | `Esc` | Konec fullscreenu / zrušit ořez |
 

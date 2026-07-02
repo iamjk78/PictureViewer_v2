@@ -1,4 +1,4 @@
-// MainWindow_Toolbar.cpp — toolbars, VLC, PDF, favorites, sort
+// MainWindow_Toolbar.cpp — toolbars, video, PDF, favorites, sort
 // QPushButton must be included BEFORE MainWindow.hpp to resolve the
 // elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
 #include <QPushButton>
@@ -9,7 +9,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
-#include "app/VlcController.hpp"
+#include "app/VideoPlayer.hpp"
 
 #include <QAction>
 #include <QActionGroup>
@@ -30,14 +30,11 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QStyle>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
 
 namespace pictureviewer {
 
@@ -565,91 +562,22 @@ void MainWindow::onPlayVideo()
     const QString imagePath = m_imagePaths.at(m_currentIndex);
     QString videoPath;
 
-    if (!VlcController::findVideoFile(imagePath, videoPath)) {
+    if (!VideoPlayer::findVideoFile(imagePath, videoPath)) {
         m_statusLabel->setText(tr("Video se stejným názvem neexistuje."));
         return;
     }
 
-    QString errorMsg;
-    if (!m_vlcController->initialize(videoPath, errorMsg)) {
-        QMessageBox::critical(this, tr("Chyba VLC"), errorMsg);
-        m_statusLabel->setText(tr("Nepodařilo se spustit VLC."));
-        return;
-    }
+    disableImageBrowsing();
+    m_centralStack->setCurrentWidget(m_videoPlayer);
+    m_videoPlayer->playFile(videoPath);
+    m_statusLabel->setText(tr("Přehrávám: %1").arg(QFileInfo(videoPath).fileName()));
 }
 
-void MainWindow::onVlcStatusChanged(int vlcState)
+void MainWindow::onVideoStopped()
 {
-    const auto state = static_cast<VlcState>(vlcState);
-
-    switch (state) {
-    case VlcState::Running:
-        m_vlcActive = true;
-        disableImageBrowsing();
-        applyGrayscaleEffect(true);
-        updateVideoMetadata(m_imagePaths.at(m_currentIndex));
-        if (!m_vlcKeyPollTimer) {
-            m_vlcKeyPollTimer = new QTimer(this);
-            connect(m_vlcKeyPollTimer, &QTimer::timeout, this, &MainWindow::pollVlcKeys);
-        }
-        m_vlcKeyPollTimer->start(80);
-        break;
-
-    case VlcState::Stopped:
-    case VlcState::Error:
-        m_vlcActive = false;
-        if (m_vlcKeyPollTimer)
-            m_vlcKeyPollTimer->stop();
-        enableImageBrowsing();
-        applyGrayscaleEffect(false);
-        m_statusLabel->setText(tr("Vyber složku s obrázky."));
-        break;
-
-    default:
-        break;
-    }
-}
-
-void MainWindow::onVlcConnectionLost()
-{
-    QMessageBox::warning(this, tr("Chyba"), tr("Spojení s VLC bylo ztraceno."));
-    m_vlcActive = false;
+    m_centralStack->setCurrentWidget(m_imageView);
     enableImageBrowsing();
-    applyGrayscaleEffect(false);
-}
-
-void MainWindow::onVlcProcessCrashed()
-{
-    const QString logPath = m_vlcController->lastLogPath();
-    QString msg = tr("VLC se nečekaně ukončil.");
-    if (!logPath.isEmpty())
-        msg += tr("\n\nDiagnostický log:\n%1").arg(logPath);
-    QMessageBox::critical(this, tr("Chyba VLC"), msg);
-    m_vlcActive = false;
-    enableImageBrowsing();
-    applyGrayscaleEffect(false);
-}
-
-void MainWindow::pollVlcKeys()
-{
-#ifdef Q_OS_WIN
-    auto pressed = [](int vk) { return (GetAsyncKeyState(vk) & 0x8001) == 0x8001; };
-
-    if (pressed(VK_ESCAPE)) {
-        m_vlcController->stop();
-        return;
-    }
-    if (pressed(VK_SPACE))
-        m_vlcController->sendCommand("pause");
-    if (pressed(VK_LEFT))
-        m_vlcController->sendCommand("seek -10");
-    if (pressed(VK_RIGHT))
-        m_vlcController->sendCommand("seek +10");
-    if (pressed(VK_ADD) || pressed(0xBB))
-        m_vlcController->sendCommand("volup");
-    if (pressed(VK_SUBTRACT) || pressed(0xBD))
-        m_vlcController->sendCommand("voldown");
-#endif
+    m_statusLabel->setText(tr("Přehrávání ukončeno."));
 }
 
 void MainWindow::disableImageBrowsing()

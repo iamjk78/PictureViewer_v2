@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PictureViewer VERSION 0.14 LANGUAGES CXX)
+project(PictureViewer VERSION 0.15 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,7 +18,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Widgets Network Pdf Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Widgets Network Pdf Sql Multimedia MultimediaWidgets)
 
 # Build subdirectories for core, app, and workers
 add_subdirectory(src)

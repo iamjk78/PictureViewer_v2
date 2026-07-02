@@ -33,8 +33,8 @@ set(APP_SOURCES
     SettingsManager.cpp
     ThumbnailCacheManager.hpp
     ThumbnailCacheManager.cpp
-    VlcController.hpp
-    VlcController.cpp
+    VideoPlayer.hpp
+    VideoPlayer.cpp
 )
 
 if(APPLE)
@@ -61,4 +61,6 @@ target_link_libraries(picture_viewer_app
         Qt6::Widgets
         Qt6::Network
         Qt6::Sql
+        Qt6::Multimedia
+        Qt6::MultimediaWidgets
 )
