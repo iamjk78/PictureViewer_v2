@@ -45,3 +45,23 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
+
+      # Windows: zkopírovat exe + Qt DLL pomocí windeployqt, zabalit do ZIP.
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $deployDir = "dist\PictureViewer"
+          New-Item -ItemType Directory -Force -Path $deployDir | Out-Null
+          Copy-Item "build\Release\PictureViewer.exe" "$deployDir\"
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --no-translations `
+              --no-system-d3d-compiler "$deployDir\PictureViewer.exe"
+          Compress-Archive -Path $deployDir -DestinationPath "PictureViewer-Windows.zip"
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PictureViewer-Windows
+          path: PictureViewer-Windows.zip
+          retention-days: 30
