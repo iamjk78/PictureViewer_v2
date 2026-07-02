@@ -85,7 +85,8 @@ SettingsManager::SettingsManager()
 {
 }
 
-SettingsManager::SettingsManager(const QString &path)
+SettingsManager::SettingsManager(const QString &path, const QString &profileName)
+    : m_profileName(profileName)
 {
     // Ensure the directory exists before handing the path to QSettings.
     QDir().mkpath(QFileInfo(path).absolutePath());
@@ -476,7 +477,11 @@ QString SettingsManager::effectiveThumbnailCacheDir() const
     if (root.isEmpty()) {
         root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     }
-    return root + QStringLiteral("/PictureViewerThumbs");
+    QString dir = root + QStringLiteral("/PictureViewerThumbs");
+    if (!m_profileName.isEmpty()) {
+        dir += QLatin1Char('/') + m_profileName;
+    }
+    return dir;
 }
 
 } // namespace pictureviewer

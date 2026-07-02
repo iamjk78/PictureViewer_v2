@@ -14,8 +14,11 @@ class SettingsManager
 {
 public:
     SettingsManager();
-    // Nový — pro profily: explicitní cesta k config.ini
-    explicit SettingsManager(const QString &configFilePath);
+    // Pro profily: explicitní cesta k config.ini + název profilu.
+    // profileName se připojí jako podsložka k effectiveThumbnailCacheDir(),
+    // takže každý profil má vlastní cache miniatur.
+    explicit SettingsManager(const QString &configFilePath,
+                             const QString &profileName = QString());
     ~SettingsManager();
 
     // Returns the absolute path to config.ini (useful for diagnostics).
@@ -126,6 +129,7 @@ public:
 
 private:
     QSettings *m_settings;
+    QString    m_profileName;
 };
 
 } // namespace pictureviewer

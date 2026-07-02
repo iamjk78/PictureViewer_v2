@@ -9,7 +9,9 @@
 #include "app/CategoryManager.hpp"
 #include "app/ImageView.hpp"
 #include "app/SettingsManager.hpp"
+#include "app/ThumbnailPanel.hpp"
 #include "workers/FolderScanWorker.hpp"
+#include "workers/VideoThumbnailWorker.hpp"
 
 #include <QApplication>
 #include <QDialog>
@@ -55,7 +57,7 @@ SettingsManager *MainWindow::createProfileAndSettings()
     m_profileManager->migrateIfNeeded();
 
     const QString active = m_profileManager->activeProfile();
-    return new SettingsManager(m_profileManager->configPath(active));
+    return new SettingsManager(m_profileManager->configPath(active), active);
 }
 
 // ── Menu ──────────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ void MainWindow::switchProfile(const QString &profileName)
     // Znovu vytvořit SettingsManager.
     delete m_settingsManager;
     m_settingsManager = new SettingsManager(
-        m_profileManager->configPath(profileName));
+        m_profileManager->configPath(profileName), profileName);
 
     // Znovu vytvořit CategoryManager (destruktor uzavře a odregistruje starou DB).
     delete m_categoryManager;
@@ -133,6 +135,21 @@ void MainWindow::switchProfile(const QString &profileName)
     updateFavoritesMenu();
     updateSortButtonText();
     applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
+
+    // Aktualizovat cache miniatur pro nový profil
+    m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
+                                   m_settingsManager->effectiveThumbnailCacheDir());
+    if (m_videoThumbnailWorker) {
+        m_videoThumbnailWorker->cancel();
+        delete m_videoThumbnailWorker;
+        m_videoThumbnailWorker = new VideoThumbnailWorker(
+            m_settingsManager->thumbnailCacheEnabled(),
+            m_settingsManager->effectiveThumbnailCacheDir(),
+            this);
+        connect(m_videoThumbnailWorker, &VideoThumbnailWorker::thumbnailReady,
+                m_thumbnailPanel, &ThumbnailPanel::setVideoThumbnail);
+    }
+
     restoreLastFolder();
 
     refreshProfileMenu();
@@ -271,7 +288,7 @@ void MainWindow::manageProfiles()
                 const QString newActive = m_profileManager->activeProfile();
                 delete m_settingsManager;
                 m_settingsManager = new SettingsManager(
-                    m_profileManager->configPath(newActive));
+                    m_profileManager->configPath(newActive), newActive);
                 delete m_categoryManager;
                 m_categoryManager = new CategoryManager(
                     m_profileManager->dbPath(newActive));
