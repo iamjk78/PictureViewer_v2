@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15, windows-latest]
+        os: [windows-latest]
 
     steps:
       - name: Checkout
@@ -28,15 +28,6 @@ jobs:
           modules: 'qtpdf qtmultimedia'
           cache: true
 
-      # Linux: build Qt Widgets/Gui potřebuje systémové GL/xcb knihovny.
-      - name: Install Linux system deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgl1-mesa-dev libxkbcommon-dev libvulkan-dev \
-            libxcb-cursor0 libxcb-xinerama0
-
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -46,9 +37,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
-      # Windows: zkopírovat exe + Qt DLL pomocí windeployqt, zabalit do ZIP.
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
+      # Zkopírovat exe + Qt DLL pomocí windeployqt, zabalit do ZIP.
+      - name: Package
         shell: pwsh
         run: |
           $deployDir = "dist\PictureViewer"
@@ -58,8 +48,7 @@ jobs:
               --no-system-d3d-compiler --compiler-runtime "$deployDir\PictureViewer.exe"
           Compress-Archive -Path $deployDir -DestinationPath "PictureViewer-Windows.zip"
 
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PictureViewer-Windows
