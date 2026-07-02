@@ -25,7 +25,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.1'
-          modules: 'qtpdf'
+          modules: 'qtpdf qtmultimedia'
           cache: true
 
       # Linux: build Qt Widgets/Gui potřebuje systémové GL/xcb knihovny.
