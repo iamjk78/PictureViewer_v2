@@ -138,12 +138,12 @@ void MainWindow::setupToolbar()
     m_rotateLeftAction = new QAction(QStringLiteral("⟲"), this);
     m_rotateLeftAction->setToolTip(tr("Otočit doleva ([ nebo L)"));
     m_rotateLeftAction->setShortcuts({QKeySequence(Qt::Key_BracketLeft), QKeySequence(Qt::Key_L)});
-    connect(m_rotateLeftAction, &QAction::triggered, m_imageView, &ImageView::rotateLeft);
+    connect(m_rotateLeftAction, &QAction::triggered, this, &MainWindow::onRotateLeft);
 
     m_rotateRightAction = new QAction(QStringLiteral("⟳"), this);
     m_rotateRightAction->setToolTip(tr("Otočit doprava (])"));
     m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
-    connect(m_rotateRightAction, &QAction::triggered, m_imageView, &ImageView::rotateRight);
+    connect(m_rotateRightAction, &QAction::triggered, this, &MainWindow::onRotateRight);
 
     toolbar->addAction(m_renameImageAction);
     toolbar->addSeparator();

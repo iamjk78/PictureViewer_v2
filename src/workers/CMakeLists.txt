@@ -3,6 +3,8 @@ set(WORKERS_SOURCES
     FolderScanWorker.cpp
     ThumbnailWorker.hpp
     ThumbnailWorker.cpp
+    VideoThumbnailWorker.hpp
+    VideoThumbnailWorker.cpp
 )
 
 add_library(picture_viewer_workers OBJECT ${WORKERS_SOURCES})
@@ -17,4 +19,5 @@ target_link_libraries(picture_viewer_workers
         Qt6::Core
         Qt6::Gui
         Qt6::Pdf
+        Qt6::Multimedia
 )

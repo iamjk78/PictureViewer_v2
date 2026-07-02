@@ -36,6 +36,9 @@ public:
     void updateImagePath(const QString &oldPath, const QString &newPath);
     QIcon iconAt(int index) const;   // náhled pro placeholder při async načítání
 
+    // Aktualizuje miniaturu videa (voláno z VideoThumbnailWorker přes MainWindow).
+    void setVideoThumbnail(const QString &path, const QImage &image);
+
     // Cancel the running worker and disconnect all its signals.
     // Must be called before QThreadPool::waitForDone() so the worker cannot
     // emit into a widget that is about to be destroyed.

@@ -10,8 +10,10 @@
 #include "app/MetadataPanel.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/VideoPlayer.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
+#include "workers/VideoThumbnailWorker.hpp"
 
 #include <QApplication>
 #include <QAbstractButton>
@@ -109,7 +111,8 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event)
             continue;
         }
         const QFileInfo info(url.toLocalFile());
-        if (info.isDir() || isSupportedFileExtension("." + info.suffix())) {
+        const QString suf = "." + info.suffix();
+        if (info.isDir() || isSupportedFileExtension(suf) || isVideoFile(suf)) {
             event->acceptProposedAction();
             return;
         }
@@ -133,7 +136,8 @@ void MainWindow::dropEvent(QDropEvent *event)
             event->acceptProposedAction();
             return;
         }
-        if (isSupportedFileExtension("." + info.suffix())) {
+        const QString suf2 = "." + info.suffix();
+        if (isSupportedFileExtension(suf2) || isVideoFile(suf2)) {
             openFile(localPath);
             event->acceptProposedAction();
             return;
@@ -171,6 +175,20 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     }
 
     m_thumbnailPanel->loadImages(m_imagePaths);
+
+    // Spustit extrakci video miniatur (asynchronně, na hlavním vlákně přes QMediaPlayer)
+    if (m_videoThumbnailWorker) {
+        m_videoThumbnailWorker->cancel();
+        QStringList videoPaths;
+        for (const QString &p : m_imagePaths) {
+            if (isVideoFile(QStringLiteral(".") + QFileInfo(p).suffix())) {
+                videoPaths.append(p);
+            }
+        }
+        if (!videoPaths.isEmpty()) {
+            m_videoThumbnailWorker->enqueue(videoPaths);
+        }
+    }
 
     int index = 0;
     if (!m_requestedFile.isEmpty()) {
@@ -293,8 +311,18 @@ void MainWindow::showImage(int index)
 #endif
 
     const QString suffix = "." + QFileInfo(path).suffix();
-    const bool isPdf = isPdfFile(suffix);
-    const bool isGif = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
+    const bool isPdf   = isPdfFile(suffix);
+    const bool isVideo = isVideoFile(suffix);
+    const bool isGif   = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
+
+    if (isVideo) {
+        m_currentIndex = index;
+        m_thumbnailPanel->setCurrentIndex(index);
+        disableImageBrowsing();
+        m_centralStack->setCurrentWidget(m_videoPlayer);
+        m_videoPlayer->playFile(path);
+        return;
+    }
 
     if (isPdf) {
         m_pendingDisplayPath.clear();

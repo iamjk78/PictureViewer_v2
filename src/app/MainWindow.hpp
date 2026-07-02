@@ -33,6 +33,7 @@ class SettingsManager;
 class SlideshowController;
 class ThumbnailPanel;
 class VideoPlayer;
+class VideoThumbnailWorker;
 
 class MainWindow : public QMainWindow
 {
@@ -64,6 +65,10 @@ private slots:
     void onEnableMoveToDeleteToggled(bool checked);
     void onAskConfirmationToggled(bool checked);
     void onEnablePdfProcessingToggled(bool checked);
+    void onEnableImagesToggled(bool checked);
+    void onEnableVideosToggled(bool checked);
+    void onRotateLeft();
+    void onRotateRight();
     void onScanComplete(int generation, const QStringList &paths);
     void onScanError(int generation, const QString &error);
     void onScanFinished(int generation);
@@ -176,6 +181,7 @@ private:
     SettingsManager *m_settingsManager;
     CategoryManager *m_categoryManager = nullptr;
     VideoPlayer *m_videoPlayer = nullptr;
+    VideoThumbnailWorker *m_videoThumbnailWorker = nullptr;
     ThumbnailPanel *m_thumbnailPanel;
     QDockWidget *m_thumbnailDock;
     UiLayout m_uiLayout = UiLayout::Classic;
@@ -212,6 +218,8 @@ private:
     QAction *m_enableMoveToDeleteAction;
     QAction *m_askConfirmationAction;
     QAction *m_enablePdfProcessingAction;
+    QAction *m_enableImagesAction = nullptr;
+    QAction *m_enableVideosAction = nullptr;
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
     QAction *m_recycleAction = nullptr;

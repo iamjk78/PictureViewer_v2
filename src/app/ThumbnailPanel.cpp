@@ -1,7 +1,9 @@
 #include "app/ThumbnailPanel.hpp"
 
+#include "core/ImageFormats.hpp"
 #include "workers/ThumbnailWorker.hpp"
 
+#include <QFileInfo>
 #include <QHash>
 #include <QIcon>
 #include <QImage>
@@ -9,6 +11,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSize>
+#include <QStyle>
 #include <QStyledItemDelegate>
 #include <QKeyEvent>
 #include <QResizeEvent>
@@ -167,18 +170,27 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     clear();
     m_pathToItem.clear();
 
+    QStringList imagePaths;
     for (const QString &path : paths) {
         auto *item = new QListWidgetItem();
         item->setToolTip(path.section('/', -1));
         item->setData(Qt::UserRole, path);
         item->setTextAlignment(Qt::AlignCenter);
-        // Nastavit fixní velikost položky - zabraňuje přesahu portrait obrázků
         item->setSizeHint(QSize(m_thumbSize, m_thumbSize));
+
+        const QString suffix = QStringLiteral(".") + QFileInfo(path).suffix();
+        if (isVideoFile(suffix)) {
+            // Video placeholder: standardní ikona přehrávání
+            item->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        } else {
+            imagePaths.append(path);
+        }
+
         addItem(item);
         m_pathToItem[path] = item;
     }
 
-    startThumbnailLoader(paths);
+    startThumbnailLoader(imagePaths);
 }
 
 void ThumbnailPanel::setCurrentIndex(int index)
@@ -253,6 +265,17 @@ void ThumbnailPanel::onThumbnailsFinished(int generation)
     }
 
     m_currentWorker = nullptr;
+}
+
+void ThumbnailPanel::setVideoThumbnail(const QString &path, const QImage &image)
+{
+    if (image.isNull()) {
+        return;
+    }
+    auto it = m_pathToItem.find(path);
+    if (it != m_pathToItem.end()) {
+        (*it)->setIcon(QIcon(QPixmap::fromImage(image)));
+    }
 }
 
 void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)

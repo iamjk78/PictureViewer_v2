@@ -191,7 +191,9 @@ VideoPlayer::~VideoPlayer() = default;
 
 void VideoPlayer::playFile(const QString &path)
 {
-    m_currentPath = path;
+    m_currentPath  = path;
+    m_rotationDeg  = 0;
+    m_videoItem->setRotation(0);
     resetZoom();
     m_player->setSource(QUrl::fromLocalFile(path));
     m_player->play();
@@ -315,6 +317,20 @@ void VideoPlayer::resetZoom()
     m_zoomMultiplier = 1.0;
     m_firstZoomOp    = true;
     m_view->setDragMode(QGraphicsView::NoDrag);
+}
+
+void VideoPlayer::rotateLeft()
+{
+    m_rotationDeg = (m_rotationDeg - 90 + 360) % 360;
+    m_videoItem->setRotation(m_rotationDeg);
+    applyZoom();
+}
+
+void VideoPlayer::rotateRight()
+{
+    m_rotationDeg = (m_rotationDeg + 90) % 360;
+    m_videoItem->setRotation(m_rotationDeg);
+    applyZoom();
 }
 
 // ── Privátní sloty ───────────────────────────────────────────────────────────

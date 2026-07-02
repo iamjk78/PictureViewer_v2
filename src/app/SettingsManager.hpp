@@ -55,6 +55,12 @@ public:
     int videoVolume() const;
     void setVideoVolume(int volume);
 
+    // ── Processing Settings ───────────────────────────────────────────────────
+    bool enableImages() const;
+    void setEnableImages(bool enabled);
+    bool enableVideos() const;
+    void setEnableVideos(bool enabled);
+
     // ── PDF Settings ─────────────────────────────────────────────────────────
     bool enablePdfProcessing() const;
     void setEnablePdfProcessing(bool enabled);

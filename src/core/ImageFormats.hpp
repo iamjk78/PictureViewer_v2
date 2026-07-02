@@ -60,4 +60,20 @@ inline bool isPdfFile(const QString &suffix)
     return isSupportedDocumentExtension(suffix);
 }
 
+// Video formáty kompatibilní s Qt Multimedia
+inline const QStringList &supportedVideoExtensions()
+{
+    static const QStringList extensions = {
+        ".mp4", ".mkv", ".avi", ".mov", ".ts", ".mpg", ".mpeg",
+        ".webm", ".wmv", ".m4v", ".flv", ".f4v", ".m2ts", ".mts",
+        ".3gp", ".3g2", ".divx", ".asf",
+    };
+    return extensions;
+}
+
+inline bool isVideoFile(const QString &suffix)
+{
+    return supportedVideoExtensions().contains(suffix.toLower());
+}
+
 } // namespace pictureviewer

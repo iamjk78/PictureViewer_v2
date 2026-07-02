@@ -38,6 +38,8 @@ constexpr auto kVlcTimeoutMsKey          = "VLC/vlc_timeout_ms";
 constexpr auto kVideoVolumeKey           = "Video/volume";
 constexpr int  kDefaultVideoVolume       = 50;
 
+constexpr auto kEnableImagesKey          = "Processing/enable_images";
+constexpr auto kEnableVideosKey          = "Processing/enable_videos";
 constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
 
 constexpr auto kUiLayoutKey              = "UI/layout";
@@ -228,6 +230,28 @@ int SettingsManager::videoVolume() const
 void SettingsManager::setVideoVolume(int volume)
 {
     m_settings->setValue(kVideoVolumeKey, qBound(0, volume, 100));
+}
+
+// ── Processing Settings ───────────────────────────────────────────────────────
+
+bool SettingsManager::enableImages() const
+{
+    return m_settings->value(kEnableImagesKey, true).toBool();
+}
+
+void SettingsManager::setEnableImages(bool enabled)
+{
+    m_settings->setValue(kEnableImagesKey, enabled);
+}
+
+bool SettingsManager::enableVideos() const
+{
+    return m_settings->value(kEnableVideosKey, false).toBool();
+}
+
+void SettingsManager::setEnableVideos(bool enabled)
+{
+    m_settings->setValue(kEnableVideosKey, enabled);
 }
 
 // ── PDF Settings ─────────────────────────────────────────────────────────────

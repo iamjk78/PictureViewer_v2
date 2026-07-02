@@ -45,6 +45,10 @@ public:
     // Zastaví přehrávání a emituje stopped().
     void stopPlayback();
 
+    // Vizuální rotace o 90° (nepíše do souboru).
+    void rotateLeft();
+    void rotateRight();
+
     // Hledá video se stejným názvem jako imagePath (jiná přípona, stejný adresář).
     static bool findVideoFile(const QString &imagePath, QString &outVideoPath);
 
@@ -94,6 +98,8 @@ private:
     double  m_zoomMultiplier = 1.0;
     // Po prvním stisku +/- je krok 5 %, každý další 10 %.
     bool    m_firstZoomOp    = true;
+    // Vizuální rotace videa v násobcích 90°.
+    int     m_rotationDeg    = 0;
 };
 
 } // namespace pictureviewer

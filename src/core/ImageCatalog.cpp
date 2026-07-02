@@ -17,7 +17,8 @@ namespace pictureviewer {
 QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
                                      SortKey sortKey, bool ascending,
                                      const QList<int> &categoryIds,
-                                     CategoryManager *categoryManager) const
+                                     CategoryManager *categoryManager,
+                                     bool includeImages, bool includeVideos) const
 {
     const QDir directory(folderPath);
     if (!directory.exists()) {
@@ -43,7 +44,7 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
     QFileInfoList supported;
     supported.reserve(entries.size());
     for (const QFileInfo &entry : entries) {
-        if (!isSupported(entry, includePdf)) {
+        if (!isSupported(entry, includePdf, includeImages, includeVideos)) {
             continue;
         }
 
@@ -101,7 +102,10 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
     return files;
 }
 
-bool ImageCatalog::isSupported(const QFileInfo &fileInfo, bool includePdf) const
+bool ImageCatalog::isSupported(const QFileInfo &fileInfo,
+                               bool includePdf,
+                               bool includeImages,
+                               bool includeVideos) const
 {
     if (!fileInfo.isFile()) {
         return false;
@@ -109,11 +113,15 @@ bool ImageCatalog::isSupported(const QFileInfo &fileInfo, bool includePdf) const
 
     const QString suffix = QStringLiteral(".") + fileInfo.suffix();
 
-    if (isSupportedImageExtension(suffix)) {
+    if (includeImages && isSupportedImageExtension(suffix)) {
         return true;
     }
 
     if (includePdf && isSupportedDocumentExtension(suffix)) {
+        return true;
+    }
+
+    if (includeVideos && isVideoFile(suffix)) {
         return true;
     }
 

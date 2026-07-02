@@ -13,6 +13,7 @@
 #include "app/VideoPlayer.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
+#include "workers/VideoThumbnailWorker.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -199,6 +200,14 @@ MainWindow::MainWindow(QWidget *parent)
                 m_statusLabel->setText(text);
             });
 
+    // VideoThumbnailWorker žije na hlavním vlákně — QMediaPlayer potřebuje event loop.
+    m_videoThumbnailWorker = new VideoThumbnailWorker(
+        m_settingsManager->thumbnailCacheEnabled(),
+        m_settingsManager->effectiveThumbnailCacheDir(),
+        this);
+    connect(m_videoThumbnailWorker, &VideoThumbnailWorker::thumbnailReady,
+            m_thumbnailPanel, &ThumbnailPanel::setVideoThumbnail);
+
     m_imageLoader = new ImageLoader(this);
     connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
     connect(m_imageView, &ImageView::contextMenuRequested, this, &MainWindow::showImageContextMenu);
@@ -338,6 +347,22 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     // Klávesy při přehrávání videa zpracovává VideoPlayer::keyPressEvent přímo
     // (má focus nastavený v playFile()). Sem se dostanou jen při prohlížení obrázků.
     if (m_centralStack->currentWidget() == m_videoPlayer) {
+        // Mazání a přejmenování fungují i při přehrávání videa
+        if (event->text() == 'd' || event->text() == 'D') {
+            deleteOrMoveCurrentImage();
+            event->accept();
+            return;
+        }
+        if (event->text() == 'r' || event->text() == 'R') {
+            renameCurrentImage();
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Delete) {
+            deleteOrMoveCurrentImage();
+            event->accept();
+            return;
+        }
         event->ignore();
         return;
     }
@@ -406,9 +431,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     default:
-        // Handle 'g' and 'G' key for play video
+        // Handle 'g' and 'G' key for play video (only when images are shown)
         if (event->text() == 'g' || event->text() == 'G') {
-            onPlayVideo();
+            if (m_settingsManager->enableImages()) {
+                onPlayVideo();
+            }
             event->accept();
             return;
         }
@@ -537,10 +564,44 @@ void MainWindow::onEnablePdfProcessingToggled(bool checked)
 {
     m_settingsManager->setEnablePdfProcessing(checked);
 
-    // Reload current folder to show/hide PDF files based on the new setting
-    if (!m_imagePaths.isEmpty()) {
-        const QString currentFolder = m_imagePaths.first().section('/', 0, -2);
-        loadFolder(currentFolder);
+    if (!m_currentFolder.isEmpty()) {
+        loadFolder(m_currentFolder);
+    }
+}
+
+void MainWindow::onEnableImagesToggled(bool checked)
+{
+    m_settingsManager->setEnableImages(checked);
+
+    if (!m_currentFolder.isEmpty()) {
+        loadFolder(m_currentFolder);
+    }
+}
+
+void MainWindow::onEnableVideosToggled(bool checked)
+{
+    m_settingsManager->setEnableVideos(checked);
+
+    if (!m_currentFolder.isEmpty()) {
+        loadFolder(m_currentFolder);
+    }
+}
+
+void MainWindow::onRotateLeft()
+{
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        m_videoPlayer->rotateLeft();
+    } else {
+        m_imageView->rotateLeft();
+    }
+}
+
+void MainWindow::onRotateRight()
+{
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        m_videoPlayer->rotateRight();
+    } else {
+        m_imageView->rotateRight();
     }
 }
 
@@ -902,6 +963,18 @@ void MainWindow::setupMenu()
     });
 
     settingsMenu->addSeparator();
+
+    m_enableImagesAction = new QAction(tr("Zpracovávat obrázky"), this);
+    m_enableImagesAction->setCheckable(true);
+    m_enableImagesAction->setChecked(m_settingsManager->enableImages());
+    connect(m_enableImagesAction, &QAction::toggled, this, &MainWindow::onEnableImagesToggled);
+    settingsMenu->addAction(m_enableImagesAction);
+
+    m_enableVideosAction = new QAction(tr("Zpracovávat videa"), this);
+    m_enableVideosAction->setCheckable(true);
+    m_enableVideosAction->setChecked(m_settingsManager->enableVideos());
+    connect(m_enableVideosAction, &QAction::toggled, this, &MainWindow::onEnableVideosToggled);
+    settingsMenu->addAction(m_enableVideosAction);
 
     m_enablePdfProcessingAction->setCheckable(true);
     m_enablePdfProcessingAction->setChecked(m_settingsManager->enablePdfProcessing());

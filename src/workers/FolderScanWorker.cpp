@@ -31,11 +31,15 @@ void FolderScanWorker::run()
 
     try {
         ImageCatalog catalog;
-        const bool includePdf = m_settings ? m_settings->enablePdfProcessing() : true;
-        const SortKey sortKey = m_settings
+        const bool includePdf    = m_settings ? m_settings->enablePdfProcessing() : true;
+        const bool includeImages = m_settings ? m_settings->enableImages() : true;
+        const bool includeVideos = m_settings ? m_settings->enableVideos() : false;
+        const SortKey sortKey    = m_settings
             ? static_cast<SortKey>(m_settings->sortKey()) : SortKey::Name;
-        const bool ascending = m_settings ? m_settings->sortAscending() : true;
-        const QStringList paths = catalog.loadFolder(m_folderPath, includePdf, sortKey, ascending);
+        const bool ascending     = m_settings ? m_settings->sortAscending() : true;
+        const QStringList paths  = catalog.loadFolder(
+            m_folderPath, includePdf, sortKey, ascending, {}, nullptr,
+            includeImages, includeVideos);
         if (!m_cancelled.load()) {
             emit scanComplete(m_generation, paths);
         }

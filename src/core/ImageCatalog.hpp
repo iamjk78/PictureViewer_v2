@@ -16,7 +16,7 @@ enum class SortKey {
 class ImageCatalog
 {
 public:
-    // loadFolder: if includePdf=true, both images and PDFs are included.
+    // loadFolder: řídí co se načítá pomocí bool přepínačů.
     // sortKey + ascending určují pořadí výsledného seznamu.
     // categoryIds: filtrování podle kategorií (AND logika). Prázdný = bez filtrování.
     // categoryManager: potřebný pro filtrování; pokud nullptr, filtrování se přeskočí.
@@ -25,8 +25,13 @@ public:
                            SortKey sortKey = SortKey::Name,
                            bool ascending = true,
                            const QList<int> &categoryIds = {},
-                           class CategoryManager *categoryManager = nullptr) const;
-    bool isSupported(const QFileInfo &fileInfo, bool includePdf = true) const;
+                           class CategoryManager *categoryManager = nullptr,
+                           bool includeImages = true,
+                           bool includeVideos = false) const;
+    bool isSupported(const QFileInfo &fileInfo,
+                     bool includePdf = true,
+                     bool includeImages = true,
+                     bool includeVideos = false) const;
 };
 
 } // namespace pictureviewer
