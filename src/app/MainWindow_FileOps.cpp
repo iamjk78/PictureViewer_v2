@@ -61,7 +61,7 @@ namespace {
 // videa proto může selhat na zamčený soubor. Mezi pokusy zpracujeme události
 // (bez uživatelského vstupu), aby backend stihl handle uvolnit.
 template <typename Op>
-bool tryWithRetry(Op op, int attempts = 4, int delayMs = 150)
+bool tryWithRetry(Op op, int attempts = 8, int delayMs = 250)
 {
     for (int i = 0; i < attempts; ++i) {
         if (op()) {
@@ -619,7 +619,18 @@ void MainWindow::moveImageToDeleteFolder()
         updateRecycleButtonState();
         removeImageFromList(m_currentIndex);
     } else {
-        m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete."));
+        // Diagnostika: co se stalo?
+        QString reason;
+        if (!QFile::exists(currentPath)) {
+            reason = tr("soubor již neexistuje");
+        } else if (QFile::exists(newPath)) {
+            reason = tr("cílové umístění už existuje — zkuste ručně smazat Delete složku");
+        } else if (!QFileInfo(folderPath).isWritable()) {
+            reason = tr("složka nemá práva pro zápis");
+        } else {
+            reason = tr("soubor je stále zamčený — zkuste zavřít video a zkusit znovu");
+        }
+        m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete: %1").arg(reason));
     }
 }
 
