@@ -566,19 +566,19 @@ void MainWindow::moveImageToDeleteFolder()
     }
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    const QString folderPath = currentPath.section('/', 0, -2);
-    const QString deleteFolderPath = folderPath + "/Delete";
+    const QFileInfo fileInfo(currentPath);
+    const QString folderPath = fileInfo.absolutePath();
+    const QString deleteFolderPath = folderPath + QDir::separator() + QStringLiteral("Delete");
 
     QDir deleteFolder(deleteFolderPath);
     if (!deleteFolder.exists()) {
-        if (!QDir(folderPath).mkdir("Delete")) {
+        if (!QDir(folderPath).mkdir(QStringLiteral("Delete"))) {
             m_statusLabel->setText(tr("Nepodařilo se vytvořit složku Delete."));
             return;
         }
     }
 
-    QFileInfo fileInfo(currentPath);
-    const QString newPath = deleteFolderPath + "/" + fileInfo.fileName();
+    const QString newPath = deleteFolderPath + QDir::separator() + fileInfo.fileName();
 
     if (QFile::rename(currentPath, newPath)) {
         m_deleteHistory.append({newPath, currentPath});
