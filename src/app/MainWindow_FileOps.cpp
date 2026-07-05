@@ -704,6 +704,11 @@ void MainWindow::removeImageFromList(int index)
         return;
     }
 
+    // Zastavit video, pokud se právě přehrává — aby se video nezastavilo až později
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        m_videoPlayer->stopQuietly();
+    }
+
     m_imagePaths.removeAt(index);
     m_thumbnailPanel->removeImage(index);
 
