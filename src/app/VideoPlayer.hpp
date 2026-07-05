@@ -39,6 +39,10 @@ public:
     explicit VideoPlayer(SettingsManager *settings, QWidget *parent = nullptr);
     ~VideoPlayer() override;
 
+    // Při přepnutí profilu se SettingsManager znovu vytváří — bez aktualizace
+    // ukazatele by zápis hlasitosti šel do uvolněné paměti (use-after-free).
+    void setSettingsManager(SettingsManager *settings);
+
     // Spustí přehrávání souboru path (resetuje zoom na výchozí).
     void playFile(const QString &path);
 

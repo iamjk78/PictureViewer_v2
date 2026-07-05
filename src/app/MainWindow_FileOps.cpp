@@ -23,6 +23,7 @@
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -52,6 +53,30 @@ void removeQuarantine(const QString &path)
 }
 } // namespace
 #endif
+
+namespace {
+
+// Multimediální backend (Windows Media Foundation) uvolňuje handle souboru
+// asynchronně i po stop() — první pokus o přesun/smazání právě přehrávaného
+// videa proto může selhat na zamčený soubor. Mezi pokusy zpracujeme události
+// (bez uživatelského vstupu), aby backend stihl handle uvolnit.
+template <typename Op>
+bool tryWithRetry(Op op, int attempts = 4, int delayMs = 150)
+{
+    for (int i = 0; i < attempts; ++i) {
+        if (op()) {
+            return true;
+        }
+        if (i + 1 < attempts) {
+            QEventLoop loop;
+            QTimer::singleShot(delayMs, &loop, &QEventLoop::quit);
+            loop.exec(QEventLoop::ExcludeUserInputEvents);
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 namespace pictureviewer {
 
@@ -552,7 +577,7 @@ void MainWindow::deleteImageToTrash()
     }
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    if (QFile::moveToTrash(currentPath)) {
+    if (tryWithRetry([&] { return QFile::moveToTrash(currentPath); })) {
         removeImageFromList(m_currentIndex);
     } else {
         m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(currentPath));
@@ -580,7 +605,7 @@ void MainWindow::moveImageToDeleteFolder()
 
     const QString newPath = deleteFolderPath + QDir::separator() + fileInfo.fileName();
 
-    if (QFile::rename(currentPath, newPath)) {
+    if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
         m_deleteHistory.append({newPath, currentPath});
         updateRecycleButtonState();
         removeImageFromList(m_currentIndex);

@@ -50,8 +50,11 @@ void VideoThumbnailWorker::cancel()
     m_timeoutTimer->stop();
     m_queue.clear();
     if (m_state != State::Idle) {
-        m_player->stop();
         m_state = State::Idle;
+        m_player->stop();
+        // Uvolnit handle souboru — na Windows by jinak zůstal soubor zamčený
+        // a nešel by přesunout/smazat.
+        m_player->setSource(QUrl());
     }
 }
 
@@ -136,6 +139,14 @@ void VideoThumbnailWorker::onTimeout()
 
 void VideoThumbnailWorker::finishCurrent(const QImage &image)
 {
+    // Idle PŘED setSource(QUrl()) — změna zdroje emituje mediaStatusChanged(NoMedia)
+    // synchronně a bez toho by se onMediaStatusChanged rekurzivně vrátil sem.
+    m_state = State::Idle;
+    m_player->stop();
+    // Uvolnit handle souboru — na Windows by jinak poslední zpracované video
+    // zůstalo zamčené a nešlo by přesunout do Delete ani smazat.
+    m_player->setSource(QUrl());
+
     if (!image.isNull()) {
         emit thumbnailReady(m_currentPath, image);
     }

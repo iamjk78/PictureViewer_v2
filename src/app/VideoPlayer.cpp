@@ -196,6 +196,16 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
 
 VideoPlayer::~VideoPlayer() = default;
 
+void VideoPlayer::setSettingsManager(SettingsManager *settings)
+{
+    m_settings = settings;
+    if (m_settings != nullptr) {
+        // Převzít hlasitost nového profilu; setValue propíše i do audio výstupu
+        // přes existující valueChanged connect.
+        m_volumeSlider->setValue(m_settings->videoVolume());
+    }
+}
+
 // ── Veřejné rozhraní ─────────────────────────────────────────────────────────
 
 void VideoPlayer::playFile(const QString &path)

@@ -10,6 +10,7 @@
 #include "app/ImageView.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/VideoPlayer.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
 
@@ -27,6 +28,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QVBoxLayout>
 
@@ -120,6 +122,13 @@ void MainWindow::switchProfile(const QString &profileName)
         m_folderScanWorker = nullptr;
     }
 
+    // Zastavit případné přehrávání videa — starý profil končí a VideoPlayer
+    // nesmí zůstat aktivním widgetem nad daty nového profilu.
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        m_videoPlayer->stopQuietly();
+        m_centralStack->setCurrentWidget(m_imageView);
+    }
+
     // Přepnout profil.
     m_profileManager->setActiveProfile(profileName);
 
@@ -127,6 +136,10 @@ void MainWindow::switchProfile(const QString &profileName)
     delete m_settingsManager;
     m_settingsManager = new SettingsManager(
         m_profileManager->configPath(profileName), profileName);
+
+    // VideoPlayer drží ukazatel na SettingsManager — bez aktualizace by další
+    // změna hlasitosti zapisovala do právě uvolněné paměti.
+    m_videoPlayer->setSettingsManager(m_settingsManager);
 
     // Znovu vytvořit CategoryManager (destruktor uzavře a odregistruje starou DB).
     delete m_categoryManager;
@@ -296,10 +309,15 @@ void MainWindow::manageProfiles()
             // Pokud jsme smazali aktivní profil, ProfileManager přepnul na jiný —
             // přenačíst data pro nově aktivní profil.
             if (wasActive) {
+                if (m_centralStack->currentWidget() == m_videoPlayer) {
+                    m_videoPlayer->stopQuietly();
+                    m_centralStack->setCurrentWidget(m_imageView);
+                }
                 const QString newActive = m_profileManager->activeProfile();
                 delete m_settingsManager;
                 m_settingsManager = new SettingsManager(
                     m_profileManager->configPath(newActive), newActive);
+                m_videoPlayer->setSettingsManager(m_settingsManager);
                 delete m_categoryManager;
                 m_categoryManager = new CategoryManager(
                     m_profileManager->dbPath(newActive));

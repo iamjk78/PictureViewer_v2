@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/ImageCatalog.hpp"
+
 #include <QObject>
 #include <QRunnable>
 #include <QStringList>
@@ -26,7 +28,15 @@ signals:
     void finished(int generation);
 
 private:
-    const SettingsManager *m_settings;
+    // Hodnoty nastavení se kopírují v konstruktoru (na hlavním vlákně).
+    // Worker NESMÍ držet ukazatel na SettingsManager — při přepnutí profilu
+    // se manager maže a běžící vlákno by četlo uvolněnou paměť.
+    bool    m_includePdf    = true;
+    bool    m_includeImages = true;
+    bool    m_includeVideos = false;
+    SortKey m_sortKey       = SortKey::Name;
+    bool    m_ascending     = true;
+
     QString m_folderPath;
     int m_generation;
     std::atomic_bool m_cancelled;

@@ -9,12 +9,21 @@ namespace pictureviewer {
 
 FolderScanWorker::FolderScanWorker(const SettingsManager *settings, QString folderPath, int generation, QObject *parent)
     : QObject(parent)
-    , m_settings(settings)
     , m_folderPath(std::move(folderPath))
     , m_generation(generation)
     , m_cancelled(false)
 {
     setAutoDelete(false);
+
+    // Zkopírovat hodnoty hned teď, na hlavním vlákně — settings je tu zaručeně
+    // platný. run() pak běží čistě nad vlastními členy.
+    if (settings != nullptr) {
+        m_includePdf    = settings->enablePdfProcessing();
+        m_includeImages = settings->enableImages();
+        m_includeVideos = settings->enableVideos();
+        m_sortKey       = static_cast<SortKey>(settings->sortKey());
+        m_ascending     = settings->sortAscending();
+    }
 }
 
 void FolderScanWorker::cancel()
@@ -31,15 +40,9 @@ void FolderScanWorker::run()
 
     try {
         ImageCatalog catalog;
-        const bool includePdf    = m_settings ? m_settings->enablePdfProcessing() : true;
-        const bool includeImages = m_settings ? m_settings->enableImages() : true;
-        const bool includeVideos = m_settings ? m_settings->enableVideos() : false;
-        const SortKey sortKey    = m_settings
-            ? static_cast<SortKey>(m_settings->sortKey()) : SortKey::Name;
-        const bool ascending     = m_settings ? m_settings->sortAscending() : true;
-        const QStringList paths  = catalog.loadFolder(
-            m_folderPath, includePdf, sortKey, ascending, {}, nullptr,
-            includeImages, includeVideos);
+        const QStringList paths = catalog.loadFolder(
+            m_folderPath, m_includePdf, m_sortKey, m_ascending, {}, nullptr,
+            m_includeImages, m_includeVideos);
         if (!m_cancelled.load()) {
             emit scanComplete(m_generation, paths);
         }
