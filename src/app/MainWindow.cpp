@@ -10,6 +10,7 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/UpdateChecker.hpp"
 #include "app/VideoPlayer.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
@@ -63,6 +64,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
@@ -258,6 +260,9 @@ MainWindow::MainWindow(QWidget *parent)
     } else {
         qDebug() << "Skipping restoreLastFolder() - image file passed as argument";
     }
+
+    setupUpdateChecker();
+    scheduleStartupUpdateCheck();
 }
 
 // ── cancelAllWorkers ─────────────────────────────────────────────────────────
@@ -1014,6 +1019,154 @@ void MainWindow::setupMenu()
     helpMenu->addAction(tr("Klávesové zkratky"),     this, [this] { HelpDialog::showShortcuts(this); });
     helpMenu->addSeparator();
     helpMenu->addAction(tr("Co je nového"),          this, [this] { HelpDialog::showWhatsNew(this);  });
+    helpMenu->addSeparator();
+    helpMenu->addAction(tr("Zkontrolovat aktualizace…"), this, [this] {
+        if (m_updateChecker != nullptr) {
+            m_statusLabel->setText(tr("Kontroluji aktualizace…"));
+            m_updateChecker->checkForUpdates(/*silent=*/false);
+        }
+    });
+}
+
+// ── Aktualizace ───────────────────────────────────────────────────────────────
+
+void MainWindow::setupUpdateChecker()
+{
+    m_updateChecker = new UpdateChecker(this);
+
+    connect(m_updateChecker, &UpdateChecker::updateAvailable,
+            this, &MainWindow::onUpdateAvailable);
+
+    connect(m_updateChecker, &UpdateChecker::upToDate, this, [this](bool silent) {
+        m_settingsManager->setLastUpdateCheck(QDateTime::currentDateTime());
+        if (!silent) {
+            QMessageBox::information(
+                this, tr("Aktualizace"),
+                tr("Máte nejnovější verzi (%1).")
+                    .arg(QCoreApplication::applicationVersion()));
+            m_statusLabel->setText(tr("Aplikace je aktuální."));
+        }
+    });
+
+    connect(m_updateChecker, &UpdateChecker::checkFailed,
+            this, [this](const QString &error, bool silent) {
+        if (!silent) {
+            QMessageBox::warning(this, tr("Aktualizace"),
+                                 tr("Kontrola aktualizací selhala:\n%1").arg(error));
+            m_statusLabel->setText(tr("Kontrola aktualizací selhala."));
+        }
+    });
+
+    connect(m_updateChecker, &UpdateChecker::installFailed,
+            this, [this](const QString &error) {
+        QMessageBox::warning(this, tr("Aktualizace"), error);
+    });
+
+    connect(m_updateChecker, &UpdateChecker::installerStarted, this, [this] {
+        // Instalátor běží — ukončit aplikaci, aby mohl přepsat soubory.
+        close();
+    });
+}
+
+void MainWindow::scheduleStartupUpdateCheck()
+{
+    // Tichý check po startu: až uplyne interval od poslední kontroly.
+    const QDateTime last = m_settingsManager->lastUpdateCheck();
+    const int intervalDays = m_settingsManager->updateCheckIntervalDays();
+    if (last.isValid() && last.daysTo(QDateTime::currentDateTime()) < intervalDays) {
+        return;
+    }
+    const int delayMs = m_settingsManager->updateCheckDelayMinutes() * 60'000;
+    QTimer::singleShot(delayMs, this, [this] {
+        if (m_updateChecker != nullptr && !m_updateChecker->isBusy()) {
+            m_updateChecker->checkForUpdates(/*silent=*/true);
+        }
+    });
+}
+
+void MainWindow::onUpdateAvailable(const QString &version, const QString &notes,
+                                   const QUrl &releasePageUrl,
+                                   const QUrl &installerUrl,
+                                   const QUrl &checksumsUrl,
+                                   const QString &installerName, bool silent)
+{
+    m_settingsManager->setLastUpdateCheck(QDateTime::currentDateTime());
+
+    // Tichý check: verzi označenou „přeskočit" nepřipomínat.
+    if (silent && version == m_settingsManager->skippedUpdateVersion()) {
+        return;
+    }
+    if (silent) {
+        m_statusLabel->setText(
+            tr("Je dostupná nová verze %1 — Nápověda → Zkontrolovat aktualizace…")
+                .arg(version));
+        return;
+    }
+
+    QMessageBox box(this);
+    box.setWindowTitle(tr("Dostupná aktualizace"));
+    box.setIcon(QMessageBox::Information);
+    box.setText(tr("Je dostupná verze %1 (máte %2).")
+                    .arg(version, QCoreApplication::applicationVersion()));
+    if (!notes.trimmed().isEmpty()) {
+        box.setDetailedText(notes);
+    }
+
+#ifdef Q_OS_WIN
+    const bool canAutoInstall = installerUrl.isValid() && checksumsUrl.isValid();
+#else
+    const bool canAutoInstall = false;
+#endif
+
+    QPushButton *installBtn = nullptr;
+    QPushButton *openPageBtn = nullptr;
+    if (canAutoInstall) {
+        installBtn = box.addButton(tr("Stáhnout a nainstalovat"),
+                                   QMessageBox::AcceptRole);
+    } else {
+        openPageBtn = box.addButton(tr("Otevřít stránku s vydáním"),
+                                    QMessageBox::AcceptRole);
+    }
+    QPushButton *skipBtn  = box.addButton(tr("Přeskočit tuto verzi"),
+                                          QMessageBox::DestructiveRole);
+    QPushButton *laterBtn = box.addButton(tr("Později"), QMessageBox::RejectRole);
+    box.setDefaultButton(laterBtn);
+    box.exec();
+
+    if (box.clickedButton() == skipBtn) {
+        m_settingsManager->setSkippedUpdateVersion(version);
+        return;
+    }
+    if (openPageBtn != nullptr && box.clickedButton() == openPageBtn) {
+        QDesktopServices::openUrl(releasePageUrl);
+        return;
+    }
+    if (installBtn == nullptr || box.clickedButton() != installBtn) {
+        return;
+    }
+
+    // Stažení s progress dialogem. Dialog nezavírá stahování při Cancel —
+    // pouze se skryje (zrušení běžícího QNetworkReply řeší destrukce checkeru).
+    auto *progress = new QProgressDialog(
+        tr("Stahuji aktualizaci…"), tr("Skrýt"), 0, 100, this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setMinimumDuration(0);
+    progress->setAutoClose(true);
+
+    connect(m_updateChecker, &UpdateChecker::downloadProgress, progress,
+            [progress](qint64 received, qint64 total) {
+                if (total > 0) {
+                    progress->setMaximum(100);
+                    progress->setValue(
+                        static_cast<int>(received * 100 / total));
+                }
+            });
+    connect(m_updateChecker, &UpdateChecker::installFailed,
+            progress, &QProgressDialog::close);
+    connect(m_updateChecker, &UpdateChecker::installerStarted,
+            progress, &QProgressDialog::close);
+
+    m_updateChecker->downloadAndInstall(installerUrl, checksumsUrl, installerName);
 }
 
 } // namespace pictureviewer

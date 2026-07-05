@@ -33,6 +33,8 @@ set(APP_SOURCES
     SettingsManager.cpp
     ThumbnailCacheManager.hpp
     ThumbnailCacheManager.cpp
+    UpdateChecker.hpp
+    UpdateChecker.cpp
     VideoPlayer.hpp
     VideoPlayer.cpp
 )
@@ -47,6 +49,11 @@ else()
 endif()
 
 add_library(picture_viewer_app OBJECT ${APP_SOURCES})
+# Jediný zdroj pravdy pro verzi aplikace je project(VERSION …) v kořenovém
+# CMakeLists.txt — Application.cpp ji čte z této definice.
+target_compile_definitions(picture_viewer_app
+    PRIVATE PV_APP_VERSION="${PROJECT_VERSION}"
+)
 target_include_directories(picture_viewer_app
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/..

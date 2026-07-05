@@ -35,9 +35,11 @@ public:
     int updateCheckDelayMinutes() const;
     int updateCheckIntervalDays() const;
     QDateTime lastUpdateCheck() const;
+    QString skippedUpdateVersion() const;
     void setUpdateCheckDelayMinutes(int minutes);
     void setUpdateCheckIntervalDays(int days);
     void setLastUpdateCheck(const QDateTime &dt);
+    void setSkippedUpdateVersion(const QString &version);
 
     // ── File Handling ────────────────────────────────────────────────────────
     bool enableDeleteImage() const;

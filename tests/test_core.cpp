@@ -13,6 +13,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
+#include "app/UpdateChecker.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
 
@@ -654,6 +655,23 @@ private slots:
         // Záměrně nespustit — žádný signál nesmí přijít
         QTest::qWait(200);
         QCOMPARE(spy.count(), 0);
+    }
+
+    // ── UpdateChecker ────────────────────────────────────────────────────────
+    void updateChecker_versionComparison()
+    {
+        QVERIFY(UpdateChecker::isNewerVersion("0.16", "0.15"));
+        QVERIFY(UpdateChecker::isNewerVersion("1.0", "0.99"));
+        QVERIFY(UpdateChecker::isNewerVersion("0.15.1", "0.15"));
+
+        QVERIFY(!UpdateChecker::isNewerVersion("0.15", "0.15"));
+        QVERIFY(!UpdateChecker::isNewerVersion("0.14", "0.15"));   // downgrade
+        QVERIFY(!UpdateChecker::isNewerVersion("0.15", "0.15.0")); // normalizace
+
+        // Neparsovatelné verze nikdy nesmí vést k nabídce instalace.
+        QVERIFY(!UpdateChecker::isNewerVersion("", "0.15"));
+        QVERIFY(!UpdateChecker::isNewerVersion("abc", "0.15"));
+        QVERIFY(!UpdateChecker::isNewerVersion("0.16", ""));
     }
 };
 

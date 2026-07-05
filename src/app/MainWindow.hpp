@@ -7,6 +7,7 @@
 #include <QKeyEvent>
 #include <QMainWindow>
 #include <QStringList>
+#include <QUrl>
 
 class QAction;
 class QActionGroup;
@@ -32,6 +33,7 @@ class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
 class ThumbnailPanel;
+class UpdateChecker;
 class VideoPlayer;
 class VideoThumbnailWorker;
 
@@ -124,6 +126,15 @@ private:
     void refreshProfileMenu();
     void manageProfiles();
     void showProfileStartupSettings();
+
+    // ── Aktualizace ─────────────────────────────────────────────────────────
+    void setupUpdateChecker();
+    void scheduleStartupUpdateCheck();
+    void onUpdateAvailable(const QString &version, const QString &notes,
+                           const QUrl &releasePageUrl, const QUrl &installerUrl,
+                           const QUrl &checksumsUrl, const QString &installerName,
+                           bool silent);
+    UpdateChecker *m_updateChecker = nullptr;
     // Vytvoří ProfileManager, provede migraci a vrátí SettingsManager pro aktivní
     // profil. Volá se z member-initializer listu (proto vrací pointer).
     SettingsManager *createProfileAndSettings();

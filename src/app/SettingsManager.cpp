@@ -27,6 +27,7 @@ constexpr auto kLastFolderKey            = "General/last_folder";
 constexpr auto kUpdateDelayMinutesKey    = "Updates/update_check_delay_minutes";
 constexpr auto kUpdateIntervalDaysKey    = "Updates/update_check_interval_days";
 constexpr auto kLastUpdateCheckKey       = "Updates/last_update_check";
+constexpr auto kSkippedUpdateVersionKey  = "Updates/skipped_version";
 
 constexpr auto kEnableDeleteImageKey     = "FileHandling/enable_delete_image";
 constexpr auto kEnableMoveToDeleteKey    = "FileHandling/enable_move_to_delete";
@@ -167,6 +168,16 @@ void SettingsManager::setUpdateCheckIntervalDays(int days)
 void SettingsManager::setLastUpdateCheck(const QDateTime &dt)
 {
     m_settings->setValue(kLastUpdateCheckKey, dt.toString(Qt::ISODate));
+}
+
+QString SettingsManager::skippedUpdateVersion() const
+{
+    return m_settings->value(kSkippedUpdateVersionKey, QString()).toString();
+}
+
+void SettingsManager::setSkippedUpdateVersion(const QString &version)
+{
+    m_settings->setValue(kSkippedUpdateVersionKey, version);
 }
 
 // ── File Handling ────────────────────────────────────────────────────────────
