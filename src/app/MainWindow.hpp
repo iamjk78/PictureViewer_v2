@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <memory>
+
 class QAction;
 class QActionGroup;
 class QDockWidget;
@@ -86,6 +88,9 @@ private slots:
     void onImageDecoded(const QString &path, const QImage &image);
     void onPlayVideo();
     void onVideoStopped();
+    // Tiše zastaví video, pokud právě běží. Vrací true, když běželo —
+    // jediné místo pro „uvolni soubor před manipulací" logiku.
+    bool stopVideoIfPlaying();
     void showImageContextMenu(const QPoint &globalPos);
     void onScreenshotCapture();   // zachytit výřez obrazovky a zobrazit ho v aplikaci
 
@@ -191,7 +196,7 @@ private:
     // pořadí inicializace v konstruktoru odpovídá pořadí deklarace zde.
     ProfileManager *m_profileManager = nullptr;
     SettingsManager *m_settingsManager;
-    CategoryManager *m_categoryManager = nullptr;
+    std::unique_ptr<CategoryManager> m_categoryManager;
     VideoPlayer *m_videoPlayer = nullptr;
     VideoThumbnailWorker *m_videoThumbnailWorker = nullptr;
     ThumbnailPanel *m_thumbnailPanel;

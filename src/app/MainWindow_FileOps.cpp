@@ -557,9 +557,7 @@ void MainWindow::deleteOrMoveCurrentImage()
 
     // Na Windows se video drží v paměti — zastavit jej PŘED pokusem o přesunutí/smazání
     // aby se soubor odemčil a dal se manipulovat.
-    if (m_centralStack->currentWidget() == m_videoPlayer) {
-        m_videoPlayer->stopQuietly();
-    }
+    stopVideoIfPlaying();
 
     bool shouldAskConfirmation = m_settingsManager->askConfirmationDelete();
     if (shouldAskConfirmation) {
@@ -662,10 +660,7 @@ void MainWindow::renameCurrentImage()
 
     // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
     // znovu z nové cesty.
-    const bool videoWasPlaying = (m_centralStack->currentWidget() == m_videoPlayer);
-    if (videoWasPlaying) {
-        m_videoPlayer->stopQuietly();
-    }
+    const bool videoWasPlaying = stopVideoIfPlaying();
 
     if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
         if (m_categoryManager) {
@@ -756,6 +751,15 @@ void MainWindow::onDeleteFolder()
     }
 }
 
+bool MainWindow::stopVideoIfPlaying()
+{
+    if (m_centralStack->currentWidget() != m_videoPlayer) {
+        return false;
+    }
+    m_videoPlayer->stopQuietly();
+    return true;
+}
+
 void MainWindow::removeImageFromList(int index)
 {
     if (index < 0 || index >= m_imagePaths.size()) {
@@ -763,9 +767,7 @@ void MainWindow::removeImageFromList(int index)
     }
 
     // Zastavit video, pokud se právě přehrává — aby se video nezastavilo až později
-    if (m_centralStack->currentWidget() == m_videoPlayer) {
-        m_videoPlayer->stopQuietly();
-    }
+    stopVideoIfPlaying();
 
     m_imagePaths.removeAt(index);
     m_thumbnailPanel->removeImage(index);

@@ -38,8 +38,10 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
 - **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;
-  zoom (+/-), posun myší, fullscreen, vyhledávání šipkami, hlasitost, buffer overlay;
-  metadata (velikost, rozlišení, délka, datový tok) ve status baru
+  přehrávání v nekonečné smyčce; zoom (+/-), posun myší, fullscreen, posun šipkami,
+  hlasitost, buffer overlay; metadata (velikost, rozlišení, délka, datový tok) ve status baru
+- **Automatické aktualizace** — Nápověda → Zkontrolovat aktualizace… stáhne nové
+  vydání z GitHubu, ověří SHA256 a na Windows rovnou nainstaluje
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
   obrazovky se spustí v předvolené velikosti
 - **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Štítky, PDF) mají
@@ -123,7 +125,8 @@ cmake --build . --config Release --parallel
 
 | Klávesa | Akce |
 |---|---|
-| `←` / `→` | Předchozí / další obrázek; seek ±10 % (ve videu) |
+| `←` / `→` | Předchozí / další obrázek; posun ±10 % (ve videu) |
+| `Shift+←` / `Shift+→` | Předchozí / další soubor (ve videu) |
 | `↑` / `↓` | První / poslední obrázek; začátek / stop (ve videu) |
 | `PageUp` / `PageDown` | Předchozí / následující stránka PDF |
 | `S` | Spustit / zastavit slideshow |

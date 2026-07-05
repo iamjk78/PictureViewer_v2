@@ -131,7 +131,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     // Inicializovat CategoryManager — databáze v adresáři aktivního profilu.
     // (ProfileManager a SettingsManager jsou již vytvořeny v init-listu.)
-    m_categoryManager = new CategoryManager(
+    m_categoryManager = std::make_unique<CategoryManager>(
         m_profileManager->dbPath(m_profileManager->activeProfile()));
 
     m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
