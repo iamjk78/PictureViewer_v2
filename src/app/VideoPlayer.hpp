@@ -63,6 +63,8 @@ signals:
     void stopped();
     void fullscreenToggleRequested();
     void videoMetadataReady(const pictureviewer::VideoMeta &meta);
+    // Přehrávání selhalo (poškozený soubor, nepodporovaný kodek, timeout).
+    void playbackError(const QString &message);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

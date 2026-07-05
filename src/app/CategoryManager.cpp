@@ -50,7 +50,7 @@ CategoryManager::~CategoryManager()
 }
 
 // Aktuální verze schématu databáze. Zvyšte při každé strukturální změně.
-static constexpr int kCurrentSchemaVersion = 1;
+static constexpr int kCurrentSchemaVersion = 2;
 
 bool CategoryManager::initializeDatabase()
 {
@@ -60,6 +60,10 @@ bool CategoryManager::initializeDatabase()
     }
 
     QSqlQuery query(db);
+
+    // SQLite cizí klíče NEvynucuje, dokud se nezapnou pro každé připojení.
+    // Bez toho ON DELETE CASCADE u image_categories nikdy neproběhne.
+    query.exec("PRAGMA foreign_keys = ON");
 
     // Tabulka kategorií
     if (!query.exec(
@@ -120,12 +124,15 @@ void CategoryManager::migrateSchema(QSqlDatabase &db)
 {
     int ver = currentSchemaVersion(db);
 
-    // Šablona pro budoucí migrace:
-    // if (ver < 2) {
-    //     QSqlQuery(db).exec("ALTER TABLE categories ADD COLUMN ...");
-    //     QSqlQuery(db).exec("UPDATE schema_version SET version = 2");
-    //     ver = 2;
-    // }
+    if (ver < 2) {
+        // v1 běželo bez PRAGMA foreign_keys — smazání kategorie nechávalo
+        // v image_categories osiřelé řádky. Jednorázový úklid.
+        QSqlQuery(db).exec(
+            "DELETE FROM image_categories "
+            "WHERE category_id NOT IN (SELECT id FROM categories)");
+        QSqlQuery(db).exec("UPDATE schema_version SET version = 2");
+        ver = 2;
+    }
 
     if (ver != kCurrentSchemaVersion) {
         qWarning() << "Neznámá verze schématu databáze:" << ver
@@ -358,6 +365,31 @@ void CategoryManager::unassignAll(const QString &imagePath)
     if (!query.exec()) {
         qWarning() << "Chyba odebrání všech kategorií:" << query.lastError().text();
     }
+}
+
+void CategoryManager::renameImagePath(const QString &oldPath, const QString &newPath)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.isOpen() || oldPath == newPath) {
+        return;
+    }
+
+    // OR IGNORE: pokud cílová cesta už některé přiřazení má (kolize PK),
+    // řádek se přeskočí a zbytek se dočistí druhým dotazem.
+    QSqlQuery query(db);
+    query.prepare(
+        "UPDATE OR IGNORE image_categories SET image_path = ? WHERE image_path = ?");
+    query.addBindValue(newPath);
+    query.addBindValue(oldPath);
+    if (!query.exec()) {
+        qWarning() << "Chyba přepsání cesty obrázku:" << query.lastError().text();
+        return;
+    }
+
+    QSqlQuery cleanup(db);
+    cleanup.prepare("DELETE FROM image_categories WHERE image_path = ?");
+    cleanup.addBindValue(oldPath);
+    cleanup.exec();
 }
 
 QList<Category> CategoryManager::categoriesForImage(const QString &imagePath) const

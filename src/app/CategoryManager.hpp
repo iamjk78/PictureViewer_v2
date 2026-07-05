@@ -48,6 +48,10 @@ public:
     // Odebere všechny kategorie z obrázku
     void unassignAll(const QString &imagePath);
 
+    // Přepíše cestu obrázku v přiřazeních — volat při přejmenování/přesunu
+    // souboru, jinak štítky zůstanou u staré (mrtvé) cesty.
+    void renameImagePath(const QString &oldPath, const QString &newPath);
+
     // Vrátí kategorie přiřazené obrázku
     QList<Category> categoriesForImage(const QString &imagePath) const;
 

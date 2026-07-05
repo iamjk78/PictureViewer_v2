@@ -164,6 +164,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_videoPlayer, &VideoPlayer::stopped,
             this, &MainWindow::onVideoStopped);
+    connect(m_videoPlayer, &VideoPlayer::playbackError,
+            this, [this](const QString &message) {
+                m_statusLabel->setText(message);
+            });
     connect(m_videoPlayer, &VideoPlayer::fullscreenToggleRequested,
             this, &MainWindow::toggleFullscreen);
     connect(m_videoPlayer, &VideoPlayer::videoMetadataReady,

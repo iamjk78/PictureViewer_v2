@@ -79,7 +79,12 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     m_loadTimeoutTimer->setInterval(15000);
     connect(m_loadTimeoutTimer, &QTimer::timeout, this, [this] {
         m_bufferOverlay->hide();
+        // stopPlayback() → stopped() → MainWindow přepíše status bar;
+        // chybu proto emitovat až PO něm, aby zůstala viditelná.
         stopPlayback();
+        emit playbackError(
+            tr("Video se nepodařilo načíst (%1) — soubor může být poškozený.")
+                .arg(QFileInfo(m_currentPath).fileName()));
     });
 
     // ── Overlay pro stav bufferu ──────────────────────────────────────────────
@@ -162,8 +167,17 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     connect(m_player, &QMediaPlayer::positionChanged,  this, &VideoPlayer::onPositionChanged);
     connect(m_player, &QMediaPlayer::durationChanged,  this, &VideoPlayer::onDurationChanged);
     connect(m_player, &QMediaPlayer::errorOccurred, this,
-            [this](QMediaPlayer::Error /*e*/, const QString & /*msg*/) {
-                emit stopped();
+            [this](QMediaPlayer::Error /*e*/, const QString &msg) {
+                m_loadTimeoutTimer->stop();
+                m_bufferOverlay->hide();
+                const QString name = QFileInfo(m_currentPath).fileName();
+                // stopPlayback() → stopped() → MainWindow přepíše status bar;
+                // chybu proto emitovat až PO něm, aby zůstala viditelná.
+                stopPlayback();
+                emit playbackError(
+                    msg.isEmpty()
+                        ? tr("Video %1 nelze přehrát — soubor je poškozený nebo v nepodporovaném formátu.").arg(name)
+                        : tr("Video %1 nelze přehrát: %2").arg(name, msg));
             });
 
     // Metadata videa — backend je vydává postupně; posloucháme na obou místech.

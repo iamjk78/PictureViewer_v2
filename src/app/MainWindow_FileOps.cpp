@@ -578,6 +578,9 @@ void MainWindow::deleteImageToTrash()
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
     if (tryWithRetry([&] { return QFile::moveToTrash(currentPath); })) {
+        if (m_categoryManager) {
+            m_categoryManager->unassignAll(currentPath);
+        }
         removeImageFromList(m_currentIndex);
     } else {
         m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(currentPath));
@@ -606,6 +609,9 @@ void MainWindow::moveImageToDeleteFolder()
     const QString newPath = deleteFolderPath + QDir::separator() + fileInfo.fileName();
 
     if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
+        if (m_categoryManager) {
+            m_categoryManager->renameImagePath(currentPath, newPath);
+        }
         m_deleteHistory.append({newPath, currentPath});
         updateRecycleButtonState();
         removeImageFromList(m_currentIndex);
@@ -649,13 +655,29 @@ void MainWindow::renameCurrentImage()
         return;
     }
 
-    if (QFile::rename(currentPath, newPath)) {
+    // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
+    // znovu z nové cesty.
+    const bool videoWasPlaying = (m_centralStack->currentWidget() == m_videoPlayer);
+    if (videoWasPlaying) {
+        m_videoPlayer->stopQuietly();
+    }
+
+    if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
+        if (m_categoryManager) {
+            m_categoryManager->renameImagePath(currentPath, newPath);
+        }
         m_imagePaths[m_currentIndex] = newPath;
         m_thumbnailPanel->updateImagePath(currentPath, newPath);
         updateStatus(newPath);
         m_statusLabel->setText(tr("Obrázek přejmenován na '%1'.").arg(newFileName));
+        if (videoWasPlaying) {
+            m_videoPlayer->playFile(newPath);
+        }
     } else {
         m_statusLabel->setText(tr("Nepodařilo se přejmenovat obrázek."));
+        if (videoWasPlaying) {
+            m_videoPlayer->playFile(currentPath);
+        }
     }
 }
 
@@ -782,6 +804,9 @@ void MainWindow::onUndoDelete()
     QDir().mkpath(QFileInfo(originalPath).absolutePath());
 
     if (QFile::rename(deletedPath, originalPath)) {
+        if (m_categoryManager) {
+            m_categoryManager->renameImagePath(deletedPath, originalPath);
+        }
         m_deleteHistory.removeLast();
         updateRecycleButtonState();
         m_requestedFile = originalPath;

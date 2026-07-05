@@ -508,7 +508,93 @@ private slots:
         categoryManager_cleanup();
     }
 
-    void categoryManager_schemaVersionIsOne()
+    void categoryManager_renameImagePath()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Cestovní"));
+        const QString oldPath = QStringLiteral("/tmp/stary.jpg");
+        const QString newPath = QStringLiteral("/tmp/novy.jpg");
+        mgr.assignCategory(oldPath, cat.id);
+
+        mgr.renameImagePath(oldPath, newPath);
+
+        QVERIFY(mgr.categoriesForImage(oldPath).isEmpty());
+        QCOMPARE(mgr.categoriesForImage(newPath).size(), 1);
+        QCOMPARE(mgr.categoriesForImage(newPath).first().id, cat.id);
+
+        // Kolize: nová cesta už stejný štítek má — nesmí skončit chybou
+        // ani duplicitou.
+        mgr.assignCategory(oldPath, cat.id);
+        mgr.renameImagePath(oldPath, newPath);
+        QVERIFY(mgr.categoriesForImage(oldPath).isEmpty());
+        QCOMPARE(mgr.categoriesForImage(newPath).size(), 1);
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_migrationCleansOrphanedAssignments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString dbPath = dir.filePath("labels.db");
+
+        // Simulovat databázi z v1: orphan řádek v image_categories
+        // a verze schématu 1 (FK bez PRAGMA nevynucené).
+        {
+            const QString conn = QStringLiteral("orphan_setup");
+            {
+                QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+                db.setDatabaseName(dbPath);
+                QVERIFY(db.open());
+                QSqlQuery q(db);
+                QVERIFY(q.exec("CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                               " name TEXT NOT NULL UNIQUE, color TEXT NOT NULL)"));
+                QVERIFY(q.exec("CREATE TABLE image_categories (image_path TEXT NOT NULL,"
+                               " category_id INTEGER NOT NULL,"
+                               " PRIMARY KEY (image_path, category_id),"
+                               " FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE)"));
+                QVERIFY(q.exec("CREATE TABLE schema_version (version INTEGER NOT NULL)"));
+                QVERIFY(q.exec("INSERT INTO schema_version (version) VALUES (1)"));
+                // Orphan: category_id 99 neexistuje
+                QVERIFY(q.exec("INSERT INTO image_categories (image_path, category_id)"
+                               " VALUES ('/tmp/x.jpg', 99)"));
+                db.close();
+            }
+            QSqlDatabase::removeDatabase(conn);
+        }
+
+        // Otevření přes CategoryManager spustí migraci na v2 → úklid orphanů.
+        CategoryManager mgr(dbPath);
+
+        {
+            const QString conn = QStringLiteral("orphan_check");
+            int orphans = -1;
+            int version = 0;
+            {
+                QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+                db.setDatabaseName(dbPath);
+                QVERIFY(db.open());
+                QSqlQuery q(db);
+                QVERIFY(q.exec("SELECT COUNT(*) FROM image_categories"));
+                QVERIFY(q.next());
+                orphans = q.value(0).toInt();
+                QVERIFY(q.exec("SELECT version FROM schema_version"));
+                QVERIFY(q.next());
+                version = q.value(0).toInt();
+                db.close();
+            }
+            QSqlDatabase::removeDatabase(conn);
+            QCOMPARE(orphans, 0);
+            QCOMPARE(version, 2);
+        }
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_schemaVersionIsCurrent()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
@@ -533,7 +619,7 @@ private slots:
             db.close();
             QSqlDatabase::removeDatabase(conn);
         }
-        QCOMPARE(version, 1);
+        QCOMPARE(version, 2);
     }
 
     // ── SettingsManager ──────────────────────────────────────────────────────
