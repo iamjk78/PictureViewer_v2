@@ -279,15 +279,20 @@ void MainWindow::setupFavoritesToolbar()
     m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
     m_favoritesToolbar->setMovable(false);
 
-    QAction *addAction = m_favoritesToolbar->addAction(tr("[+ Přidat]"));
+    constexpr int ICON_SIZE = 28;
+    const QString iconButtonStyle = QStringLiteral(
+        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  background: transparent; font-size: 14px; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        .arg(ICON_SIZE);
+
+    QAction *addAction = m_favoritesToolbar->addAction(QStringLiteral("➕"));
     addAction->setToolTip(tr("Přidat aktuální složku do oblíbených"));
     connect(addAction, &QAction::triggered, this, &MainWindow::onAddCurrentFolderToFavorites);
 
     if (auto *btn = qobject_cast<QToolButton *>(m_favoritesToolbar->widgetForAction(addAction))) {
-        btn->setStyleSheet(
-            "QToolButton { font-size: 14px; font-weight: bold;"
-            "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
-            "QToolButton:hover { background-color: rgba(0,0,0,0.08); }");
+        btn->setStyleSheet(iconButtonStyle);
     }
 
     m_favoritesToolbar->addSeparator();
@@ -295,13 +300,14 @@ void MainWindow::setupFavoritesToolbar()
     refreshFavoriteButtons();
 
     m_mainToolbar->addSeparator();
-    QAction *toggleFavoritesAction = m_mainToolbar->addAction(tr("⭐ Oblíbené"));
+    QAction *toggleFavoritesAction = m_mainToolbar->addAction(QStringLiteral("⭐"));
     toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
     connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
         m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
     });
 
     m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+    m_favoritesToolbar->setStyleSheet(iconButtonStyle);
 }
 
 void MainWindow::refreshFavoriteButtons()

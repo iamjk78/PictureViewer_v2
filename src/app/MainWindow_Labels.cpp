@@ -29,16 +29,15 @@ void MainWindow::setupCategoriesToolbar()
     m_categoriesToolbar = addToolBar(tr("Štítky"));
     m_categoriesToolbar->setMovable(false);
 
-    const QString catBtnStyle =
-        "QToolButton { font-size: 14px; font-weight: bold;"
-        "  min-height: 30px; padding: 2px 10px; border-radius: 4px; }"
-        "QToolButton:hover { background-color: rgba(0,0,0,0.08); }";
-    auto applyTbStyle = [&](QAction *action) {
-        if (auto *btn = qobject_cast<QToolButton *>(m_categoriesToolbar->widgetForAction(action)))
-            btn->setStyleSheet(catBtnStyle);
-    };
+    constexpr int ICON_SIZE = 28;
+    const QString iconButtonStyle = QStringLiteral(
+        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  background: transparent; font-size: 14px; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        .arg(ICON_SIZE);
 
-    QAction *newCatAction = m_categoriesToolbar->addAction(tr("[+ Nový]"));
+    QAction *newCatAction = m_categoriesToolbar->addAction(QStringLiteral("➕"));
     newCatAction->setToolTip(tr("Vytvořit nový štítek"));
     connect(newCatAction, &QAction::triggered, this, [this] {
         NewCategoryDialog dialog(this);
@@ -53,7 +52,9 @@ void MainWindow::setupCategoriesToolbar()
             }
         }
     });
-    applyTbStyle(newCatAction);
+    if (auto *btn = qobject_cast<QToolButton *>(m_categoriesToolbar->widgetForAction(newCatAction))) {
+        btn->setStyleSheet(iconButtonStyle);
+    }
 
     m_categoriesToolbar->addSeparator();
 
@@ -61,22 +62,26 @@ void MainWindow::setupCategoriesToolbar()
 
     m_categoriesToolbar->addSeparator();
 
-    QAction *removeAllAction = m_categoriesToolbar->addAction(tr("[Odebrat vše]"));
+    QAction *removeAllAction = m_categoriesToolbar->addAction(QStringLiteral("❌"));
     removeAllAction->setToolTip(tr("Odebrat všechny štítky z obrázku"));
     connect(removeAllAction, &QAction::triggered, this, &MainWindow::onCategoryRemoveAll);
-    applyTbStyle(removeAllAction);
+    if (auto *btn = qobject_cast<QToolButton *>(m_categoriesToolbar->widgetForAction(removeAllAction))) {
+        btn->setStyleSheet(iconButtonStyle);
+    }
 
     m_categoriesToolbar->addSeparator();
 
     m_categoriesToolbar->addWidget(new QLabel(tr("Filtr:")));
 
-    QAction *clearFiltersAction = m_categoriesToolbar->addAction(tr("[Vyčistit filtr]"));
+    QAction *clearFiltersAction = m_categoriesToolbar->addAction(QStringLiteral("✕"));
     clearFiltersAction->setToolTip(tr("Odebrat všechny štítky z filtru"));
     connect(clearFiltersAction, &QAction::triggered, this, &MainWindow::clearFilters);
-    applyTbStyle(clearFiltersAction);
+    if (auto *btn = qobject_cast<QToolButton *>(m_categoriesToolbar->widgetForAction(clearFiltersAction))) {
+        btn->setStyleSheet(iconButtonStyle);
+    }
 
     m_mainToolbar->addSeparator();
-    QAction *toggleCategoriesAction = m_mainToolbar->addAction(tr("🏷️ Štítky"));
+    QAction *toggleCategoriesAction = m_mainToolbar->addAction(QStringLiteral("🏷️"));
     toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel štítků"));
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         bool willBeVisible = !m_categoriesToolbar->isVisible();
@@ -88,67 +93,7 @@ void MainWindow::setupCategoriesToolbar()
 
     bool wasVisible = m_settingsManager->categoriesToolbarVisible();
     m_categoriesToolbar->setVisible(wasVisible);
-
-    const QString toolbarButtonStyle =
-        "QToolButton {"
-        "  font-size: 14px;"
-        "  font-weight: bold;"
-        "  min-height: 30px;"
-        "  padding: 2px 10px;"
-        "  border-radius: 4px;"
-        "}"
-        "QToolButton:hover {"
-        "  background-color: rgba(0,0,0,0.08);"
-        "}"
-        "QToolButton:checked {"
-        "  background-color: rgba(60,120,220,0.20);"
-        "  border: 1px solid rgba(60,120,220,0.35);"
-        "}";
-    m_mainToolbar->setStyleSheet(toolbarButtonStyle);
-    m_mainToolbar->setIconSize(QSize(24, 24));
-
-    const QString bigEmojiStyle =
-        "QToolButton {"
-        "  font-size: 22px;"
-        "  min-width: 36px;"
-        "  min-height: 34px;"
-        "  padding: 2px 6px;"
-        "}";
-    const QString bigIconStyle =
-        "QToolButton {"
-        "  min-width: 36px;"
-        "  min-height: 34px;"
-        "  padding: 2px 6px;"
-        "}";
-
-    auto applyStyle = [this](QAction *action, const QString &style) {
-        auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(action));
-        if (btn) {
-            btn->setStyleSheet(style);
-        }
-    };
-    applyStyle(m_reloadFolderAction, bigEmojiStyle);
-    applyStyle(m_rotateLeftAction,   bigEmojiStyle);
-    applyStyle(m_rotateRightAction,  bigEmojiStyle);
-    applyStyle(m_cropAction,         bigEmojiStyle);
-    applyStyle(m_recycleAction,      bigEmojiStyle);
-    applyStyle(m_saveAction,        bigIconStyle);
-    applyStyle(m_saveAsAction,      bigIconStyle);
-
-    if (m_sortButton) {
-        m_sortButton->setStyleSheet(
-            "QToolButton {"
-            "  font-size: 14px; font-weight: bold;"
-            "  min-height: 30px; padding: 2px 10px; border-radius: 4px;"
-            "}"
-            "QToolButton::menu-indicator { image: none; }");
-        updateSortButtonText();
-    }
-
-    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(m_renameImageAction))) {
-        btn->setStyleSheet(bigIconStyle);
-        btn->setIconSize(QSize(28, 28));
-    }
+    m_categoriesToolbar->setStyleSheet(iconButtonStyle);
 }
 
 void MainWindow::onCategoryRemoveAll()
