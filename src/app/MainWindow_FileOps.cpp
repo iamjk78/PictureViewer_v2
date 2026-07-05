@@ -525,6 +525,12 @@ void MainWindow::deleteOrMoveCurrentImage()
         return;
     }
 
+    // Na Windows se video drží v paměti — zastavit jej PŘED pokusem o přesunutí/smazání
+    // aby se soubor odemčil a dal se manipulovat.
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
+        m_videoPlayer->stopQuietly();
+    }
+
     bool shouldAskConfirmation = m_settingsManager->askConfirmationDelete();
     if (shouldAskConfirmation) {
         if (!showDeleteConfirmationDialog()) {
