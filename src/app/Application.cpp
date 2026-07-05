@@ -3,6 +3,7 @@
 
 #include <QEvent>
 #include <QFileOpenEvent>
+#include <QImageReader>
 #include <QPainter>
 #include <QPixmap>
 #include <QProcess>
@@ -88,6 +89,12 @@ Application::Application(int &argc, char **argv)
     m_qtApplication->setApplicationVersion(QStringLiteral(PV_APP_VERSION));
     m_qtApplication->setOrganizationName("JiriKrejci");
     m_qtApplication->setOrganizationDomain("com.jk78");
+
+    // Ochrana proti dekompresním bombám: malý soubor, který se rozbalí do
+    // obřího rastru, dekodér odmítne. Globální limit pro všechna QImageReader
+    // použití (ImageLoader, ThumbnailWorker, ImageView). 512 MB ≈ 128 Mpx
+    // ARGB32 — pokryje i velká panoramata.
+    QImageReader::setAllocationLimit(512);
 
     // Workaround for macOS 26 crash: NSImageSymbolRepProvider crashes when
     // QStyleSheetStyle requests the SF Symbol for the toolbar extension button.

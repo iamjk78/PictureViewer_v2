@@ -1,8 +1,12 @@
 #pragma once
 
+#include <QCryptographicHash>
+#include <QFile>
 #include <QObject>
 #include <QString>
 #include <QUrl>
+
+#include <memory>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -55,7 +59,9 @@ private:
     void onCheckFinished(QNetworkReply *reply, bool silent);
     void onChecksumsFinished(QNetworkReply *reply);
     void onInstallerFinished(QNetworkReply *reply);
-    void launchInstaller(const QByteArray &installerData);
+    void drainInstallerReply(QNetworkReply *reply);
+    void abortInstallerDownload(const QString &error);
+    void launchInstaller();
 
     // Nastaví bezpečnou redirect policy: povolí jen HTTPS na GitHub hosty.
     QNetworkReply *startGet(const QUrl &url, int timeoutMs);
@@ -68,6 +74,13 @@ private:
     QUrl    m_pendingInstallerUrl;
     QString m_pendingInstallerName;
     QString m_expectedSha256;   // hex, lowercase
+
+    // Stav streamovaného stahování instalátoru — zapisuje se přímo do souboru
+    // a hash se počítá průběžně (žádné držení celého .exe v RAM).
+    std::unique_ptr<QFile>              m_installerFile;
+    std::unique_ptr<QCryptographicHash> m_installerHash;
+    qint64                              m_installerBytes = 0;
+    bool                                m_downloadAborted = false;
 };
 
 } // namespace pictureviewer

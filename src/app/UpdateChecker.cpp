@@ -26,6 +26,10 @@ constexpr int kDownloadTimeoutMs = 5 * 60'000;
 // Maximální velikost JSON odpovědi API (ochrana proti nesmyslně velké odpovědi).
 constexpr qint64 kMaxApiResponseBytes = 1 * 1024 * 1024;
 
+// Strop velikosti instalátoru — reálný má ~25 MB; výrazně větší stažení
+// znamená chybu nebo podvrh a stahování se přeruší.
+constexpr qint64 kMaxInstallerBytes = 200 * 1024 * 1024;
+
 } // namespace
 
 namespace pictureviewer {
@@ -231,53 +235,114 @@ void UpdateChecker::onChecksumsFinished(QNetworkReply *reply)
         return;
     }
 
+    // Otevřít cílový soubor předem — instalátor se streamuje na disk po
+    // blocích a SHA256 se počítá průběžně, nic se nedrží celé v paměti.
+    const QString tempRoot =
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    const QString dirPath = tempRoot + QStringLiteral("/PictureViewerUpdate");
+    QDir().mkpath(dirPath);
+
+    m_installerFile = std::make_unique<QFile>(
+        dirPath + QLatin1Char('/') + m_pendingInstallerName);
+    if (!m_installerFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        m_installerFile.reset();
+        m_busy = false;
+        emit installFailed(tr("Nelze uložit instalátor do dočasné složky."));
+        return;
+    }
+    m_installerHash =
+        std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
+    m_installerBytes  = 0;
+    m_downloadAborted = false;
+
     QNetworkReply *dl = startGet(m_pendingInstallerUrl, kDownloadTimeoutMs);
     connect(dl, &QNetworkReply::downloadProgress,
             this, &UpdateChecker::downloadProgress);
+    connect(dl, &QNetworkReply::readyRead, this, [this, dl] {
+        drainInstallerReply(dl);
+    });
     connect(dl, &QNetworkReply::finished, this, [this, dl] {
         dl->deleteLater();
         onInstallerFinished(dl);
     });
 }
 
-void UpdateChecker::onInstallerFinished(QNetworkReply *reply)
+void UpdateChecker::drainInstallerReply(QNetworkReply *reply)
 {
-    m_busy = false;
-
-    if (reply->error() != QNetworkReply::NoError) {
-        emit installFailed(tr("Stažení instalátoru selhalo: %1")
-                               .arg(reply->errorString()));
+    if (m_downloadAborted || !m_installerFile) {
         return;
     }
 
-    const QByteArray data = reply->readAll();
+    const QByteArray chunk = reply->readAll();
+    m_installerBytes += chunk.size();
+    if (m_installerBytes > kMaxInstallerBytes) {
+        m_downloadAborted = true;
+        reply->abort();
+        abortInstallerDownload(
+            tr("Stahovaný soubor překročil povolenou velikost — instalace zrušena."));
+        return;
+    }
 
-    const QString actual = QString::fromLatin1(
-        QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
+    m_installerHash->addData(chunk);
+    if (m_installerFile->write(chunk) != chunk.size()) {
+        m_downloadAborted = true;
+        reply->abort();
+        abortInstallerDownload(tr("Zápis instalátoru na disk selhal."));
+    }
+}
+
+void UpdateChecker::abortInstallerDownload(const QString &error)
+{
+    if (m_installerFile) {
+        m_installerFile->close();
+        m_installerFile->remove();
+        m_installerFile.reset();
+    }
+    m_installerHash.reset();
+    m_busy = false;
+    emit installFailed(error);
+}
+
+void UpdateChecker::onInstallerFinished(QNetworkReply *reply)
+{
+    if (m_downloadAborted) {
+        // Chyba už byla ohlášena v drainInstallerReply.
+        return;
+    }
+
+    if (reply->error() != QNetworkReply::NoError) {
+        abortInstallerDownload(tr("Stažení instalátoru selhalo: %1")
+                                   .arg(reply->errorString()));
+        return;
+    }
+
+    // Dozapsat data, která dorazila mezi posledním readyRead a finished.
+    drainInstallerReply(reply);
+    if (m_downloadAborted || !m_installerFile) {
+        return;
+    }
+
+    m_busy = false;
+    m_installerFile->close();
+
+    const QString actual =
+        QString::fromLatin1(m_installerHash->result().toHex());
+    m_installerHash.reset();
     if (actual != m_expectedSha256) {
+        m_installerFile->remove();
+        m_installerFile.reset();
         emit installFailed(
             tr("Ověření integrity staženého souboru selhalo — instalace zrušena."));
         return;
     }
 
-    launchInstaller(data);
+    launchInstaller();
 }
 
-void UpdateChecker::launchInstaller(const QByteArray &installerData)
+void UpdateChecker::launchInstaller()
 {
-    const QString tempRoot =
-        QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString dirPath = tempRoot + QStringLiteral("/PictureViewerUpdate");
-    QDir().mkpath(dirPath);
-    const QString exePath = dirPath + QLatin1Char('/') + m_pendingInstallerName;
-
-    QFile file(exePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        emit installFailed(tr("Nelze uložit instalátor do dočasné složky."));
-        return;
-    }
-    file.write(installerData);
-    file.close();
+    const QString exePath = m_installerFile->fileName();
+    m_installerFile.reset();
 
     // /VERYSILENT = bez průvodce, /NORESTART = nikdy nerestartovat systém.
     // Instalátor přepíše soubory programu; uživatelská data v AppData zůstávají.

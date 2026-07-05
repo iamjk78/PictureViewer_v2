@@ -95,7 +95,12 @@ void MainWindow::openFileDialog()
         this,
         tr("Otevřít soubor"),
         QString(),
-        tr("Obrázky (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.tiff *.tif)")
+        tr("Podporované soubory (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.tiff *.tif"
+           " *.pdf *.mp4 *.mkv *.avi *.mov *.ts *.mpg *.webm *.wmv *.m4v);;"
+           "Obrázky (*.jpg *.jpeg *.png *.gif *.bmp *.webp *.tiff *.tif);;"
+           "Videa (*.mp4 *.mkv *.avi *.mov *.ts *.mpg *.webm *.wmv *.m4v);;"
+           "PDF (*.pdf);;"
+           "Všechny soubory (*)")
     );
     if (!path.isEmpty()) {
         m_requestedFile = path;
