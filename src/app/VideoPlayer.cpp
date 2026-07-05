@@ -205,6 +205,7 @@ void VideoPlayer::playFile(const QString &path)
     m_videoItem->setRotation(0);
     resetZoom();
     m_player->setSource(QUrl::fromLocalFile(path));
+    m_player->setLoops(QMediaPlayer::Infinite);
     m_player->play();
     m_playPauseBtn->setText(QStringLiteral("⏸"));
     m_loadTimeoutTimer->start();
