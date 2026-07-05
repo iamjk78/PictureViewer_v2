@@ -5,6 +5,8 @@ set(CORE_SOURCES
     ImageMetadataReader.cpp
     ImageCatalog.hpp
     ImageCatalog.cpp
+    FolderNavigator.hpp
+    FolderNavigator.cpp
     PdfHandler.hpp
     PdfHandler.cpp
 )

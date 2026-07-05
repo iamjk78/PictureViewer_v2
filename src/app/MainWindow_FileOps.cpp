@@ -297,6 +297,10 @@ void MainWindow::loadFolder(const QString &folderPath)
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(true);
     m_statusLabel->setText(tr("Načítám složku…"));
 
+    // Navigace mezi složkami nezávisí na skenu obrázků (ImageCatalog) — je to
+    // čistě informace o adresářové struktuře, proto se aktualizuje hned tady.
+    refreshFolderNavData();
+
     if (!m_requestedFile.isEmpty()) {
         displayPathEarly(m_requestedFile);
     }

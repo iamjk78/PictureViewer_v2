@@ -13,6 +13,7 @@
 #include "app/UpdateChecker.hpp"
 #include "app/VideoPlayer.hpp"
 #include "core/ImageFormats.hpp"
+#include "workers/FolderNavWorker.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
 
@@ -235,6 +236,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupFavoritesToolbar();
     setupCategoriesToolbar();
     setupMoveToolbar();
+    setupFolderNavToolbar();
     setupPdfToolbar();
     setupStatusBar();
     setupOverlayToolbar();
@@ -303,6 +305,11 @@ void MainWindow::cancelAllWorkers()
         m_imageLoader->shutdown();
     }
 
+    if (m_folderNavWorker != nullptr) {
+        m_folderNavWorker->cancel();
+        disconnect(m_folderNavWorker, nullptr, this, nullptr);
+        m_folderNavWorker = nullptr;
+    }
 }
 
 // ── closeEvent ────────────────────────────────────────────────────────────────

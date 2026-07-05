@@ -1,6 +1,8 @@
 set(WORKERS_SOURCES
     FolderScanWorker.hpp
     FolderScanWorker.cpp
+    FolderNavWorker.hpp
+    FolderNavWorker.cpp
     ThumbnailWorker.hpp
     ThumbnailWorker.cpp
     VideoThumbnailWorker.hpp

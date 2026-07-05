@@ -13,6 +13,7 @@ set(APP_SOURCES
     MainWindow.hpp
     MainWindow.cpp
     MainWindow_FileOps.cpp
+    MainWindow_FolderNav.cpp
     MainWindow_Labels.cpp
     MainWindow_Layout.cpp
     MainWindow_Move.cpp

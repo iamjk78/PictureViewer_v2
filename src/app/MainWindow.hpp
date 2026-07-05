@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/ProfileManager.hpp"
+#include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageMetadataReader.hpp"
 
@@ -31,6 +32,7 @@ class CategoryManager;
 class ImageLoader;
 class ImageView;
 class FolderScanWorker;
+class FolderNavWorker;
 class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
@@ -188,6 +190,24 @@ private:
     void onUndoMove();
     void updateMoveUndoButtonState();
     QString pickRandomUnusedMoveColor() const;
+
+    // ── Navigace mezi složkami (Folder nav toolbar) ──────────────────────────
+    void setupFolderNavToolbar();
+    void onToggleFolderNavToolbar();
+    // Spustí (nebo zruší běžící a znovu spustí) FolderNavWorker pro aktuální
+    // složku — jen pokud je toolbar viditelný. Nahoru se počítá synchronně.
+    void refreshFolderNavData();
+    void onFolderNavDataReady(int generation, FolderNavResult left, FolderNavResult right, FolderNavResult down);
+    void onFolderNavClicked(const QString &targetPath);
+    void updateFolderNavButton(QPushButton *button, const QString &arrow, const FolderNavResult &result, bool loading);
+
+    QToolBar *m_folderNavToolbar = nullptr;
+    QPushButton *m_folderNavLeftButton = nullptr;
+    QPushButton *m_folderNavRightButton = nullptr;
+    QPushButton *m_folderNavUpButton = nullptr;
+    QPushButton *m_folderNavDownButton = nullptr;
+    FolderNavWorker *m_folderNavWorker = nullptr;
+    int m_folderNavGeneration = 0;
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)

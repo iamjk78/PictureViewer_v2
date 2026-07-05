@@ -14,6 +14,7 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/UpdateChecker.hpp"
+#include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
 
@@ -310,6 +311,114 @@ private slots:
         ImageCatalog catalog;
         const QStringList result = catalog.loadFolder(dir.path(), false);
         QCOMPARE(result.size(), 1);
+    }
+
+    // ── FolderNavigator ──────────────────────────────────────────────────────
+    void folderNavigator_siblingBeforeAfter()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Alfa"));
+        QVERIFY(QDir(dir.path()).mkdir("Beta"));
+        QVERIFY(QDir(dir.path()).mkdir("Gama"));
+
+        const QString current = dir.filePath("Beta");
+
+        const FolderNavResult before = FolderNavigator::siblingBefore(current);
+        QVERIFY(before.available);
+        QCOMPARE(before.name, QStringLiteral("Alfa"));
+        QCOMPARE(before.count, 1);
+
+        const FolderNavResult after = FolderNavigator::siblingAfter(current);
+        QVERIFY(after.available);
+        QCOMPARE(after.name, QStringLiteral("Gama"));
+        QCOMPARE(after.count, 1);
+    }
+
+    void folderNavigator_edgesHaveNoSibling()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Alfa"));
+        QVERIFY(QDir(dir.path()).mkdir("Beta"));
+
+        const FolderNavResult before = FolderNavigator::siblingBefore(dir.filePath("Alfa"));
+        QVERIFY(!before.available);
+        QCOMPARE(before.count, 0);
+
+        const FolderNavResult after = FolderNavigator::siblingAfter(dir.filePath("Beta"));
+        QVERIFY(!after.available);
+        QCOMPARE(after.count, 0);
+    }
+
+    void folderNavigator_excludesDeleteFolderAsSibling()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Alfa"));
+        QVERIFY(QDir(dir.path()).mkdir("Delete"));
+        QVERIFY(QDir(dir.path()).mkdir("Zeta"));
+
+        const FolderNavResult after = FolderNavigator::siblingAfter(dir.filePath("Alfa"));
+        QVERIFY(after.available);
+        QCOMPARE(after.name, QStringLiteral("Zeta"));   // "Delete" přeskočena
+        QCOMPARE(after.count, 1);
+    }
+
+    void folderNavigator_excludesDeleteFolderAsSubfolder()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Delete"));
+        QVERIFY(QDir(dir.path()).mkdir("SubA"));
+
+        const FolderNavResult down = FolderNavigator::firstSubfolder(dir.path());
+        QVERIFY(down.available);
+        QCOMPARE(down.name, QStringLiteral("SubA"));
+        QCOMPARE(down.count, 1);   // "Delete" se nepočítá
+    }
+
+    void folderNavigator_firstSubfolderNaturalSort()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Sub10"));
+        QVERIFY(QDir(dir.path()).mkdir("Sub2"));
+        QVERIFY(QDir(dir.path()).mkdir("Sub1"));
+
+        const FolderNavResult down = FolderNavigator::firstSubfolder(dir.path());
+        QVERIFY(down.available);
+        QCOMPARE(down.name, QStringLiteral("Sub1"));
+        QCOMPARE(down.count, 3);
+    }
+
+    void folderNavigator_noSubfoldersUnavailable()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        const FolderNavResult down = FolderNavigator::firstSubfolder(dir.path());
+        QVERIFY(!down.available);
+        QCOMPARE(down.count, 0);
+    }
+
+    void folderNavigator_parentFolder()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Beta"));
+
+        const FolderNavResult up = FolderNavigator::parentFolder(dir.filePath("Beta"));
+        QVERIFY(up.available);
+        QCOMPARE(up.count, 1);
+        QCOMPARE(QDir(up.path).canonicalPath(), QDir(dir.path()).canonicalPath());
+    }
+
+    void folderNavigator_parentUnavailableAtFilesystemRoot()
+    {
+        const FolderNavResult up = FolderNavigator::parentFolder(QDir::rootPath());
+        QVERIFY(!up.available);
+        QCOMPARE(up.count, 0);
     }
 
     // ── CategoryManager ──────────────────────────────────────────────────────
