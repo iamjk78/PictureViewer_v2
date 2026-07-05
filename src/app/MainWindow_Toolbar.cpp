@@ -45,6 +45,12 @@ void MainWindow::setupToolbar()
     toolbar->setMovable(false);
     m_mainToolbar = toolbar;
 
+    // Bez explicitní velikosti si macOS/Qt volí velikost pixmapy per-ikona podle
+    // poměru stran zdrojového .ico (delete_folder_icon.ico má jiný poměr stran
+    // než delete_picture_icon.ico/rename.ico), takže bitmapové ikony vypadaly
+    // v toolbaru různě velké. Pevná velikost sjednotí všechny QIcon-akce.
+    toolbar->setIconSize(QSize(20, 20));
+
     constexpr int ICON_SIZE = 28;
     const QString iconButtonStyle = QStringLiteral(
         "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
@@ -53,16 +59,20 @@ void MainWindow::setupToolbar()
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); }")
         .arg(ICON_SIZE);
 
+    // Poznámka k Unicode znakům v toolbaru: ◀ ▶ ✂ ↕ mají oficiální emoji
+    // (barevnou/tučnou) variantu přes variation selector U+FE0F ("◀️" "▶️" …),
+    // což je vizuálně sjednotí s ostatními emoji ikonami (🗑 ➕ 💾 ⭐ ♻).
+    // ⟲ ⟳ žádnou emoji variantu nemají — ty se řeší zvlášť větším písmem níže.
     m_previousImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Left));
-    m_previousImageAction->setText(QStringLiteral("◀"));
+    m_previousImageAction->setText(QStringLiteral("◀️"));
     m_previousImageAction->setToolTip(tr("Předchozí obrázek (Shift+←)"));
 
     m_nextImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Right));
-    m_nextImageAction->setText(QStringLiteral("▶"));
+    m_nextImageAction->setText(QStringLiteral("▶️"));
     m_nextImageAction->setToolTip(tr("Další obrázek (Shift+→)"));
 
     m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
-    m_toggleSlideshowAction->setText(QStringLiteral("▶"));
+    m_toggleSlideshowAction->setText(QStringLiteral("▶️"));
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 
     m_intervalSpinBox->setRange(1, 60);
@@ -105,7 +115,7 @@ void MainWindow::setupToolbar()
     // Sort button
     m_sortButton = new QToolButton(toolbar);
     m_sortButton->setPopupMode(QToolButton::InstantPopup);
-    m_sortButton->setText(QStringLiteral("↕"));
+    m_sortButton->setText(QStringLiteral("↕️"));
     m_sortButton->setToolTip(tr("Řazení souborů"));
     m_sortButton->setStyleSheet(iconButtonStyle);
 
@@ -168,7 +178,7 @@ void MainWindow::setupToolbar()
     m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
     connect(m_rotateRightAction, &QAction::triggered, this, &MainWindow::onRotateRight);
 
-    m_renameImageAction->setText(QStringLiteral("✏"));
+    m_renameImageAction->setText(QStringLiteral("✏️"));
     m_renameImageAction->setToolTip(tr("Přejmenovat obrázek (R)"));
     toolbar->addAction(m_renameImageAction);
     toolbar->addSeparator();
@@ -177,7 +187,21 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_rotateRightAction);
     toolbar->addSeparator();
 
-    m_cropAction = new QAction(QStringLiteral("✂"), this);
+    // ⟲ ⟳ nemají emoji variantu (na rozdíl od ◀️ ▶️ ✂️ ↕️ výše), takže bez
+    // zásahu vypadají mnohem menší než ostatní ikony — kompenzujeme větším písmem.
+    const QString rotateGlyphStyle = QStringLiteral(
+        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "  padding: 2px; min-width: 28px; width: 28px; min-height: 28px; height: 28px; "
+        "  background: transparent; font-size: 30px; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }");
+    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(m_rotateLeftAction))) {
+        btn->setStyleSheet(rotateGlyphStyle);
+    }
+    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(m_rotateRightAction))) {
+        btn->setStyleSheet(rotateGlyphStyle);
+    }
+
+    m_cropAction = new QAction(QStringLiteral("✂️"), this);
     m_cropAction->setToolTip(tr("Ořez obrázku — označte oblast myší"));
     m_cropAction->setCheckable(true);
     connect(m_cropAction, &QAction::toggled, this, [this](bool checked) {
@@ -222,11 +246,13 @@ void MainWindow::setupToolbar()
     connect(m_recycleAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
     toolbar->addAction(m_recycleAction);
 
-    // Apply consistent icon-only styling to all toolbar buttons
+    // Apply consistent icon-only styling to all toolbar buttons.
+    // font-size zvětšeno na 20px, aby textové/emoji glyfy (◀ ▶ ⟲ ✂ …) vizuálně
+    // odpovídaly velikosti bitmapových ikon (setIconSize 20×20 výše).
     const QString toolButtonStyle = QStringLiteral(
         "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
         "  padding: 2px; min-width: 28px; width: 28px; min-height: 28px; height: 28px; "
-        "  background: transparent; font-size: 14px; } "
+        "  background: transparent; font-size: 20px; } "
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }");
     toolbar->setStyleSheet(toolButtonStyle);
 }
@@ -475,7 +501,9 @@ void MainWindow::updateSortButtonText()
         return;
     }
     const bool asc = m_settingsManager->sortAscending();
-    m_sortButton->setText(asc ? QStringLiteral("↑") : QStringLiteral("↓"));
+    // ⬆/⬇ (ne ↑/↓) — mají výchozí emoji (tučnou) reprezentaci, konzistentní
+    // s ostatními ikonami toolbaru.
+    m_sortButton->setText(asc ? QStringLiteral("⬆") : QStringLiteral("⬇"));
 }
 
 void MainWindow::setupPdfToolbar()

@@ -142,7 +142,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
 
-    m_renameImageAction->setIcon(QIcon(":/icons/rename.ico"));
+    // Pozn.: rename.ico se záměrně nepoužívá jako QIcon — jeho kresba vyplňuje
+    // jen ~31 % plátna (velké průhledné okraje), takže i při stejné iconSize
+    // vypadala výrazně menší než ostatní ikony. Text (emoji ✏️) se nastavuje
+    // v setupToolbar() a chová se konzistentně s ostatními textovými ikonami.
     m_renameImageAction->setToolTip(tr("Přejmenování obrázku (R)"));
     m_renameImageAction->setShortcut(QKeySequence("R"));
     connect(m_renameImageAction, &QAction::triggered, this, &MainWindow::renameCurrentImage);
