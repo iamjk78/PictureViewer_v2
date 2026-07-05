@@ -41,6 +41,7 @@ namespace pictureviewer {
 void MainWindow::setupToolbar()
 {
     auto *toolbar = addToolBar(tr("Navigace"));
+    toolbar->setObjectName("mainToolbar");
     toolbar->setMovable(false);
     m_mainToolbar = toolbar;
 
@@ -277,6 +278,7 @@ void MainWindow::setupFavoritesToolbar()
     addToolBarBreak();
 
     m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
+    m_favoritesToolbar->setObjectName("favoritesToolbar");
     m_favoritesToolbar->setMovable(false);
 
     constexpr int ICON_SIZE = 28;

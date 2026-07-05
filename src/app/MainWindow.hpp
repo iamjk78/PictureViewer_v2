@@ -38,6 +38,7 @@ class ThumbnailPanel;
 class UpdateChecker;
 class VideoPlayer;
 class VideoThumbnailWorker;
+struct MoveButtonInfo;
 
 class MainWindow : public QMainWindow
 {
@@ -173,6 +174,21 @@ private:
     void onCategoryChangeColor(int categoryId); // změnit barvu kategorie
     void onCategoryDelete(int categoryId); // smazat kategorii
 
+    // ── Přesun do složky (Move toolbar) ──────────────────────────────────────
+    void setupMoveToolbar();
+    void refreshMoveButtons();
+    void onMoveButtonAdd();
+    void onMoveButtonClicked(int moveButtonId);
+    void onMoveButtonRename(int moveButtonId);
+    void onMoveButtonChangeColor(int moveButtonId);
+    void onMoveButtonChangeFolder(int moveButtonId);
+    void onMoveButtonDelete(int moveButtonId);
+    // Provede přesun jednoho souboru; vrátí true při úspěchu (a odebere ho ze seznamu).
+    bool performSingleMove(const QString &filePath, const MoveButtonInfo &button);
+    void onUndoMove();
+    void updateMoveUndoButtonState();
+    QString pickRandomUnusedMoveColor() const;
+
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)
     QStringList m_unfilteredImagePaths;  // všechny obrázky bez filtru
@@ -207,6 +223,11 @@ private:
     QToolBar *m_mainToolbar = nullptr;
     QToolBar *m_favoritesToolbar = nullptr;    // Sekundární toolbar pro oblíbené složky
     QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)
+    QToolBar *m_moveToolbar = nullptr;         // Sekundární toolbar pro rychlý přesun do složky
+    QMap<int, QPushButton*> m_moveButtons;     // mapa: moveButtonId → tlačítko
+    QAction *m_moveUndoAction = nullptr;
+    // Zásobník přesunutých souborů (přes Move toolbar): {cílová cesta, původní cesta}
+    QList<QPair<QString, QString>> m_moveHistory;
     QToolBar *m_pdfToolbar = nullptr;          // Toolbar pro PDF — viditelný jen při PDF
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;

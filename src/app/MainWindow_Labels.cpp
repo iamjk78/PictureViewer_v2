@@ -27,6 +27,7 @@ void MainWindow::setupCategoriesToolbar()
     addToolBarBreak();
 
     m_categoriesToolbar = addToolBar(tr("Štítky"));
+    m_categoriesToolbar->setObjectName("categoriesToolbar");
     m_categoriesToolbar->setMovable(false);
 
     constexpr int ICON_SIZE = 28;

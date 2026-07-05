@@ -4,6 +4,7 @@
 #include "workers/ThumbnailWorker.hpp"
 
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHash>
 #include <QIcon>
 #include <QImage>
@@ -16,6 +17,7 @@
 #include <QKeyEvent>
 #include <QResizeEvent>
 #include <QThreadPool>
+#include <algorithm>
 
 namespace {
 
@@ -76,6 +78,8 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     setIconSize(QSize(kThumbnailSize, kThumbnailSize));
     setSortingEnabled(false);
     setMovement(QListWidget::Static);
+    // Ctrl/Shift+klik umožňuje vybrat více položek pro hromadný přesun.
+    setSelectionMode(QAbstractItemView::ExtendedSelection);
     setUniformItemSizes(true);  // Zpět povoleno - size hint zabraňuje přesahu
     setItemDelegate(new CenteredIconDelegate(this));
     setStyleSheet(
@@ -243,7 +247,22 @@ void ThumbnailPanel::keyPressEvent(QKeyEvent *event)
 
 void ThumbnailPanel::onItemClicked(QListWidgetItem *item)
 {
+    // Ctrl/Shift+klik jen rozšiřuje výběr (pro hromadný přesun) — nenavigovat,
+    // aby se neresetoval zbytek výběru přes setCurrentIndex() z showImage().
+    if (QGuiApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier)) {
+        return;
+    }
     emit imageSelected(row(item));
+}
+
+QList<int> ThumbnailPanel::selectedIndices() const
+{
+    QList<int> result;
+    for (QListWidgetItem *item : selectedItems()) {
+        result.append(row(item));
+    }
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 void ThumbnailPanel::onThumbnailReady(int generation, const QString &path, const QImage &image)

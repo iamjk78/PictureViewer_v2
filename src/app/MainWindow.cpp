@@ -231,6 +231,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupToolbar();
     setupFavoritesToolbar();
     setupCategoriesToolbar();
+    setupMoveToolbar();
     setupPdfToolbar();
     setupStatusBar();
     setupOverlayToolbar();
@@ -319,6 +320,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
     if (m_categoriesToolbar) {
         m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
+    }
+    if (m_moveToolbar) {
+        m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());
     }
 
     // Uložit geometrii okna + stav doků + aktuální rozlišení obrazovky

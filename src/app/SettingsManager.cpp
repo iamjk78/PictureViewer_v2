@@ -52,6 +52,13 @@ constexpr int kMaxFavoriteFolders        = 10;
 
 constexpr auto kCategoriesToolbarVisibleKey = "Categories/toolbar_visible";
 
+constexpr auto kMoveButtonIdsKey         = "Move/ids";
+constexpr auto kMoveButtonNamesKey       = "Move/names";
+constexpr auto kMoveButtonColorsKey      = "Move/colors";
+constexpr auto kMoveButtonFoldersKey     = "Move/folders";
+constexpr auto kMoveNextIdKey            = "Move/next_id";
+constexpr auto kMoveToolbarVisibleKey    = "Move/toolbar_visible";
+
 constexpr auto kWindowGeometryKey        = "UI/window_geometry";
 constexpr auto kWindowStateKey           = "UI/window_state";
 constexpr auto kSavedScreenSizeKey       = "UI/saved_screen_size";
@@ -90,11 +97,20 @@ SettingsManager::SettingsManager(const QString &path, const QString &profileName
     m_settings = new QSettings(path, QSettings::IniFormat);
 
     // Při prvním spuštění (nebo po ruční editaci) zapsat verzi schématu nastavení.
-    // Šablona pro budoucí migrace:
-    //   int ver = settingsVersion();
-    //   if (ver < 2) { /* migrate */ m_settings->setValue(kSettingsVersionKey, 2); }
     if (!m_settings->contains(kSettingsVersionKey)) {
         m_settings->setValue(kSettingsVersionKey, kCurrentSettingsVersion);
+    }
+
+    // Migrace v2: přidán toolbar Přesun a objectName() na všechny toolbary
+    // (nutné pro QMainWindow::restoreState()). Staré uložené window_state
+    // neobsahuje tyto identifikátory — Qt by ho přesto částečně napárovalo
+    // na nově pojmenované toolbary a přepsalo jejich viditelnost/pořadí
+    // nesmyslnými hodnotami ze staré, neodpovídající struktury oken.
+    // Zahodit staré window_state donutí aplikaci použít výchozí layout,
+    // který se při příštím zavření uloží už se správnou strukturou.
+    if (settingsVersion() < 2) {
+        m_settings->remove(kWindowStateKey);
+        m_settings->setValue(kSettingsVersionKey, 2);
     }
 }
 
@@ -375,6 +391,141 @@ bool SettingsManager::categoriesToolbarVisible() const
 void SettingsManager::setCategoriesToolbarVisible(bool visible)
 {
     m_settings->setValue(kCategoriesToolbarVisibleKey, visible);
+}
+
+// ── Přesun do složky (Move buttons) ──────────────────────────────────────────
+
+QList<MoveButtonInfo> SettingsManager::moveButtons() const
+{
+    const QStringList ids     = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    const QStringList names   = m_settings->value(kMoveButtonNamesKey, QStringList()).toStringList();
+    const QStringList colors  = m_settings->value(kMoveButtonColorsKey, QStringList()).toStringList();
+    const QStringList folders = m_settings->value(kMoveButtonFoldersKey, QStringList()).toStringList();
+
+    QList<MoveButtonInfo> result;
+    for (int i = 0; i < ids.size(); ++i) {
+        MoveButtonInfo info;
+        info.id     = ids.at(i).toInt();
+        info.name   = i < names.size()   ? names.at(i)   : QString();
+        info.color  = i < colors.size()  ? colors.at(i)  : QString();
+        info.folder = i < folders.size() ? folders.at(i) : QString();
+        result.append(info);
+    }
+    return result;
+}
+
+int SettingsManager::addMoveButton(const QString &name, const QString &folder, const QString &colorHex)
+{
+    if (name.trimmed().isEmpty() || folder.trimmed().isEmpty()) {
+        return -1;
+    }
+
+    const int newId = m_settings->value(kMoveNextIdKey, 1).toInt();
+    m_settings->setValue(kMoveNextIdKey, newId + 1);
+
+    QStringList ids     = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    QStringList names   = m_settings->value(kMoveButtonNamesKey, QStringList()).toStringList();
+    QStringList colors  = m_settings->value(kMoveButtonColorsKey, QStringList()).toStringList();
+    QStringList folders = m_settings->value(kMoveButtonFoldersKey, QStringList()).toStringList();
+
+    ids.append(QString::number(newId));
+    names.append(name);
+    colors.append(colorHex);
+    folders.append(folder);
+
+    m_settings->setValue(kMoveButtonIdsKey, ids);
+    m_settings->setValue(kMoveButtonNamesKey, names);
+    m_settings->setValue(kMoveButtonColorsKey, colors);
+    m_settings->setValue(kMoveButtonFoldersKey, folders);
+
+    return newId;
+}
+
+bool SettingsManager::renameMoveButton(int id, const QString &newName)
+{
+    if (newName.trimmed().isEmpty()) {
+        return false;
+    }
+    QStringList ids   = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    const int idx = ids.indexOf(QString::number(id));
+    if (idx < 0) {
+        return false;
+    }
+    QStringList names = m_settings->value(kMoveButtonNamesKey, QStringList()).toStringList();
+    while (names.size() <= idx) {
+        names.append(QString());
+    }
+    names[idx] = newName;
+    m_settings->setValue(kMoveButtonNamesKey, names);
+    return true;
+}
+
+bool SettingsManager::setMoveButtonColor(int id, const QString &colorHex)
+{
+    QStringList ids = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    const int idx = ids.indexOf(QString::number(id));
+    if (idx < 0) {
+        return false;
+    }
+    QStringList colors = m_settings->value(kMoveButtonColorsKey, QStringList()).toStringList();
+    while (colors.size() <= idx) {
+        colors.append(QString());
+    }
+    colors[idx] = colorHex;
+    m_settings->setValue(kMoveButtonColorsKey, colors);
+    return true;
+}
+
+bool SettingsManager::setMoveButtonFolder(int id, const QString &folder)
+{
+    if (folder.trimmed().isEmpty()) {
+        return false;
+    }
+    QStringList ids = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    const int idx = ids.indexOf(QString::number(id));
+    if (idx < 0) {
+        return false;
+    }
+    QStringList folders = m_settings->value(kMoveButtonFoldersKey, QStringList()).toStringList();
+    while (folders.size() <= idx) {
+        folders.append(QString());
+    }
+    folders[idx] = folder;
+    m_settings->setValue(kMoveButtonFoldersKey, folders);
+    return true;
+}
+
+bool SettingsManager::removeMoveButton(int id)
+{
+    QStringList ids = m_settings->value(kMoveButtonIdsKey, QStringList()).toStringList();
+    const int idx = ids.indexOf(QString::number(id));
+    if (idx < 0) {
+        return false;
+    }
+    QStringList names   = m_settings->value(kMoveButtonNamesKey, QStringList()).toStringList();
+    QStringList colors  = m_settings->value(kMoveButtonColorsKey, QStringList()).toStringList();
+    QStringList folders = m_settings->value(kMoveButtonFoldersKey, QStringList()).toStringList();
+
+    ids.removeAt(idx);
+    if (idx < names.size())   names.removeAt(idx);
+    if (idx < colors.size())  colors.removeAt(idx);
+    if (idx < folders.size()) folders.removeAt(idx);
+
+    m_settings->setValue(kMoveButtonIdsKey, ids);
+    m_settings->setValue(kMoveButtonNamesKey, names);
+    m_settings->setValue(kMoveButtonColorsKey, colors);
+    m_settings->setValue(kMoveButtonFoldersKey, folders);
+    return true;
+}
+
+bool SettingsManager::moveToolbarVisible() const
+{
+    return m_settings->value(kMoveToolbarVisibleKey, false).toBool();
+}
+
+void SettingsManager::setMoveToolbarVisible(bool visible)
+{
+    m_settings->setValue(kMoveToolbarVisibleKey, visible);
 }
 
 // ── Settings version ─────────────────────────────────────────────────────────

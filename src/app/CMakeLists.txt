@@ -15,10 +15,13 @@ set(APP_SOURCES
     MainWindow_FileOps.cpp
     MainWindow_Labels.cpp
     MainWindow_Layout.cpp
+    MainWindow_Move.cpp
     MainWindow_Profiles.cpp
     MainWindow_Toolbar.cpp
     MetadataPanel.hpp
     MetadataPanel.cpp
+    MoveDialogs.hpp
+    MoveDialogs.cpp
     ProfileManager.hpp
     ProfileManager.cpp
     ImageView.hpp

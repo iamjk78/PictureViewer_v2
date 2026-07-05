@@ -36,6 +36,9 @@ public:
     void updateImagePath(const QString &oldPath, const QString &newPath);
     QIcon iconAt(int index) const;   // náhled pro placeholder při async načítání
 
+    // Indexy aktuálně vybraných položek (Ctrl/Shift+klik), setříděné vzestupně.
+    QList<int> selectedIndices() const;
+
     // Aktualizuje miniaturu videa (voláno z VideoThumbnailWorker přes MainWindow).
     void setVideoThumbnail(const QString &path, const QImage &image);
 

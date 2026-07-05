@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.21**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.22**.
 
 ## Funkce
 
@@ -35,6 +35,10 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   správa (přejmenovat, změnit barvu, smazat) přes pravý klik
 - **Oblíbené složky** (⭐) — toolbar s barevnými tlačítky pro rychlé přepínání;
   max 10 složek, klik otevře složku, pravý klik odebere
+- **Přesun do složky** (➡️) — vlastní tlačítka pro tematické roztřídění souborů
+  (název, barva, cílová složka); hromadný přesun přes výběr více souborů
+  v náhledech (Ctrl/Shift+klik); ochrana proti přepsání při shodě jmen;
+  přesun lze vrátit zpět (↩, LIFO); tlačítka jsou per-profil
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
 - **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;

@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QList>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -9,6 +10,14 @@
 class QSettings;
 
 namespace pictureviewer {
+
+// Tlačítko rychlého přesunu do konkrétní složky (toolbar Přesun).
+struct MoveButtonInfo {
+    int id;
+    QString name;
+    QString color;    // hex, např. "#4ECDC4"
+    QString folder;   // absolutní cesta k cílové složce
+};
 
 class SettingsManager
 {
@@ -94,10 +103,23 @@ public:
     bool categoriesToolbarVisible() const;
     void setCategoriesToolbarVisible(bool visible);
 
+    // ── Přesun do složky (Move buttons) ──────────────────────────────────────
+    // Tlačítka jsou per-profil (uložena v config.ini aktivního profilu).
+    QList<MoveButtonInfo> moveButtons() const;
+    // Vrátí id nového tlačítka, nebo -1 při chybě (prázdný název/složka).
+    int addMoveButton(const QString &name, const QString &folder, const QString &colorHex = QString());
+    bool renameMoveButton(int id, const QString &newName);
+    bool setMoveButtonColor(int id, const QString &colorHex);
+    bool setMoveButtonFolder(int id, const QString &folder);
+    bool removeMoveButton(int id);
+
+    bool moveToolbarVisible() const;
+    void setMoveToolbarVisible(bool visible);
+
     // ── Settings version ─────────────────────────────────────────────────────
     // Zvyšte kCurrentSettingsVersion při každé změně formátu nastavení
     // a přidejte migraci do SettingsManager konstruktoru.
-    static constexpr int kCurrentSettingsVersion = 1;
+    static constexpr int kCurrentSettingsVersion = 2;
     int settingsVersion() const;
 
     // ── Window geometry ───────────────────────────────────────────────────────

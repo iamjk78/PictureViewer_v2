@@ -144,6 +144,11 @@ void MainWindow::switchProfile(const QString &profileName)
     m_categoryManager = std::make_unique<CategoryManager>(
         m_profileManager->dbPath(profileName));
 
+    // Move buttons a historie přesunů jsou per-profil (viz SettingsManager) —
+    // historie starého profilu už neodpovídá souborům nového profilu.
+    m_moveHistory.clear();
+    updateMoveUndoButtonState();
+
     // Obnovit UI.
     m_imagePaths.clear();
     m_unfilteredImagePaths.clear();
@@ -155,6 +160,7 @@ void MainWindow::switchProfile(const QString &profileName)
     updateCategoryFilterButtons();
     refreshFavoriteButtons();
     updateFavoritesMenu();
+    refreshMoveButtons();
     updateSortButtonText();
     applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
 
@@ -317,6 +323,8 @@ void MainWindow::manageProfiles()
                 m_videoPlayer->setSettingsManager(m_settingsManager);
                 m_categoryManager = std::make_unique<CategoryManager>(
                     m_profileManager->dbPath(newActive));
+                m_moveHistory.clear();
+                updateMoveUndoButtonState();
                 m_imagePaths.clear();
                 m_unfilteredImagePaths.clear();
                 m_categoryFilterIds.clear();
@@ -327,6 +335,7 @@ void MainWindow::manageProfiles()
                 updateCategoryFilterButtons();
                 refreshFavoriteButtons();
                 updateFavoritesMenu();
+                refreshMoveButtons();
                 updateSortButtonText();
                 applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
                 restoreLastFolder();
