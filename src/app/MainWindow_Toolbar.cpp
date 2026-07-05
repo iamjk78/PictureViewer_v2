@@ -44,12 +44,30 @@ void MainWindow::setupToolbar()
     toolbar->setMovable(false);
     m_mainToolbar = toolbar;
 
+    constexpr int ICON_SIZE = 28;
+    const QString iconButtonStyle = QStringLiteral(
+        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  background: transparent; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); }")
+        .arg(ICON_SIZE);
+
     m_previousImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Left));
+    m_previousImageAction->setText(QStringLiteral("◀"));
+    m_previousImageAction->setToolTip(tr("Předchozí obrázek (Shift+←)"));
+
     m_nextImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Right));
+    m_nextImageAction->setText(QStringLiteral("▶"));
+    m_nextImageAction->setToolTip(tr("Další obrázek (Shift+→)"));
+
     m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
+    m_toggleSlideshowAction->setText(QStringLiteral("▶"));
+    m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
+
     m_intervalSpinBox->setRange(1, 60);
     m_intervalSpinBox->setValue(m_slideshowController->intervalMs() / 1000);
     m_intervalSpinBox->setSuffix(tr(" s"));
+    m_intervalSpinBox->setMaximumWidth(50);
 
     connect(m_previousImageAction, &QAction::triggered, this, &MainWindow::showPreviousImage);
     connect(m_nextImageAction, &QAction::triggered, this, &MainWindow::showNextImage);
@@ -59,6 +77,8 @@ void MainWindow::setupToolbar()
     });
 
     m_openFolderAction->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    m_openFolderAction->setText(QString());
+    m_openFolderAction->setToolTip(tr("Otevřít složku (Ctrl+O)"));
     toolbar->addAction(m_openFolderAction);
 
     m_reloadFolderAction = new QAction(QStringLiteral("🔄"), this);
@@ -69,7 +89,7 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_reloadFolderAction);
 
     m_screenshotAction = new QAction(QStringLiteral("📷"), this);
-    m_screenshotAction->setToolTip(tr("Snímek výřezu obrazovky — označte oblast myší (i mimo aplikaci)"));
+    m_screenshotAction->setToolTip(tr("Snímek výřezu obrazovky (i mimo aplikaci)"));
     connect(m_screenshotAction, &QAction::triggered, this, &MainWindow::onScreenshotCapture);
     toolbar->addAction(m_screenshotAction);
     toolbar->addSeparator();
@@ -84,7 +104,9 @@ void MainWindow::setupToolbar()
     // Sort button
     m_sortButton = new QToolButton(toolbar);
     m_sortButton->setPopupMode(QToolButton::InstantPopup);
+    m_sortButton->setText(QStringLiteral("↕"));
     m_sortButton->setToolTip(tr("Řazení souborů"));
+    m_sortButton->setStyleSheet(iconButtonStyle);
 
     auto *sortMenu = new QMenu(m_sortButton);
 
@@ -145,8 +167,11 @@ void MainWindow::setupToolbar()
     m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
     connect(m_rotateRightAction, &QAction::triggered, this, &MainWindow::onRotateRight);
 
+    m_renameImageAction->setText(QStringLiteral("✏"));
+    m_renameImageAction->setToolTip(tr("Přejmenovat obrázek (R)"));
     toolbar->addAction(m_renameImageAction);
     toolbar->addSeparator();
+
     toolbar->addAction(m_rotateLeftAction);
     toolbar->addAction(m_rotateRightAction);
     toolbar->addSeparator();
@@ -163,12 +188,12 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_cropAction);
     toolbar->addSeparator();
 
-    m_saveAction = new QAction(tr("Uložit"), this);
+    m_saveAction = new QAction(QStringLiteral("💾"), this);
     m_saveAction->setToolTip(tr("Uložit upravenou kopii (přepsat originál)"));
     m_saveAction->setEnabled(false);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveImage);
 
-    m_saveAsAction = new QAction(tr("Uložit jako"), this);
+    m_saveAsAction = new QAction(QStringLiteral("➕"), this);
     m_saveAsAction->setToolTip(tr("Uložit jako nový soubor JPEG"));
     m_saveAsAction->setEnabled(false);
     connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAsImage);
@@ -182,14 +207,27 @@ void MainWindow::setupToolbar()
         updateSaveButtonStates();
     });
 
+    m_deletePictureAction->setText(QStringLiteral("🗑"));
+    m_deletePictureAction->setToolTip(tr("Smazat obrázek (D)"));
     toolbar->addAction(m_deletePictureAction);
+
+    m_deleteFolderAction->setText(QStringLiteral("❌"));
+    m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     toolbar->addAction(m_deleteFolderAction);
 
     m_recycleAction = new QAction(QStringLiteral("♻"), this);
-    m_recycleAction->setToolTip(tr("Vrátit poslední přesunutý soubor zpět do původní složky"));
+    m_recycleAction->setToolTip(tr("Vrátit poslední soubor"));
     m_recycleAction->setEnabled(false);
     connect(m_recycleAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
     toolbar->addAction(m_recycleAction);
+
+    // Apply consistent icon-only styling to all toolbar buttons
+    const QString toolButtonStyle = QStringLiteral(
+        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "  padding: 2px; min-width: 28px; width: 28px; min-height: 28px; height: 28px; "
+        "  background: transparent; font-size: 14px; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }");
+    toolbar->setStyleSheet(toolButtonStyle);
 }
 
 void MainWindow::setupStatusBar()
@@ -428,12 +466,8 @@ void MainWindow::updateSortButtonText()
     if (!m_sortButton) {
         return;
     }
-    const int key = m_settingsManager->sortKey();
     const bool asc = m_settingsManager->sortAscending();
-    const QString keyLabel = (key == 0) ? tr("Název")
-                           : (key == 1) ? tr("Datum")
-                                        : tr("Velikost");
-    m_sortButton->setText(keyLabel + (asc ? QStringLiteral(" ↑") : QStringLiteral(" ↓")));
+    m_sortButton->setText(asc ? QStringLiteral("↑") : QStringLiteral("↓"));
 }
 
 void MainWindow::setupPdfToolbar()
