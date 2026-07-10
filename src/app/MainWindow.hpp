@@ -50,6 +50,12 @@ public:
     // Přepínatelná rozložení UI (Nastavení → Vzhled aplikace)
     enum class UiLayout { Classic, Filmstrip, Immersive, Gallery, Pro };
 
+    // Undo historie přesunů/mazání se ukládá po SKUPINÁCH: jedna skupina =
+    // jedna uživatelská akce (aktivní soubor + jeho párové soubory). Undo vrací
+    // celou skupinu jedním krokem. Pár = {cílová cesta, původní cesta}.
+    using FileMovePair = QPair<QString, QString>;
+    using MoveGroup    = QList<FileMovePair>;
+
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
@@ -184,11 +190,21 @@ private:
     void onMoveButtonChangeColor(int moveButtonId);
     void onMoveButtonChangeFolder(int moveButtonId);
     void onMoveButtonDelete(int moveButtonId);
-    // Provede přesun jednoho souboru; vrátí true při úspěchu (a odebere ho ze seznamu).
-    bool performSingleMove(const QString &filePath, const MoveButtonInfo &button);
+    // Provede přesun jednoho souboru do složky tlačítka. Úspěšný přesun zapíše
+    // do `group` (kvůli skupinovému undo); vrací true při úspěchu.
+    bool performSingleMove(const QString &filePath, const MoveButtonInfo &button,
+                           MoveGroup &group);
     void onUndoMove();
     void updateMoveUndoButtonState();
     QString pickRandomUnusedMoveColor() const;
+
+    // Párové soubory (obrázek/video se stejným názvem). Vrátí seznam souborů,
+    // se kterými se má akce provést (aktivní první + zvolené páry). cancelled=true,
+    // pokud uživatel u 2+ párů zvolil Storno. Když je volba vypnutá nebo 0 párů,
+    // vrátí jen {activeFile}. verb = "přesunout" / "smazat" pro text dialogu.
+    QStringList resolveCompanionSet(const QString &activeFile, const QString &verb,
+                                    bool &cancelled);
+    void onMoveCompanionToggled(bool checked);
 
     // ── Navigace mezi složkami (Folder nav toolbar) ──────────────────────────
     enum class FolderNavDirection { Left, Right, Up, Down };
@@ -257,8 +273,8 @@ private:
     QToolBar *m_moveToolbar = nullptr;         // Sekundární toolbar pro rychlý přesun do složky
     QMap<int, QPushButton*> m_moveButtons;     // mapa: moveButtonId → tlačítko
     QAction *m_moveUndoAction = nullptr;
-    // Zásobník přesunutých souborů (přes Move toolbar): {cílová cesta, původní cesta}
-    QList<QPair<QString, QString>> m_moveHistory;
+    // Zásobník přesunutých souborů (přes Move toolbar), po skupinách (viz MoveGroup).
+    QList<MoveGroup> m_moveHistory;
     QToolBar *m_pdfToolbar = nullptr;          // Toolbar pro PDF — viditelný jen při PDF
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;
@@ -286,14 +302,15 @@ private:
     QAction *m_enableDeleteImageAction;
     QAction *m_enableMoveToDeleteAction;
     QAction *m_askConfirmationAction;
+    QAction *m_moveCompanionAction = nullptr;
     QAction *m_enablePdfProcessingAction;
     QAction *m_enableImagesAction = nullptr;
     QAction *m_enableVideosAction = nullptr;
     QAction *m_deleteFolderAction;
     QAction *m_deletePictureAction;
     QAction *m_recycleAction = nullptr;
-    // Zásobník přesunutých souborů: {cesta v Delete složce, původní cesta}
-    QList<QPair<QString, QString>> m_deleteHistory;
+    // Zásobník smazaných souborů (do složky Delete), po skupinách (viz MoveGroup).
+    QList<MoveGroup> m_deleteHistory;
 
     void onUndoDelete();
     void updateRecycleButtonState();

@@ -57,6 +57,10 @@ public:
     void setEnableMoveToDelete(bool enabled);
     bool askConfirmationDelete() const;
     void setAskConfirmationDelete(bool enabled);
+    // Při přesunu/smazání souboru přesunout/smazat i párové soubory (obrázek/video)
+    // se stejným názvem ve stejné složce. Per-profil.
+    bool moveCompanionFiles() const;
+    void setMoveCompanionFiles(bool enabled);
 
     // ── Video Settings ───────────────────────────────────────────────────────
     // Hlasitost videa v rozsahu 0–100 (default 50).

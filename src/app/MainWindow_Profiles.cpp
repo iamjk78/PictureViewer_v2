@@ -191,6 +191,7 @@ void MainWindow::switchProfile(const QString &profileName)
     m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
     m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
     m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
+    m_moveCompanionAction->setChecked(m_settingsManager->moveCompanionFiles());
     updateConfirmationActionState();
     m_enableImagesAction->setChecked(m_settingsManager->enableImages());
     m_enableVideosAction->setChecked(m_settingsManager->enableVideos());
@@ -386,6 +387,7 @@ void MainWindow::manageProfiles()
                 m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
                 m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
                 m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
+                m_moveCompanionAction->setChecked(m_settingsManager->moveCompanionFiles());
                 updateConfirmationActionState();
                 m_enableImagesAction->setChecked(m_settingsManager->enableImages());
                 m_enableVideosAction->setChecked(m_settingsManager->enableVideos());

@@ -617,6 +617,11 @@ void MainWindow::onAskConfirmationToggled(bool checked)
     m_settingsManager->setAskConfirmationDelete(checked);
 }
 
+void MainWindow::onMoveCompanionToggled(bool checked)
+{
+    m_settingsManager->setMoveCompanionFiles(checked);
+}
+
 void MainWindow::onEnablePdfProcessingToggled(bool checked)
 {
     m_settingsManager->setEnablePdfProcessing(checked);
@@ -961,6 +966,12 @@ void MainWindow::setupMenu()
     m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
     connect(m_askConfirmationAction, &QAction::toggled, this, &MainWindow::onAskConfirmationToggled);
     settingsMenu->addAction(m_askConfirmationAction);
+
+    m_moveCompanionAction = new QAction(tr("Přesouvat/mazat i párové soubory (obrázek/video)"), this);
+    m_moveCompanionAction->setCheckable(true);
+    m_moveCompanionAction->setChecked(m_settingsManager->moveCompanionFiles());
+    connect(m_moveCompanionAction, &QAction::toggled, this, &MainWindow::onMoveCompanionToggled);
+    settingsMenu->addAction(m_moveCompanionAction);
 
     settingsMenu->addSeparator();
 

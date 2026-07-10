@@ -109,6 +109,19 @@ tests/                        – jednotkové testy jádra (Qt Test, ctest)
 - Volba v **Nastavení → Řazení souborů**; změna znovu naskenuje složku a
   zachová právě zobrazený obrázek.
 
+### Párové soubory (obrázek/video) — `CompanionFinder`
+- Volitelné (per-profil, `Nastavení → Přesouvat/mazat i párové soubory`). Při
+  přesunu (toolbar Přesun) nebo mazání (koš i složka Delete) najde ve **stejné
+  složce** ostatní **obrázky a videa** se stejným `completeBaseName`
+  (case-insensitive) a jinou příponou — a provede s nimi stejnou akci.
+- `CompanionFinder` (čisté jádro, `src/core/`) posuzuje kategorii přes
+  `ImageFormats.hpp`; **PDF se nikdy nepáruje** (ani jako zdroj, ani jako cíl).
+- 0 párů → jen aktivní; 1 pár → automaticky obojí; 2+ párů → `CompanionActionDialog`
+  (vše / jen aktivní / storno).
+- Undo je **skupinové**: `m_moveHistory` / `m_deleteHistory` jsou `QList<MoveGroup>`,
+  kde jedna skupina = jedna akce (aktivní + páry). ↩ i ♻ vrátí celou skupinu
+  jedním krokem. Bez zapnuté funkce je skupina jednoprvková (chování beze změny).
+
 ### PDF
 - Render stránky v rozlišení podle viewportu × devicePixelRatio se zachováním
   poměru stran; při zoomu se stránka po 250 ms přerenderuje ostře.
@@ -179,6 +192,7 @@ přepnutí profilu. Nastavení tak přežije i tvrdé ukončení nebo pád aplik
 |---|---|---|
 | General | remember_last_folder, last_folder | Obnovení poslední složky |
 | FileHandling | enable_delete_image, enable_move_to_delete, ask_confirmation_delete | Režim mazání |
+| FileHandling | move_companion_files | Přesouvat/mazat i párové soubory (obrázek/video se stejným názvem) |
 | Processing | enable_images, enable_videos | Zpracovávat obrázky / videa |
 | PDF | enable_pdf_processing | Zobrazovat PDF soubory |
 | UI | layout, window_geometry, window_state, saved_screen_size | Rozložení a geometrie okna |

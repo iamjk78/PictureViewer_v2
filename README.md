@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.24**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.25**.
 
 ## Funkce
 
@@ -39,6 +39,11 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   (název, barva, cílová složka); hromadný přesun přes výběr více souborů
   v náhledech (Ctrl/Shift+klik); ochrana proti přepsání při shodě jmen;
   přesun lze vrátit zpět (↩, LIFO); tlačítka jsou per-profil
+- **Párové soubory (obrázek/video)** — volitelné (per-profil): při přesunu nebo
+  smazání souboru se přesunou/smažou i ostatní obrázky a videa se stejným názvem
+  ve stejné složce (např. `123.jpg` + `123.mp4`); PDF se nikdy nepáruje; při více
+  nalezených párech dialog s volbou vše / jen aktivní / storno; undo (↩ i ♻) vrací
+  celou skupinu najednou
 - **Navigace mezi složkami** (🧭) — čtyři tlačítka pro pohyb v adresářové
   struktuře: ◀/▶ na sousední složku (abecedně), ▲ o úroveň výše, ▼ do první
   podsložky; u tlačítek je vidět název cíle a počet složek daným směrem;

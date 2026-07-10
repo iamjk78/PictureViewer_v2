@@ -11,6 +11,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
+#include "core/CompanionFinder.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
@@ -584,13 +585,29 @@ void MainWindow::deleteImageToTrash()
     }
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    if (tryWithRetry([&] { return QFile::moveToTrash(currentPath); })) {
-        if (m_categoryManager) {
-            m_categoryManager->unassignAll(currentPath);
+
+    bool cancelled = false;
+    const QStringList filesToDelete = resolveCompanionSet(currentPath, tr("smazat"), cancelled);
+    if (cancelled) {
+        return;
+    }
+
+    // Koš nemá undo (jako dosud) — jen smazat každý soubor sady.
+    for (const QString &filePath : filesToDelete) {
+        if (!QFile::exists(filePath)) {
+            continue;
         }
-        removeImageFromList(m_currentIndex);
-    } else {
-        m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(currentPath));
+        if (tryWithRetry([&] { return QFile::moveToTrash(filePath); })) {
+            if (m_categoryManager) {
+                m_categoryManager->unassignAll(filePath);
+            }
+            const int idx = m_imagePaths.indexOf(filePath);
+            if (idx >= 0) {
+                removeImageFromList(idx);
+            }
+        } else {
+            m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(filePath));
+        }
     }
 }
 
@@ -601,8 +618,15 @@ void MainWindow::moveImageToDeleteFolder()
     }
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    const QFileInfo fileInfo(currentPath);
-    const QString folderPath = fileInfo.absolutePath();
+
+    bool cancelled = false;
+    const QStringList filesToDelete = resolveCompanionSet(currentPath, tr("smazat"), cancelled);
+    if (cancelled) {
+        return;
+    }
+
+    // Všechny soubory sady jsou ve stejné složce → stejná složka Delete.
+    const QString folderPath = QFileInfo(currentPath).absolutePath();
     const QString deleteFolderPath = folderPath + QDir::separator() + QStringLiteral("Delete");
 
     QDir deleteFolder(deleteFolderPath);
@@ -613,28 +637,41 @@ void MainWindow::moveImageToDeleteFolder()
         }
     }
 
-    const QString newPath = deleteFolderPath + QDir::separator() + fileInfo.fileName();
+    MoveGroup group;
+    for (const QString &filePath : filesToDelete) {
+        if (!QFile::exists(filePath)) {
+            continue;
+        }
+        const QString newPath = deleteFolderPath + QDir::separator() + QFileInfo(filePath).fileName();
 
-    if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
-        if (m_categoryManager) {
-            m_categoryManager->renameImagePath(currentPath, newPath);
-        }
-        m_deleteHistory.append({newPath, currentPath});
-        updateRecycleButtonState();
-        removeImageFromList(m_currentIndex);
-    } else {
-        // Diagnostika: co se stalo?
-        QString reason;
-        if (!QFile::exists(currentPath)) {
-            reason = tr("soubor již neexistuje");
-        } else if (QFile::exists(newPath)) {
-            reason = tr("cílové umístění už existuje — zkuste ručně smazat Delete složku");
-        } else if (!QFileInfo(folderPath).isWritable()) {
-            reason = tr("složka nemá práva pro zápis");
+        if (tryWithRetry([&] { return QFile::rename(filePath, newPath); })) {
+            if (m_categoryManager) {
+                m_categoryManager->renameImagePath(filePath, newPath);
+            }
+            group.append({newPath, filePath});
+            const int idx = m_imagePaths.indexOf(filePath);
+            if (idx >= 0) {
+                removeImageFromList(idx);
+            }
         } else {
-            reason = tr("soubor je stále zamčený — zkuste zavřít video a zkusit znovu");
+            // Diagnostika: co se stalo?
+            QString reason;
+            if (!QFile::exists(filePath)) {
+                reason = tr("soubor již neexistuje");
+            } else if (QFile::exists(newPath)) {
+                reason = tr("cílové umístění už existuje — zkuste ručně smazat Delete složku");
+            } else if (!QFileInfo(folderPath).isWritable()) {
+                reason = tr("složka nemá práva pro zápis");
+            } else {
+                reason = tr("soubor je stále zamčený — zkuste zavřít video a zkusit znovu");
+            }
+            m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete: %1").arg(reason));
         }
-        m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete: %1").arg(reason));
+    }
+
+    if (!group.isEmpty()) {
+        m_deleteHistory.append(group);
+        updateRecycleButtonState();
     }
 }
 
@@ -756,8 +793,10 @@ void MainWindow::onDeleteFolder()
         if (deleteFolder.removeRecursively()) {
             m_statusLabel->setText(tr("Složka Delete byla smazána."));
             const QString deleteFolderPrefix = deleteFolderPath + "/";
-            m_deleteHistory.removeIf([&](const QPair<QString, QString> &entry) {
-                return entry.first.startsWith(deleteFolderPrefix);
+            // Soubory ve skupině sdílí jednu složku Delete — stačí zkontrolovat
+            // první záznam. Fyzicky smazané skupiny odstranit z historie undo.
+            m_deleteHistory.removeIf([&](const MoveGroup &group) {
+                return !group.isEmpty() && group.first().first.startsWith(deleteFolderPrefix);
             });
             updateRecycleButtonState();
         } else {
@@ -807,34 +846,45 @@ void MainWindow::onUndoDelete()
         return;
     }
 
-    const auto [deletedPath, originalPath] = m_deleteHistory.last();
+    const MoveGroup group = m_deleteHistory.last();
 
-    if (!QFile::exists(deletedPath)) {
-        m_deleteHistory.removeLast();
-        updateRecycleButtonState();
-        m_statusLabel->setText(tr("Soubor v Delete složce nenalezen, byl zřejmě odstraněn externě."));
-        return;
-    }
-
-    if (QFile::exists(originalPath)) {
-        QMessageBox::warning(this, tr("Nelze obnovit"),
-            tr("V původním umístění již soubor '%1' existuje.")
-                .arg(QFileInfo(originalPath).fileName()));
-        return;
-    }
-
-    QDir().mkpath(QFileInfo(originalPath).absolutePath());
-
-    if (QFile::rename(deletedPath, originalPath)) {
-        if (m_categoryManager) {
-            m_categoryManager->renameImagePath(deletedPath, originalPath);
+    // Ověřit, že žádné z původních umístění není obsazené — jinak by se skupina
+    // obnovila jen zčásti.
+    for (const FileMovePair &pair : group) {
+        const QString &deletedPath  = pair.first;
+        const QString &originalPath = pair.second;
+        if (QFile::exists(deletedPath) && QFile::exists(originalPath)) {
+            QMessageBox::warning(this, tr("Nelze obnovit"),
+                tr("V původním umístění již soubor '%1' existuje.")
+                    .arg(QFileInfo(originalPath).fileName()));
+            return;
         }
-        m_deleteHistory.removeLast();
-        updateRecycleButtonState();
-        m_requestedFile = originalPath;
-        loadFolder(QFileInfo(originalPath).absolutePath());
+    }
+
+    QString anyOriginal;
+    for (const FileMovePair &pair : group) {
+        const QString &deletedPath  = pair.first;
+        const QString &originalPath = pair.second;
+        if (!QFile::exists(deletedPath)) {
+            continue;   // v Delete složce chybí (odstraněn externě) — přeskočit
+        }
+        QDir().mkpath(QFileInfo(originalPath).absolutePath());
+        if (QFile::rename(deletedPath, originalPath)) {
+            if (m_categoryManager) {
+                m_categoryManager->renameImagePath(deletedPath, originalPath);
+            }
+            anyOriginal = originalPath;
+        }
+    }
+
+    m_deleteHistory.removeLast();
+    updateRecycleButtonState();
+
+    if (!anyOriginal.isEmpty()) {
+        m_requestedFile = anyOriginal;
+        loadFolder(QFileInfo(anyOriginal).absolutePath());
     } else {
-        m_statusLabel->setText(tr("Nepodařilo se obnovit soubor."));
+        m_statusLabel->setText(tr("Soubory v Delete složce nenalezeny, byly zřejmě odstraněny externě."));
     }
 }
 

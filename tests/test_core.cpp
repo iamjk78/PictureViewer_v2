@@ -14,6 +14,7 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/UpdateChecker.hpp"
+#include "core/CompanionFinder.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
@@ -419,6 +420,103 @@ private slots:
         const FolderNavResult up = FolderNavigator::parentFolder(QDir::rootPath());
         QVERIFY(!up.available);
         QCOMPARE(up.count, 0);
+    }
+
+    // ── CompanionFinder ──────────────────────────────────────────────────────
+    static QStringList companionNames(const QStringList &paths)
+    {
+        QStringList names;
+        for (const QString &p : paths) {
+            names.append(QFileInfo(p).fileName());
+        }
+        names.sort();
+        return names;
+    }
+
+    void companionFinder_findsVideoAndImageOfSameBase()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("123.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("123.mp4"), 1));   // video (opačná kategorie)
+        QVERIFY(writeFileOfSize(dir.filePath("123.png"), 1));   // obrázek (STEJNÁ kategorie)
+        QVERIFY(writeFileOfSize(dir.filePath("999.jpg"), 1));   // jiný základ názvu
+
+        const QStringList found = CompanionFinder::findCompanions(dir.filePath("123.jpg"));
+        QCOMPARE(companionNames(found),
+                 (QStringList{QStringLiteral("123.mp4"), QStringLiteral("123.png")}));
+    }
+
+    void companionFinder_videoFindsImage()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("abc.mkv"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("abc.jpg"), 1));
+
+        const QStringList found = CompanionFinder::findCompanions(dir.filePath("abc.mkv"));
+        QCOMPARE(companionNames(found), (QStringList{QStringLiteral("abc.jpg")}));
+    }
+
+    void companionFinder_multipleCompanions()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("abc.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("abc.mp4"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("abc.mkv"), 1));
+
+        const QStringList found = CompanionFinder::findCompanions(dir.filePath("abc.jpg"));
+        QCOMPARE(found.size(), 2);
+        QCOMPARE(companionNames(found),
+                 (QStringList{QStringLiteral("abc.mkv"), QStringLiteral("abc.mp4")}));
+    }
+
+    void companionFinder_noCompanions()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("solo.jpg"), 1));
+
+        QVERIFY(CompanionFinder::findCompanions(dir.filePath("solo.jpg")).isEmpty());
+    }
+
+    void companionFinder_excludesSelf()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("x.jpg"), 1));
+
+        const QStringList found = CompanionFinder::findCompanions(dir.filePath("x.jpg"));
+        QVERIFY(!found.contains(dir.filePath("x.jpg")));
+        QVERIFY(found.isEmpty());
+    }
+
+    void companionFinder_pdfNeverPairs()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("doc.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("doc.pdf"), 1));
+
+        // Obrázek nesmí najít PDF jako pár.
+        const QStringList fromImage = CompanionFinder::findCompanions(dir.filePath("doc.jpg"));
+        QVERIFY(fromImage.isEmpty());
+
+        // PDF jako zdroj se nikdy nepáruje (vrací prázdné).
+        const QStringList fromPdf = CompanionFinder::findCompanions(dir.filePath("doc.pdf"));
+        QVERIFY(fromPdf.isEmpty());
+    }
+
+    void companionFinder_caseInsensitiveBaseName()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("Photo.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("photo.mp4"), 1));   // liší se jen velikostí písmen
+
+        const QStringList found = CompanionFinder::findCompanions(dir.filePath("Photo.jpg"));
+        QCOMPARE(companionNames(found), (QStringList{QStringLiteral("photo.mp4")}));
     }
 
     // ── CategoryManager ──────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ set(CORE_SOURCES
     ImageCatalog.cpp
     FolderNavigator.hpp
     FolderNavigator.cpp
+    CompanionFinder.hpp
+    CompanionFinder.cpp
     PdfHandler.hpp
     PdfHandler.cpp
 )

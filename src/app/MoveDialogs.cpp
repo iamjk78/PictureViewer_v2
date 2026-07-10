@@ -232,4 +232,57 @@ QString MoveConflictDialog::newFileName() const
     return m_nameEdit ? m_nameEdit->text().trimmed() : QString();
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// CompanionActionDialog
+// ────────────────────────────────────────────────────────────────────────────
+
+CompanionActionDialog::CompanionActionDialog(const QString &activeName,
+                                             const QStringList &companionNames,
+                                             const QString &verb, QWidget *parent)
+    : QDialog(parent)
+{
+    setWindowTitle(tr("Nalezeny související soubory"));
+    setModal(true);
+    setMinimumWidth(440);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+
+    mainLayout->addWidget(new QLabel(
+        tr("K souboru '%1' byly ve stejné složce nalezeny související soubory:")
+            .arg(activeName)));
+
+    QLabel *listLabel = new QLabel(QStringLiteral("• ") + companionNames.join(QStringLiteral("\n• ")));
+    listLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    listLabel->setStyleSheet(QStringLiteral("margin-left: 8px; font-weight: bold;"));
+    mainLayout->addWidget(listLabel);
+
+    mainLayout->addSpacing(10);
+    mainLayout->addWidget(new QLabel(tr("Co si přejete udělat?")));
+    mainLayout->addSpacing(10);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *allBtn    = new QPushButton(tr("%1 vše").arg(verb.left(1).toUpper() + verb.mid(1)));
+    QPushButton *activeBtn = new QPushButton(tr("Jen '%1'").arg(activeName));
+    QPushButton *cancelBtn = new QPushButton(tr("Storno"));
+
+    connect(allBtn, &QPushButton::clicked, this, [this] {
+        m_choice = Choice::All;
+        accept();
+    });
+    connect(activeBtn, &QPushButton::clicked, this, [this] {
+        m_choice = Choice::ActiveOnly;
+        accept();
+    });
+    connect(cancelBtn, &QPushButton::clicked, this, [this] {
+        m_choice = Choice::Cancel;
+        reject();
+    });
+
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(allBtn);
+    buttonLayout->addWidget(activeBtn);
+    buttonLayout->addWidget(cancelBtn);
+    mainLayout->addLayout(buttonLayout);
+}
+
 } // namespace pictureviewer

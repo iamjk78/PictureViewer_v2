@@ -9,6 +9,7 @@
 #include "app/MoveDialogs.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "core/CompanionFinder.hpp"
 
 #include <QColorDialog>
 #include <QCursor>
@@ -24,6 +25,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
@@ -305,7 +307,8 @@ void MainWindow::onMoveButtonDelete(int moveButtonId)
     refreshMoveButtons();
 }
 
-bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo &button)
+bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo &button,
+                                   MoveGroup &group)
 {
     const QFileInfo fileInfo(filePath);
     const QString targetFolder = button.folder;
@@ -341,8 +344,7 @@ bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo
         if (m_categoryManager) {
             m_categoryManager->renameImagePath(filePath, targetPath);
         }
-        m_moveHistory.append({targetPath, filePath});
-        updateMoveUndoButtonState();
+        group.append({targetPath, filePath});
         return true;
     }
 
@@ -354,6 +356,47 @@ bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo
     }
     m_statusLabel->setText(tr("Nepodařilo se přesunout '%1': %2").arg(fileInfo.fileName(), reason));
     return false;
+}
+
+QStringList MainWindow::resolveCompanionSet(const QString &activeFile, const QString &verb,
+                                            bool &cancelled)
+{
+    cancelled = false;
+    QStringList result;
+    result.append(activeFile);
+
+    if (!m_settingsManager->moveCompanionFiles()) {
+        return result;   // funkce vypnutá — jen aktivní soubor
+    }
+
+    const QStringList companions = CompanionFinder::findCompanions(activeFile);
+    if (companions.isEmpty()) {
+        return result;                       // 0 párů → jen aktivní
+    }
+    if (companions.size() == 1) {
+        result.append(companions);           // 1 pár → automaticky bez dotazu
+        return result;
+    }
+
+    // 2+ párů → dotázat se uživatele.
+    QStringList companionNames;
+    for (const QString &c : companions) {
+        companionNames.append(QFileInfo(c).fileName());
+    }
+    CompanionActionDialog dialog(QFileInfo(activeFile).fileName(), companionNames, verb, this);
+    dialog.exec();
+    switch (dialog.choice()) {
+    case CompanionActionDialog::Choice::All:
+        result.append(companions);
+        break;
+    case CompanionActionDialog::Choice::ActiveOnly:
+        break;                               // jen aktivní (result už obsahuje)
+    case CompanionActionDialog::Choice::Cancel:
+        cancelled = true;
+        result.clear();
+        break;
+    }
+    return result;
 }
 
 void MainWindow::onMoveButtonClicked(int moveButtonId)
@@ -393,17 +436,43 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     stopVideoIfPlaying();
 
     int movedCount = 0;
-    for (const QString &filePath : filesToMove) {
-        const int idx = m_imagePaths.indexOf(filePath);
-        if (idx < 0) {
-            continue;   // soubor už byl mezitím odebrán (např. jiným přesunem)
+    // Soubor, který už byl přesunut jako pár, přeskočit, pokud je i ve výběru.
+    QSet<QString> handled;
+    for (const QString &activeFile : filesToMove) {
+        if (handled.contains(activeFile)) {
+            continue;
         }
-        if (performSingleMove(filePath, button)) {
-            ++movedCount;
-            removeImageFromList(idx);
+        // Soubor už byl mezitím odebrán (např. jako pár předchozího souboru).
+        if (!QFile::exists(activeFile)) {
+            continue;
+        }
+
+        bool cancelled = false;
+        const QStringList filesInAction = resolveCompanionSet(activeFile, tr("přesunout"), cancelled);
+        if (cancelled) {
+            handled.insert(activeFile);   // storno pro tento soubor
+            continue;
+        }
+
+        MoveGroup group;
+        for (const QString &f : filesInAction) {
+            if (performSingleMove(f, button, group)) {
+                ++movedCount;
+                handled.insert(f);
+                // Odebrat z UI jen pokud je pár součástí aktuálního seznamu
+                // (pár mimo filtr se jen přesune na disku).
+                const int idx = m_imagePaths.indexOf(f);
+                if (idx >= 0) {
+                    removeImageFromList(idx);
+                }
+            }
+        }
+        if (!group.isEmpty()) {
+            m_moveHistory.append(group);
         }
     }
 
+    updateMoveUndoButtonState();
     if (movedCount > 1) {
         m_statusLabel->setText(tr("Přesunuto %1 souborů do '%2'.").arg(movedCount).arg(button.name));
     }
@@ -415,34 +484,45 @@ void MainWindow::onUndoMove()
         return;
     }
 
-    const auto [targetPath, originalPath] = m_moveHistory.last();
+    const MoveGroup group = m_moveHistory.last();
 
-    if (!QFile::exists(targetPath)) {
-        m_moveHistory.removeLast();
-        updateMoveUndoButtonState();
-        m_statusLabel->setText(tr("Přesunutý soubor nenalezen, byl zřejmě odstraněn externě."));
-        return;
-    }
-
-    if (QFile::exists(originalPath)) {
-        QMessageBox::warning(this, tr("Nelze vrátit"),
-            tr("V původním umístění již soubor '%1' existuje.")
-                .arg(QFileInfo(originalPath).fileName()));
-        return;
-    }
-
-    QDir().mkpath(QFileInfo(originalPath).absolutePath());
-
-    if (tryWithRetry([&] { return QFile::rename(targetPath, originalPath); })) {
-        if (m_categoryManager) {
-            m_categoryManager->renameImagePath(targetPath, originalPath);
+    // Nejdřív ověřit, že žádné z původních umístění není obsazené — jinak by
+    // skupina zůstala rozpůlená. Chybějící cíle (smazané externě) přeskočíme.
+    for (const FileMovePair &pair : group) {
+        const QString &targetPath   = pair.first;
+        const QString &originalPath = pair.second;
+        if (QFile::exists(targetPath) && QFile::exists(originalPath)) {
+            QMessageBox::warning(this, tr("Nelze vrátit"),
+                tr("V původním umístění již soubor '%1' existuje.")
+                    .arg(QFileInfo(originalPath).fileName()));
+            return;
         }
-        m_moveHistory.removeLast();
-        updateMoveUndoButtonState();
-        m_requestedFile = originalPath;
-        loadFolder(QFileInfo(originalPath).absolutePath());
+    }
+
+    QString anyOriginal;
+    for (const FileMovePair &pair : group) {
+        const QString &targetPath   = pair.first;
+        const QString &originalPath = pair.second;
+        if (!QFile::exists(targetPath)) {
+            continue;   // zdroj v cíli chybí (odstraněn externě) — přeskočit
+        }
+        QDir().mkpath(QFileInfo(originalPath).absolutePath());
+        if (tryWithRetry([&] { return QFile::rename(targetPath, originalPath); })) {
+            if (m_categoryManager) {
+                m_categoryManager->renameImagePath(targetPath, originalPath);
+            }
+            anyOriginal = originalPath;
+        }
+    }
+
+    m_moveHistory.removeLast();
+    updateMoveUndoButtonState();
+
+    if (!anyOriginal.isEmpty()) {
+        m_requestedFile = anyOriginal;
+        loadFolder(QFileInfo(anyOriginal).absolutePath());
     } else {
-        m_statusLabel->setText(tr("Nepodařilo se vrátit soubor zpět."));
+        m_statusLabel->setText(tr("Přesunuté soubory nenalezeny, byly zřejmě odstraněny externě."));
     }
 }
 

@@ -32,6 +32,7 @@ constexpr auto kSkippedUpdateVersionKey  = "Updates/skipped_version";
 constexpr auto kEnableDeleteImageKey     = "FileHandling/enable_delete_image";
 constexpr auto kEnableMoveToDeleteKey    = "FileHandling/enable_move_to_delete";
 constexpr auto kAskConfirmationDeleteKey = "FileHandling/ask_confirmation_delete";
+constexpr auto kMoveCompanionFilesKey    = "FileHandling/move_companion_files";
 
 constexpr auto kVideoVolumeKey           = "Video/volume";
 constexpr int  kDefaultVideoVolume       = 50;
@@ -235,6 +236,17 @@ bool SettingsManager::askConfirmationDelete() const
 void SettingsManager::setAskConfirmationDelete(bool enabled)
 {
     m_settings->setValue(kAskConfirmationDeleteKey, enabled);
+    syncToDisk();
+}
+
+bool SettingsManager::moveCompanionFiles() const
+{
+    return m_settings->value(kMoveCompanionFilesKey, false).toBool();
+}
+
+void SettingsManager::setMoveCompanionFiles(bool enabled)
+{
+    m_settings->setValue(kMoveCompanionFilesKey, enabled);
     syncToDisk();
 }
 

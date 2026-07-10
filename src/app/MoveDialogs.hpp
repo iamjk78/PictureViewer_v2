@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QDateTime>
 #include <QDialog>
+#include <QStringList>
 
 class QLineEdit;
 class QPushButton;
@@ -54,6 +55,26 @@ private:
 
     QLineEdit *m_nameEdit = nullptr;
     bool m_renameConfirmed = false;
+};
+
+// Dialog při nálezu více párových souborů (obrázek/video se stejným názvem).
+// Vypíše nalezené soubory a nechá uživatele zvolit, zda akci provést se všemi,
+// jen s aktivním souborem, nebo ji stornovat.
+class CompanionActionDialog : public QDialog
+{
+    Q_OBJECT
+
+public:
+    enum class Choice { All, ActiveOnly, Cancel };
+
+    // verb: sloveso akce v infinitivu, např. "přesunout" nebo "smazat".
+    CompanionActionDialog(const QString &activeName, const QStringList &companionNames,
+                          const QString &verb, QWidget *parent = nullptr);
+
+    Choice choice() const { return m_choice; }
+
+private:
+    Choice m_choice = Choice::Cancel;
 };
 
 } // namespace pictureviewer
