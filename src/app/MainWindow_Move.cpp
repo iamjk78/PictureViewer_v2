@@ -122,6 +122,7 @@ void MainWindow::setupMoveToolbar()
     toggleMoveAction->setToolTip(tr("Zobrazit/skrýt panel přesunů"));
     connect(toggleMoveAction, &QAction::triggered, this, [this] {
         m_moveToolbar->setVisible(!m_moveToolbar->isVisible());
+        m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());
     });
 
     m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());

@@ -59,6 +59,8 @@ constexpr auto kMoveButtonFoldersKey     = "Move/folders";
 constexpr auto kMoveNextIdKey            = "Move/next_id";
 constexpr auto kMoveToolbarVisibleKey    = "Move/toolbar_visible";
 
+constexpr auto kNavigationToolbarVisibleKey = "Navigation/toolbar_visible";
+
 constexpr auto kWindowGeometryKey        = "UI/window_geometry";
 constexpr auto kWindowStateKey           = "UI/window_state";
 constexpr auto kSavedScreenSizeKey       = "UI/saved_screen_size";
@@ -112,6 +114,8 @@ SettingsManager::SettingsManager(const QString &path, const QString &profileName
         m_settings->remove(kWindowStateKey);
         m_settings->setValue(kSettingsVersionKey, 2);
     }
+
+    m_settings->sync();
 }
 
 SettingsManager::~SettingsManager()
@@ -134,16 +138,19 @@ bool SettingsManager::rememberLastFolder() const
 void SettingsManager::clearLastFolder()
 {
     m_settings->remove(kLastFolderKey);
+    syncToDisk();
 }
 
 void SettingsManager::setLastFolder(const QString &folderPath)
 {
     m_settings->setValue(kLastFolderKey, folderPath);
+    syncToDisk();
 }
 
 void SettingsManager::setRememberLastFolder(bool enabled)
 {
     m_settings->setValue(kRememberLastFolderKey, enabled);
+    syncToDisk();
 }
 
 // ── Updates ──────────────────────────────────────────────────────────────────
@@ -170,16 +177,19 @@ QDateTime SettingsManager::lastUpdateCheck() const
 void SettingsManager::setUpdateCheckDelayMinutes(int minutes)
 {
     m_settings->setValue(kUpdateDelayMinutesKey, minutes);
+    syncToDisk();
 }
 
 void SettingsManager::setUpdateCheckIntervalDays(int days)
 {
     m_settings->setValue(kUpdateIntervalDaysKey, days);
+    syncToDisk();
 }
 
 void SettingsManager::setLastUpdateCheck(const QDateTime &dt)
 {
     m_settings->setValue(kLastUpdateCheckKey, dt.toString(Qt::ISODate));
+    syncToDisk();
 }
 
 QString SettingsManager::skippedUpdateVersion() const
@@ -190,6 +200,7 @@ QString SettingsManager::skippedUpdateVersion() const
 void SettingsManager::setSkippedUpdateVersion(const QString &version)
 {
     m_settings->setValue(kSkippedUpdateVersionKey, version);
+    syncToDisk();
 }
 
 // ── File Handling ────────────────────────────────────────────────────────────
@@ -202,6 +213,7 @@ bool SettingsManager::enableDeleteImage() const
 void SettingsManager::setEnableDeleteImage(bool enabled)
 {
     m_settings->setValue(kEnableDeleteImageKey, enabled);
+    syncToDisk();
 }
 
 bool SettingsManager::enableMoveToDelete() const
@@ -212,6 +224,7 @@ bool SettingsManager::enableMoveToDelete() const
 void SettingsManager::setEnableMoveToDelete(bool enabled)
 {
     m_settings->setValue(kEnableMoveToDeleteKey, enabled);
+    syncToDisk();
 }
 
 bool SettingsManager::askConfirmationDelete() const
@@ -222,6 +235,7 @@ bool SettingsManager::askConfirmationDelete() const
 void SettingsManager::setAskConfirmationDelete(bool enabled)
 {
     m_settings->setValue(kAskConfirmationDeleteKey, enabled);
+    syncToDisk();
 }
 
 int SettingsManager::videoVolume() const
@@ -232,6 +246,7 @@ int SettingsManager::videoVolume() const
 void SettingsManager::setVideoVolume(int volume)
 {
     m_settings->setValue(kVideoVolumeKey, qBound(0, volume, 100));
+    syncToDisk();
 }
 
 // ── Processing Settings ───────────────────────────────────────────────────────
@@ -244,6 +259,7 @@ bool SettingsManager::enableImages() const
 void SettingsManager::setEnableImages(bool enabled)
 {
     m_settings->setValue(kEnableImagesKey, enabled);
+    syncToDisk();
 }
 
 bool SettingsManager::enableVideos() const
@@ -254,6 +270,7 @@ bool SettingsManager::enableVideos() const
 void SettingsManager::setEnableVideos(bool enabled)
 {
     m_settings->setValue(kEnableVideosKey, enabled);
+    syncToDisk();
 }
 
 // ── PDF Settings ─────────────────────────────────────────────────────────────
@@ -266,6 +283,7 @@ bool SettingsManager::enablePdfProcessing() const
 void SettingsManager::setEnablePdfProcessing(bool enabled)
 {
     m_settings->setValue(kEnablePdfProcessingKey, enabled);
+    syncToDisk();
 }
 
 // ── UI Settings ──────────────────────────────────────────────────────────────
@@ -278,6 +296,7 @@ QString SettingsManager::uiLayout() const
 void SettingsManager::setUiLayout(const QString &layout)
 {
     m_settings->setValue(kUiLayoutKey, layout);
+    syncToDisk();
 }
 
 // ── Řazení souborů ─────────────────────────────────────────────────────────
@@ -290,6 +309,7 @@ int SettingsManager::sortKey() const
 void SettingsManager::setSortKey(int key)
 {
     m_settings->setValue(kSortKeyKey, key);
+    syncToDisk();
 }
 
 bool SettingsManager::sortAscending() const
@@ -300,6 +320,7 @@ bool SettingsManager::sortAscending() const
 void SettingsManager::setSortAscending(bool ascending)
 {
     m_settings->setValue(kSortAscendingKey, ascending);
+    syncToDisk();
 }
 
 // ── Oblíbené složky ─────────────────────────────────────────────────────
@@ -331,6 +352,7 @@ bool SettingsManager::addFavoriteFolder(const QString &folderPath, const QString
         }
         colors.append(colorHex.isEmpty() ? QStringLiteral("#4ECDC4") : colorHex);
         m_settings->setValue(kFavoriteColorsKey, colors);
+        syncToDisk();
     }
     return true;
 }
@@ -348,6 +370,7 @@ void SettingsManager::removeFavoriteFolder(const QString &folderPath)
         }
         m_settings->setValue(kFavoriteFoldersKey, favorites);
         m_settings->setValue(kFavoriteColorsKey, colors);
+        syncToDisk();
     }
 }
 
@@ -369,6 +392,7 @@ void SettingsManager::setFavoriteFolderColor(const QString &folderPath, const QS
     }
     colors[idx] = colorHex;
     m_settings->setValue(kFavoriteColorsKey, colors);
+    syncToDisk();
 }
 
 bool SettingsManager::favoritesToolbarVisible() const
@@ -379,6 +403,7 @@ bool SettingsManager::favoritesToolbarVisible() const
 void SettingsManager::setFavoritesToolbarVisible(bool visible)
 {
     m_settings->setValue(kFavoritesToolbarVisibleKey, visible);
+    syncToDisk();
 }
 
 // ── Kategorie toolbar ────────────────────────────────────────────────────────
@@ -391,6 +416,7 @@ bool SettingsManager::categoriesToolbarVisible() const
 void SettingsManager::setCategoriesToolbarVisible(bool visible)
 {
     m_settings->setValue(kCategoriesToolbarVisibleKey, visible);
+    syncToDisk();
 }
 
 // ── Přesun do složky (Move buttons) ──────────────────────────────────────────
@@ -437,6 +463,7 @@ int SettingsManager::addMoveButton(const QString &name, const QString &folder, c
     m_settings->setValue(kMoveButtonNamesKey, names);
     m_settings->setValue(kMoveButtonColorsKey, colors);
     m_settings->setValue(kMoveButtonFoldersKey, folders);
+    syncToDisk();
 
     return newId;
 }
@@ -457,6 +484,7 @@ bool SettingsManager::renameMoveButton(int id, const QString &newName)
     }
     names[idx] = newName;
     m_settings->setValue(kMoveButtonNamesKey, names);
+    syncToDisk();
     return true;
 }
 
@@ -473,6 +501,7 @@ bool SettingsManager::setMoveButtonColor(int id, const QString &colorHex)
     }
     colors[idx] = colorHex;
     m_settings->setValue(kMoveButtonColorsKey, colors);
+    syncToDisk();
     return true;
 }
 
@@ -492,6 +521,7 @@ bool SettingsManager::setMoveButtonFolder(int id, const QString &folder)
     }
     folders[idx] = folder;
     m_settings->setValue(kMoveButtonFoldersKey, folders);
+    syncToDisk();
     return true;
 }
 
@@ -515,6 +545,7 @@ bool SettingsManager::removeMoveButton(int id)
     m_settings->setValue(kMoveButtonNamesKey, names);
     m_settings->setValue(kMoveButtonColorsKey, colors);
     m_settings->setValue(kMoveButtonFoldersKey, folders);
+    syncToDisk();
     return true;
 }
 
@@ -526,6 +557,22 @@ bool SettingsManager::moveToolbarVisible() const
 void SettingsManager::setMoveToolbarVisible(bool visible)
 {
     m_settings->setValue(kMoveToolbarVisibleKey, visible);
+    syncToDisk();
+}
+
+// ── Navigace mezi složkami toolbar ───────────────────────────────────────────
+// Per-profil (na rozdíl od dřívějšího globálního uložení v ProfileManager) —
+// sjednoceno s ostatními toolbary (Oblíbené/Štítky/Přesun).
+
+bool SettingsManager::navigationToolbarVisible() const
+{
+    return m_settings->value(kNavigationToolbarVisibleKey, false).toBool();
+}
+
+void SettingsManager::setNavigationToolbarVisible(bool visible)
+{
+    m_settings->setValue(kNavigationToolbarVisibleKey, visible);
+    syncToDisk();
 }
 
 // ── Settings version ─────────────────────────────────────────────────────────
@@ -546,6 +593,7 @@ QByteArray SettingsManager::windowGeometry() const
 void SettingsManager::setWindowGeometry(const QByteArray &geometry)
 {
     m_settings->setValue(kWindowGeometryKey, geometry.toBase64());
+    syncToDisk();
 }
 
 QByteArray SettingsManager::windowState() const
@@ -557,6 +605,7 @@ QByteArray SettingsManager::windowState() const
 void SettingsManager::setWindowState(const QByteArray &state)
 {
     m_settings->setValue(kWindowStateKey, state.toBase64());
+    syncToDisk();
 }
 
 QSize SettingsManager::savedScreenSize() const
@@ -576,6 +625,7 @@ void SettingsManager::setSavedScreenSize(const QSize &size)
 {
     m_settings->setValue(kSavedScreenSizeKey,
                          QStringLiteral("%1x%2").arg(size.width()).arg(size.height()));
+    syncToDisk();
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────
@@ -595,6 +645,7 @@ bool SettingsManager::thumbnailCacheEnabled() const
 void SettingsManager::setThumbnailCacheEnabled(bool enabled)
 {
     m_settings->setValue(kThumbCacheEnabledKey, enabled);
+    syncToDisk();
 }
 
 QString SettingsManager::thumbnailCacheRoot() const
@@ -605,6 +656,7 @@ QString SettingsManager::thumbnailCacheRoot() const
 void SettingsManager::setThumbnailCacheRoot(const QString &path)
 {
     m_settings->setValue(kThumbCacheRootKey, path);
+    syncToDisk();
 }
 
 QString SettingsManager::effectiveThumbnailCacheDir() const

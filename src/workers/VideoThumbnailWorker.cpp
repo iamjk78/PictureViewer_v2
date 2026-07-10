@@ -15,18 +15,11 @@ namespace pictureviewer {
 VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCacheDir,
                                            QObject *parent)
     : QObject(parent)
-    , m_player(new QMediaPlayer(this))
-    , m_sink(new QVideoSink(this))
     , m_timeoutTimer(new QTimer(this))
     , m_diskCacheEnabled(diskCacheEnabled)
     , m_diskCacheDir(std::move(diskCacheDir))
 {
-    m_player->setVideoSink(m_sink);
-
-    connect(m_player, &QMediaPlayer::mediaStatusChanged,
-            this, &VideoThumbnailWorker::onMediaStatusChanged);
-    connect(m_sink, &QVideoSink::videoFrameChanged,
-            this, &VideoThumbnailWorker::onVideoFrameChanged);
+    setupPlayer();
 
     m_timeoutTimer->setSingleShot(true);
     m_timeoutTimer->setInterval(8000);
@@ -35,9 +28,22 @@ VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCa
 
 VideoThumbnailWorker::~VideoThumbnailWorker() = default;
 
-void VideoThumbnailWorker::enqueue(const QStringList &paths)
+void VideoThumbnailWorker::setupPlayer()
+{
+    m_player = new QMediaPlayer(this);
+    m_sink = new QVideoSink(this);
+    m_player->setVideoSink(m_sink);
+
+    connect(m_player, &QMediaPlayer::mediaStatusChanged,
+            this, &VideoThumbnailWorker::onMediaStatusChanged);
+    connect(m_sink, &QVideoSink::videoFrameChanged,
+            this, &VideoThumbnailWorker::onVideoFrameChanged);
+}
+
+void VideoThumbnailWorker::enqueue(const QStringList &paths, int generation)
 {
     m_cancelled = false;   // reset po cancel() – bez toho processNext() hned vrátí
+    m_generation = generation;
     m_queue.append(paths);
     if (m_state == State::Idle) {
         processNext();
@@ -51,10 +57,23 @@ void VideoThumbnailWorker::cancel()
     m_queue.clear();
     if (m_state != State::Idle) {
         m_state = State::Idle;
-        m_player->stop();
-        // Uvolnit handle souboru — na Windows by jinak zůstal soubor zamčený
-        // a nešel by přesunout/smazat.
-        m_player->setSource(QUrl());
+
+        // Zahodit CELÝ přehrávač a video sink, ne jen stop()/setSource(prázdné url).
+        // AVFoundation backend doručuje videoFrameChanged asynchronně přes
+        // CVDisplayLink na hlavní vlákno i PO stop()/setSource() — starý frame
+        // tak může dorazit AŽ PO startu dalšího videa (enqueue() zavolané hned
+        // po cancel()) a mylně se přiřadit k m_currentPath/m_generation už
+        // NOVÉHO videa (stejné m_state hodnoty se cyklicky opakují pro každé
+        // video, takže je nelze rozlišit jinak).
+        // disconnect() je NUTNÝ a musí být PŘED deleteLater() — deleteLater()
+        // samo o sobě odpojení odloží až do skutečné destrukce objektu (příští
+        // běh event loopy), takže by mezitím starý přehrávač mohl ještě stihnout
+        // emitovat signál do našich slotů.
+        disconnect(m_player, nullptr, this, nullptr);
+        disconnect(m_sink, nullptr, this, nullptr);
+        m_player->deleteLater();
+        m_sink->deleteLater();
+        setupPlayer();
     }
 }
 
@@ -69,7 +88,7 @@ void VideoThumbnailWorker::processNext()
 
     const QImage cached = loadFromCache(m_currentPath);
     if (!cached.isNull()) {
-        emit thumbnailReady(m_currentPath, cached);
+        emit thumbnailReady(m_generation, m_currentPath, cached);
         QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
                                   Qt::QueuedConnection);
         return;
@@ -148,7 +167,7 @@ void VideoThumbnailWorker::finishCurrent(const QImage &image)
     m_player->setSource(QUrl());
 
     if (!image.isNull()) {
-        emit thumbnailReady(m_currentPath, image);
+        emit thumbnailReady(m_generation, m_currentPath, image);
     }
     m_currentPath.clear();
     QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,

@@ -216,7 +216,7 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
             }
         }
         if (!videoPaths.isEmpty()) {
-            m_videoThumbnailWorker->enqueue(videoPaths);
+            m_videoThumbnailWorker->enqueue(videoPaths, m_thumbnailPanel->generation());
         }
     }
 

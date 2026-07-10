@@ -87,6 +87,7 @@ void MainWindow::setupCategoriesToolbar()
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         bool willBeVisible = !m_categoriesToolbar->isVisible();
         m_categoriesToolbar->setVisible(willBeVisible);
+        m_settingsManager->setCategoriesToolbarVisible(willBeVisible);
         if (willBeVisible) {
             updateCategoryFilterButtons();
         }

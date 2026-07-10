@@ -11,6 +11,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
+#include "workers/FolderNavWorker.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
 
@@ -30,6 +31,7 @@
 #include <QRadioButton>
 #include <QStackedWidget>
 #include <QStandardPaths>
+#include <QToolBar>
 #include <QVBoxLayout>
 
 namespace {
@@ -156,6 +158,10 @@ void MainWindow::switchProfile(const QString &profileName)
     m_currentIndex = -1;
     m_currentFolder.clear();
     m_imageView->clearImage();
+    // loadImages({}) místo pouhého clear() — clear() by smazal položky, ale
+    // ponechal by zastaralé ukazatele v interní mapě cesta→položka; loadImages()
+    // uklidí obojí konzistentně (a bumpne generaci proti pozdě doručeným miniaturám).
+    m_thumbnailPanel->loadImages({});
     refreshCategoryButtons();
     updateCategoryFilterButtons();
     refreshFavoriteButtons();
@@ -163,6 +169,32 @@ void MainWindow::switchProfile(const QString &profileName)
     refreshMoveButtons();
     updateSortButtonText();
     applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
+
+    // Obnovit viditelnost toolbarů podle uloženého nastavení NOVÉHO profilu —
+    // každý profil si pamatuje vlastní stav zapnutí/vypnutí.
+    m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+    m_categoriesToolbar->setVisible(m_settingsManager->categoriesToolbarVisible());
+    m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());
+    m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
+    if (m_folderNavToolbar->isVisible()) {
+        refreshFolderNavData();
+    } else if (m_folderNavWorker != nullptr) {
+        m_folderNavWorker->cancel();
+    }
+
+    // Synchronizovat zaškrtávací volby v menu Nastavení s NOVÝM profilem —
+    // bez tohoto zůstávaly (jen vizuálně i fakticky) hodnoty ze STARÉHO
+    // profilu, dokud je uživatel ručně nepřepnul. m_currentFolder je teď
+    // prázdné, takže případné side-effecty (rescan) v toggled handlerech
+    // jsou no-op — bezpečné volat kdykoliv tady.
+    m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
+    m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
+    m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
+    m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
+    updateConfirmationActionState();
+    m_enableImagesAction->setChecked(m_settingsManager->enableImages());
+    m_enableVideosAction->setChecked(m_settingsManager->enableVideos());
+    m_enablePdfProcessingAction->setChecked(m_settingsManager->enablePdfProcessing());
 
     // Aktualizovat cache miniatur pro nový profil
     m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
@@ -331,6 +363,7 @@ void MainWindow::manageProfiles()
                 m_currentIndex = -1;
                 m_currentFolder.clear();
                 m_imageView->clearImage();
+                m_thumbnailPanel->loadImages({});
                 refreshCategoryButtons();
                 updateCategoryFilterButtons();
                 refreshFavoriteButtons();
@@ -338,6 +371,26 @@ void MainWindow::manageProfiles()
                 refreshMoveButtons();
                 updateSortButtonText();
                 applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
+
+                m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+                m_categoriesToolbar->setVisible(m_settingsManager->categoriesToolbarVisible());
+                m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());
+                m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
+                if (m_folderNavToolbar->isVisible()) {
+                    refreshFolderNavData();
+                } else if (m_folderNavWorker != nullptr) {
+                    m_folderNavWorker->cancel();
+                }
+
+                m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
+                m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
+                m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
+                m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
+                updateConfirmationActionState();
+                m_enableImagesAction->setChecked(m_settingsManager->enableImages());
+                m_enableVideosAction->setChecked(m_settingsManager->enableVideos());
+                m_enablePdfProcessingAction->setChecked(m_settingsManager->enablePdfProcessing());
+
                 restoreLastFolder();
             }
         } else {

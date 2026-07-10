@@ -160,23 +160,41 @@ okna (drag & drop). Indikátor zoomu (%) je vpravo ve status baru u obrázků.
 
 ---
 
-## Nastavení (config.ini)
+## Nastavení (config.ini) — per-profil
 
-Umístění: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini` (macOS),
-`%APPDATA%\JiriKrejci\PictureViewer\config.ini` (Windows).
+Aplikace podporuje více profilů (`ProfileManager`); každý profil má vlastní
+`config.ini` v `profiles/<jméno profilu>/config.ini`:
+
+- macOS: `~/Library/Preferences/JiriKrejci/PictureViewer/profiles/<jméno>/config.ini`
+- Windows: `%APPDATA%\JiriKrejci\PictureViewer\profiles\<jméno>\config.ini`
+
+Seznam profilů, aktivní profil a startovní chování jsou uloženy zvlášť v
+`profiles.ini` na úrovni nad profily (sdíleno napříč všemi profily).
+
+**Okamžité ukládání**: `SettingsManager` volá po každé jednotlivé změně
+nastavení `sync()` (zápis na disk) — nic nečeká na zavření okna ani na
+přepnutí profilu. Nastavení tak přežije i tvrdé ukončení nebo pád aplikace.
 
 | Sekce | Klíč | Význam |
 |---|---|---|
 | General | remember_last_folder, last_folder | Obnovení poslední složky |
 | FileHandling | enable_delete_image, enable_move_to_delete, ask_confirmation_delete | Režim mazání |
+| Processing | enable_images, enable_videos | Zpracovávat obrázky / videa |
 | PDF | enable_pdf_processing | Zobrazovat PDF soubory |
-| UI | layout | Zvolené rozložení (classic/filmstrip/immersive/gallery/pro) |
+| UI | layout, window_geometry, window_state, saved_screen_size | Rozložení a geometrie okna |
 | Sort | key, ascending | Řazení souborů (0=název, 1=datum, 2=velikost) a směr |
 | Cache | thumbnail_cache_enabled, thumbnail_cache_root | Disková cache náhledů |
-| VLC | vlc_path, vlc_timeout_ms | Cesta k VLC |
-| Categories | toolbar_visible | Viditelnost toolbaru kategorií |
-| Favorites | folders | Seznam oblíbených složek (max 10) |
-| Updates | … | Kontrola aktualizací |
+| Video | volume | Hlasitost přehrávače videa |
+| Categories | toolbar_visible | Viditelnost toolbaru štítků |
+| Favorites | folders, colors, toolbar_visible | Oblíbené složky (max 10) + jejich toolbar |
+| Move | ids, names, colors, folders, toolbar_visible | Tlačítka Přesun do složky + jejich toolbar |
+| Navigation | toolbar_visible | Viditelnost toolbaru navigace mezi složkami |
+| Updates | update_check_delay_minutes, update_check_interval_days, last_update_check, skipped_version | Kontrola aktualizací |
+
+Po přepnutí profilu (`switchProfile()`) i po návratu z fullscreenu se
+viditelnost všech čtyř sekundárních toolbarů (Oblíbené/Štítky/Přesun/Navigace)
+a zaškrtávací volby v menu Nastavení znovu vynutí podle aktivního profilu —
+nezůstávají "viset" hodnoty ze starého profilu nebo ze stavu před fullscreenem.
 
 ---
 

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
-Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.23**.
+Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální verze **0.24**.
 
 ## Funkce
 
@@ -43,12 +43,19 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   struktuře: ◀/▶ na sousední složku (abecedně), ▲ o úroveň výše, ▼ do první
   podsložky; u tlačítek je vidět název cíle a počet složek daným směrem;
   interní složka „Delete" je vyloučena; zjišťování struktury běží na pozadí
-  jen když je panel zapnutý
+  jen když je panel zapnutý; při každém kliknutí se stav složky ověří znovu,
+  takže mezitím smazaná/přejmenovaná složka nezpůsobí chybu
+- **Nastavení a toolbary jsou per-profil a ukládají se okamžitě** — každá
+  změna (toolbary, zpracování obrázků/videí/PDF, mazání, cache, řazení…) se
+  zapíše do configu ihned, ne až při zavření aplikace; přežije i pád nebo
+  vynucené ukončení. Po přepnutí profilu nebo návratu z fullscreenu se vše
+  (toolbary i nastavení) obnoví přesně podle aktivního profilu
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
 - **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;
   přehrávání v nekonečné smyčce; zoom (+/-), posun myší, fullscreen, posun šipkami,
-  hlasitost, buffer overlay; metadata (velikost, rozlišení, délka, datový tok) ve status baru
+  hlasitost, buffer overlay; metadata (velikost, rozlišení, délka, datový tok) i
+  pořadí/celkový počet souborů ve složce ve status baru
 - **Automatické aktualizace** — Nápověda → Zkontrolovat aktualizace… stáhne nové
   vydání z GitHubu, ověří SHA256 a na Windows rovnou nainstaluje
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení

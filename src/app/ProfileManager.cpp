@@ -11,7 +11,6 @@ constexpr auto kActiveKey        = "General/active";
 constexpr auto kNamesKey         = "Profiles/names";
 constexpr auto kStartupModeKey   = "Startup/mode";
 constexpr auto kStartupProfileKey= "Startup/profile";
-constexpr auto kNavToolbarVisibleKey = "General/navigation_toolbar_visible";
 
 constexpr int  kMaxNameLength   = 50;
 const QString  kInvalidChars    = QStringLiteral("/\\:*?\"<>|");
@@ -76,7 +75,6 @@ void ProfileManager::load()
     m_startupMode    = (modeStr == QLatin1String("fixed")) ? StartupMode::FixedProfile
                                                            : StartupMode::RememberLast;
     m_startupProfile = ini.value(kStartupProfileKey).toString();
-    m_navigationToolbarVisible = ini.value(kNavToolbarVisibleKey, false).toBool();
 
     // Sanity — nikdy nezůstat bez profilu.
     if (m_profiles.isEmpty()) {
@@ -101,7 +99,6 @@ void ProfileManager::save()
                      ? QStringLiteral("fixed")
                      : QStringLiteral("remember_last"));
     ini.setValue(kStartupProfileKey, m_startupProfile);
-    ini.setValue(kNavToolbarVisibleKey, m_navigationToolbarVisible);
     ini.sync();
 }
 
@@ -346,12 +343,6 @@ void ProfileManager::setStartupMode(StartupMode mode)
 void ProfileManager::setStartupProfile(const QString &name)
 {
     m_startupProfile = name;
-    save();
-}
-
-void ProfileManager::setNavigationToolbarVisible(bool visible)
-{
-    m_navigationToolbarVisible = visible;
     save();
 }
 

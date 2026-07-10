@@ -125,7 +125,6 @@ private:
     void disableImageBrowsing();
     void enableImageBrowsing();
     void applyGrayscaleEffect(bool enable);
-    void updateVideoMetadata(const QString &videoPath);
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
     // ── Profily ────────────────────────────────────────────────────────────────
@@ -192,13 +191,20 @@ private:
     QString pickRandomUnusedMoveColor() const;
 
     // ── Navigace mezi složkami (Folder nav toolbar) ──────────────────────────
+    enum class FolderNavDirection { Left, Right, Up, Down };
     void setupFolderNavToolbar();
     void onToggleFolderNavToolbar();
     // Spustí (nebo zruší běžící a znovu spustí) FolderNavWorker pro aktuální
     // složku — jen pokud je toolbar viditelný. Nahoru se počítá synchronně.
+    // Aktualizuje jen ZOBRAZENÍ tlačítek (název/počet) — není zdrojem pravdy
+    // pro navigaci, ta se vždy přepočítá čerstvě až v okamžiku kliknutí.
     void refreshFolderNavData();
     void onFolderNavDataReady(int generation, FolderNavResult left, FolderNavResult right, FolderNavResult down);
-    void onFolderNavClicked(const QString &targetPath);
+    // Při kliknutí vždy nejdřív znovu zjistí aktuální stav adresářové
+    // struktury (rychlé synchronní čtení) a teprve s čerstvým výsledkem
+    // naviguje — tlačítko tak nikdy nepoužije zastaralou (např. mezitím
+    // smazanou) cestu.
+    void onFolderNavClicked(FolderNavDirection direction);
     void updateFolderNavButton(QPushButton *button, const QString &arrow, const FolderNavResult &result, bool loading);
 
     QToolBar *m_folderNavToolbar = nullptr;
@@ -220,6 +226,11 @@ private:
     bool m_isFullscreen = false;
     bool m_shuttingDown = false;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
+    // Stav sekundárních toolbarů před vstupem do fullscreenu (viz enterFullscreen/exitFullscreen).
+    bool m_favoritesToolbarWasVisible = false;
+    bool m_categoriesToolbarWasVisible = false;
+    bool m_moveToolbarWasVisible = false;
+    bool m_folderNavToolbarWasVisible = false;
     QList<int> m_categoryFilterIds;   // vybrané kategorie pro filtrování
     QMap<int, QPushButton*> m_categoryButtons;  // mapa: categoryId → assignment button widget
     QMap<int, QPushButton*> m_categoryFilterButtons;  // mapa: categoryId → filter button widget

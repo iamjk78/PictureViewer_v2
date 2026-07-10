@@ -116,6 +116,10 @@ public:
     bool moveToolbarVisible() const;
     void setMoveToolbarVisible(bool visible);
 
+    // ── Navigace mezi složkami toolbar ───────────────────────────────────────
+    bool navigationToolbarVisible() const;
+    void setNavigationToolbarVisible(bool visible);
+
     // ── Settings version ─────────────────────────────────────────────────────
     // Zvyšte kCurrentSettingsVersion při každé změně formátu nastavení
     // a přidejte migraci do SettingsManager konstruktoru.

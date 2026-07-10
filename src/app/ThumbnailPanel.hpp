@@ -39,8 +39,15 @@ public:
     // Indexy aktuálně vybraných položek (Ctrl/Shift+klik), setříděné vzestupně.
     QList<int> selectedIndices() const;
 
+    // Generace aktuálně zobrazeného seznamu (bump při každém loadImages()).
+    // VideoThumbnailWorker si ji předá při enqueue() a posílá zpátky s každým
+    // thumbnailReady — jinak by zastaralá/pozdě doručená miniatura z PŘEDCHOZÍHO
+    // seznamu (např. po rychlém přepnutí filtru obrázky/videa/PDF) mohla sáhnout
+    // na už smazanou QListWidgetItem a spadnout (SIGSEGV).
+    int generation() const { return m_generation; }
+
     // Aktualizuje miniaturu videa (voláno z VideoThumbnailWorker přes MainWindow).
-    void setVideoThumbnail(const QString &path, const QImage &image);
+    void setVideoThumbnail(int generation, const QString &path, const QImage &image);
 
     // Cancel the running worker and disconnect all its signals.
     // Must be called before QThreadPool::waitForDone() so the worker cannot

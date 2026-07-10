@@ -207,6 +207,13 @@ MainWindow::MainWindow(QWidget *parent)
                 }
                 if (meta.frameRate > 0.0)
                     text += tr("   |   %1 fps").arg(meta.frameRate, 0, 'f', 2);
+                // Pořadí/celkový počet — stejná informace jako u obrázků a PDF,
+                // aby uživatel vždy věděl, kolikátý soubor ve složce prohlíží.
+                if (!m_imagePaths.isEmpty()) {
+                    text += tr("   |   %1 / %2")
+                        .arg(m_currentIndex + 1)
+                        .arg(m_imagePaths.size());
+                }
                 m_statusLabel->setText(text);
             });
 
@@ -261,6 +268,18 @@ MainWindow::MainWindow(QWidget *parent)
         if (!savedState.isEmpty()) {
             restoreState(savedState);
         }
+    }
+
+    // restoreState() by mohlo (podle staré uložené geometrie okna) přepsat
+    // viditelnost sekundárních toolbarů jinak, než odpovídá aktuálně
+    // načtenému nastavení profilu — naše config hodnoty jsou zdroj pravdy,
+    // proto je po restoreState() znovu vynutíme.
+    m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
+    m_categoriesToolbar->setVisible(m_settingsManager->categoriesToolbarVisible());
+    m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());
+    m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
+    if (!m_folderNavToolbar->isHidden()) {
+        refreshFolderNavData();
     }
 
     // Only restore last folder if no image file is being opened
@@ -324,16 +343,9 @@ void MainWindow::cancelAllWorkers()
 // By the time exec() returns, the thread pool is completely idle.
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // Uložit stav toolbarů
-    if (m_favoritesToolbar) {
-        m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
-    }
-    if (m_categoriesToolbar) {
-        m_settingsManager->setCategoriesToolbarVisible(m_categoriesToolbar->isVisible());
-    }
-    if (m_moveToolbar) {
-        m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());
-    }
+    // Viditelnost toolbarů (Oblíbené/Štítky/Přesun/Navigace) se ukládá ihned
+    // při přepnutí tlačítka (viz jednotlivé toggle handlery) — není potřeba
+    // ji ukládat znovu tady.
 
     // Uložit geometrii okna + stav doků + aktuální rozlišení obrazovky
     m_settingsManager->setWindowGeometry(saveGeometry());
@@ -659,6 +671,15 @@ void MainWindow::updateConfirmationActionState()
 void MainWindow::enterFullscreen()
 {
     m_isFullscreen = true;
+
+    // Zapamatovat viditelnost PŘED hide() — sekundární toolbary (Oblíbené,
+    // Štítky, Přesun, Navigace) se musí po návratu z fullscreenu vrátit do
+    // přesně stejného stavu, ne se ztratit.
+    m_favoritesToolbarWasVisible  = m_favoritesToolbar->isVisible();
+    m_categoriesToolbarWasVisible = m_categoriesToolbar->isVisible();
+    m_moveToolbarWasVisible       = m_moveToolbar->isVisible();
+    m_folderNavToolbarWasVisible  = m_folderNavToolbar->isVisible();
+
     menuBar()->hide();
     for (QToolBar *toolbar : findChildren<QToolBar *>()) {
         toolbar->hide();
@@ -678,9 +699,22 @@ void MainWindow::exitFullscreen()
     m_isFullscreen = false;
     showNormal();
     menuBar()->show();
-    // Viditelnost toolbaru, docků a status baru řídí aktuální rozložení —
+    // Viditelnost hlavního toolbaru, docků a status baru řídí aktuální rozložení —
     // bezpodmínečné show() by např. v imerzivním režimu vrátilo chrome zpět.
     applyUiLayout(m_uiLayout);
+
+    // applyUiLayout() neřídí sekundární toolbary — vrátit je do stavu
+    // zapamatovaného před vstupem do fullscreenu.
+    m_favoritesToolbar->setVisible(m_favoritesToolbarWasVisible);
+    m_categoriesToolbar->setVisible(m_categoriesToolbarWasVisible);
+    m_moveToolbar->setVisible(m_moveToolbarWasVisible);
+    m_folderNavToolbar->setVisible(m_folderNavToolbarWasVisible);
+    if (m_folderNavToolbar->isVisible()) {
+        refreshFolderNavData();
+    }
+    // PDF toolbar je řízený typem aktuálního souboru, ne uživatelem —
+    // přepočítat znovu podle aktuálně zobrazeného souboru.
+    updatePdfToolbarVisibility(m_imageView->isPdfLoaded());
 }
 
 void MainWindow::toggleFullscreen()

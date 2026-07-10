@@ -32,12 +32,6 @@ public:
     void setStartupMode(StartupMode mode);
     void setStartupProfile(const QString &name);
 
-    // Viditelnost navigačního toolbaru (pohyb mezi složkami) — záměrně
-    // globální, ne per-profil: počet složek na disku je pro všechny
-    // profily stejný.
-    bool navigationToolbarVisible() const { return m_navigationToolbarVisible; }
-    void setNavigationToolbarVisible(bool visible);
-
     QString lastError() const { return m_lastError; }
 
     // Migrace ze staré ploché struktury (config.ini + categories.db → profiles/Výchozí/)
@@ -59,7 +53,6 @@ private:
     QString     m_lastError;
     StartupMode m_startupMode   = StartupMode::RememberLast;
     QString     m_startupProfile;
-    bool        m_navigationToolbarVisible = false;
 };
 
 } // namespace pictureviewer

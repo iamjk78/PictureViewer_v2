@@ -332,6 +332,7 @@ void MainWindow::setupFavoritesToolbar()
     toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
     connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
         m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
+        m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
     });
 
     m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
@@ -703,23 +704,6 @@ void MainWindow::applyGrayscaleEffect(bool enable)
     } else {
         setWindowOpacity(1.0);
     }
-}
-
-void MainWindow::updateVideoMetadata(const QString &videoPath)
-{
-    const QFileInfo fileInfo(videoPath);
-    const QString fileName = fileInfo.fileName();
-    const qint64 fileSize = fileInfo.size();
-
-    QString sizeStr;
-    if (fileSize > 1024 * 1024) {
-        sizeStr = QString::number(fileSize / (1024.0 * 1024.0), 'f', 1) + " MB";
-    } else {
-        sizeStr = QString::number(fileSize / 1024.0, 'f', 1) + " KB";
-    }
-
-    const QString statusText = tr("▶ Video: %1 (%2) [ESC = exit]").arg(fileName, sizeStr);
-    m_statusLabel->setText(statusText);
 }
 
 } // namespace pictureviewer

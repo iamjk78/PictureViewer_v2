@@ -5,10 +5,11 @@
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
-#include "app/ProfileManager.hpp"
+#include "app/SettingsManager.hpp"
 #include "workers/FolderNavWorker.hpp"
 
 #include <QAction>
+#include <QLabel>
 #include <QThreadPool>
 #include <QToolBar>
 
@@ -28,19 +29,19 @@ void MainWindow::setupFolderNavToolbar()
         "QPushButton:hover:enabled { background-color: rgba(0, 0, 0, 0.05); } "
         "QPushButton:disabled { color: #999; }");
 
-    auto makeButton = [this, &navButtonStyle]() {
+    auto makeButton = [this, &navButtonStyle](FolderNavDirection direction) {
         auto *btn = new QPushButton();
         btn->setStyleSheet(navButtonStyle);
-        connect(btn, &QPushButton::clicked, this, [this, btn] {
-            onFolderNavClicked(btn->property("targetPath").toString());
+        connect(btn, &QPushButton::clicked, this, [this, direction] {
+            onFolderNavClicked(direction);
         });
         return btn;
     };
 
-    m_folderNavUpButton    = makeButton();
-    m_folderNavLeftButton  = makeButton();
-    m_folderNavRightButton = makeButton();
-    m_folderNavDownButton  = makeButton();
+    m_folderNavUpButton    = makeButton(FolderNavDirection::Up);
+    m_folderNavLeftButton  = makeButton(FolderNavDirection::Left);
+    m_folderNavRightButton = makeButton(FolderNavDirection::Right);
+    m_folderNavDownButton  = makeButton(FolderNavDirection::Down);
 
     m_folderNavToolbar->addWidget(m_folderNavUpButton);
     m_folderNavToolbar->addSeparator();
@@ -60,9 +61,8 @@ void MainWindow::setupFolderNavToolbar()
     toggleNavAction->setToolTip(tr("Zobrazit/skrýt panel navigace mezi složkami"));
     connect(toggleNavAction, &QAction::triggered, this, &MainWindow::onToggleFolderNavToolbar);
 
-    // Viditelnost je záměrně globální (ProfileManager), ne per-profil —
-    // adresářová struktura na disku je pro všechny profily stejná.
-    const bool visible = m_profileManager->navigationToolbarVisible();
+    // Viditelnost je per-profil (config.ini), stejně jako Oblíbené/Štítky/Přesun.
+    const bool visible = m_settingsManager->navigationToolbarVisible();
     m_folderNavToolbar->setVisible(visible);
     if (visible) {
         refreshFolderNavData();
@@ -73,7 +73,7 @@ void MainWindow::onToggleFolderNavToolbar()
 {
     const bool willBeVisible = !m_folderNavToolbar->isVisible();
     m_folderNavToolbar->setVisible(willBeVisible);
-    m_profileManager->setNavigationToolbarVisible(willBeVisible);
+    m_settingsManager->setNavigationToolbarVisible(willBeVisible);
 
     if (willBeVisible) {
         refreshFolderNavData();
@@ -85,8 +85,24 @@ void MainWindow::onToggleFolderNavToolbar()
 
 void MainWindow::refreshFolderNavData()
 {
-    if (m_folderNavToolbar == nullptr || !m_folderNavToolbar->isVisible()
-        || m_currentFolder.isEmpty()) {
+    // isHidden(), ne isVisible() — to druhé při volání z konstruktoru MainWindow
+    // (před prvním show()) vrací false pro úplně všechny widgety bez ohledu na
+    // setVisible(), protože závisí na viditelnosti celého řetězce rodičů.
+    if (m_folderNavToolbar == nullptr || m_folderNavToolbar->isHidden()) {
+        return;
+    }
+
+    if (m_currentFolder.isEmpty()) {
+        // Žádná aktuální složka (např. po přepnutí na profil bez zapamatované
+        // složky) — tlačítka musí zobrazit prázdný stav, ne si držet zastaralá
+        // data z předchozího profilu/složky.
+        if (m_folderNavWorker != nullptr) {
+            m_folderNavWorker->cancel();
+        }
+        updateFolderNavButton(m_folderNavUpButton,    QStringLiteral("▲"), {}, false);
+        updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), {}, false);
+        updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), {}, false);
+        updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), {}, false);
         return;
     }
 
@@ -119,7 +135,7 @@ void MainWindow::refreshFolderNavData()
 void MainWindow::onFolderNavDataReady(int generation, FolderNavResult left, FolderNavResult right, FolderNavResult down)
 {
     if (generation != m_folderNavGeneration || m_folderNavToolbar == nullptr
-        || !m_folderNavToolbar->isVisible()) {
+        || m_folderNavToolbar->isHidden()) {
         return;
     }
     updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), left, false);
@@ -127,15 +143,34 @@ void MainWindow::onFolderNavDataReady(int generation, FolderNavResult left, Fold
     updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), down, false);
 }
 
-void MainWindow::onFolderNavClicked(const QString &targetPath)
+void MainWindow::onFolderNavClicked(FolderNavDirection direction)
 {
-    if (targetPath.isEmpty()) {
+    if (m_currentFolder.isEmpty()) {
         return;
     }
+
+    // Vždy znovu zjistit AKTUÁLNÍ stav adresářové struktury (rychlé
+    // synchronní čtení) — tlačítko nesmí spoléhat na starý cache z poslední
+    // async aktualizace, který může být zastaralý (např. sourozenecká
+    // složka byla mezitím smazána).
+    FolderNavResult fresh;
+    switch (direction) {
+    case FolderNavDirection::Left:  fresh = FolderNavigator::siblingBefore(m_currentFolder); break;
+    case FolderNavDirection::Right: fresh = FolderNavigator::siblingAfter(m_currentFolder);  break;
+    case FolderNavDirection::Up:    fresh = FolderNavigator::parentFolder(m_currentFolder);  break;
+    case FolderNavDirection::Down:  fresh = FolderNavigator::firstSubfolder(m_currentFolder); break;
+    }
+
+    if (!fresh.available) {
+        m_statusLabel->setText(tr("Tímto směrem už žádná složka není — aktualizuji seznam."));
+        refreshFolderNavData();
+        return;
+    }
+
     // Stejný ověřený vzor jako u přepnutí profilu / mazání — zastavit
     // přehrávané video PŘED opuštěním aktuální složky.
     stopVideoIfPlaying();
-    loadFolder(targetPath);
+    loadFolder(fresh.path);
 }
 
 void MainWindow::updateFolderNavButton(QPushButton *button, const QString &arrow,
@@ -145,10 +180,12 @@ void MainWindow::updateFolderNavButton(QPushButton *button, const QString &arrow
         return;
     }
 
+    // Tlačítko slouží jen k ZOBRAZENÍ (název cílové složky / počet) —
+    // skutečná navigace se v onFolderNavClicked() vždy přepočítá čerstvě,
+    // takže tu žádnou cestu neukládáme.
     if (loading) {
         button->setText(arrow);
         button->setToolTip(tr("Zjišťuji adresářovou strukturu…"));
-        button->setProperty("targetPath", QString());
         button->setEnabled(false);
         return;
     }
@@ -156,14 +193,12 @@ void MainWindow::updateFolderNavButton(QPushButton *button, const QString &arrow
     if (!result.available) {
         button->setText(arrow);
         button->setToolTip(tr("V tomto směru není žádná složka."));
-        button->setProperty("targetPath", QString());
         button->setEnabled(false);
         return;
     }
 
     button->setText(QStringLiteral("%1 %2 (%3)").arg(arrow, result.name).arg(result.count));
     button->setToolTip(result.path);
-    button->setProperty("targetPath", result.path);
     button->setEnabled(true);
 }
 

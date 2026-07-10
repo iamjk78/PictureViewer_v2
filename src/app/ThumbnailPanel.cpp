@@ -286,9 +286,9 @@ void ThumbnailPanel::onThumbnailsFinished(int generation)
     m_currentWorker = nullptr;
 }
 
-void ThumbnailPanel::setVideoThumbnail(const QString &path, const QImage &image)
+void ThumbnailPanel::setVideoThumbnail(int generation, const QString &path, const QImage &image)
 {
-    if (image.isNull()) {
+    if (generation != m_generation || image.isNull()) {
         return;
     }
     auto it = m_pathToItem.find(path);

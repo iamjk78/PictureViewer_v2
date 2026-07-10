@@ -22,11 +22,14 @@ public:
                                   QObject *parent = nullptr);
     ~VideoThumbnailWorker() override;
 
-    void enqueue(const QStringList &paths);
+    // generation se vrátí beze změny v každém thumbnailReady — volající (MainWindow)
+    // předá aktuální ThumbnailPanel::generation(), aby příjemce poznal a zahodil
+    // doručení patřící k už nahrazenému (zastaralému) seznamu souborů.
+    void enqueue(const QStringList &paths, int generation);
     void cancel();
 
 signals:
-    void thumbnailReady(const QString &path, const QImage &image);
+    void thumbnailReady(int generation, const QString &path, const QImage &image);
 
 private slots:
     void processNext();
@@ -39,6 +42,10 @@ private:
     QImage loadFromCache(const QString &path) const;
     void saveToCache(const QString &path, const QImage &image) const;
     void finishCurrent(const QImage &image);
+    // Vytvoří nový QMediaPlayer/QVideoSink a připojí signály. Volá se z
+    // konstruktoru a znovu z cancel() (viz komentář tam) — nikdy se
+    // nepokračuje se starým přehrávačem po přerušení rozpracovaného videa.
+    void setupPlayer();
 
     enum class State { Idle, Loading, WaitingFrame };
 
@@ -47,6 +54,7 @@ private:
     QTimer       *m_timeoutTimer;
     QStringList   m_queue;
     QString       m_currentPath;
+    int           m_generation = 0;
     State         m_state      = State::Idle;
     bool          m_cancelled  = false;
     bool          m_diskCacheEnabled;
