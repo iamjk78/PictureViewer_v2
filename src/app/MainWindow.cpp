@@ -755,11 +755,15 @@ void MainWindow::toggleSlideshow()
 {
     m_slideshowController->toggle();
     if (m_slideshowController->isRunning()) {
-        m_toggleSlideshowAction->setText(tr("⏸ Zastavit"));
+        // Jednoznaková ikona — toolbar má pro všechny akce pevnou šířku 28px
+        // (viz toolButtonStyle v setupToolbar()), delší text by se elidoval na "...".
+        m_toggleSlideshowAction->setText(QStringLiteral("⏸"));
+        m_toggleSlideshowAction->setToolTip(tr("Zastavit slideshow (S)"));
         return;
     }
 
-    m_toggleSlideshowAction->setText(tr("▶ Slideshow"));
+    m_toggleSlideshowAction->setText(QStringLiteral("▶️"));
+    m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 }
 
 bool MainWindow::showDeleteConfirmationDialog()
