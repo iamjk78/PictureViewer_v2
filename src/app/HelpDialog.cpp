@@ -279,6 +279,16 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.26</h3>"
+        "<ul>"
+        "<li><b>Oprava pádu aplikace</b> — video náhledy mohly za určitých okolností"
+        " (přesun/smazání souboru během generování náhledů) přistoupit k už uvolněné"
+        " položce v panelu náhledů a shodit aplikaci. Vyřešeno bezpečnějším propojením"
+        " náhledů s položkami seznamu, které se samo zneplatní při smazání řádku</li>"
+        "<li><b>Interní úklid kódu</b> — sjednocení duplicitní logiky (barevná paleta,"
+        " opakované pokusy o práci se soubory, řazení, vracení přesunů/mazání zpět)"
+        " a odstranění zbytečné závislosti jádra aplikace na kategoriích</li>"
+        "</ul>"
         "<h3>Verze 0.25</h3>"
         "<ul>"
         "<li><b>Nová funkce: párové soubory (obrázek/video)</b> — v Nastavení lze"
