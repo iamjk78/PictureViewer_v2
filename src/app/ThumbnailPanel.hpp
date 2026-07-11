@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QListWidget>
+#include <QPersistentModelIndex>
 #include <QStringList>
 
 class QImage;
@@ -82,10 +83,16 @@ private:
     int m_thumbSize = 96;
     bool m_diskCacheEnabled = true;
     QString m_diskCacheDir;
-    // O(1) lookup by path. Stores item pointers (stable across index shifts on
-    // removal), NOT indices — indices become stale when items shift after a
-    // mid-list removeImage().
-    QHash<QString, QListWidgetItem *> m_pathToItem;
+    // O(1) lookup by path. QPersistentModelIndex (ne surový QListWidgetItem*):
+    // přežívá posuny řádků při mazání uprostřed seznamu a při smazání svého
+    // řádku se sám zneplatní — asynchronně doručený náhled (ThumbnailWorker /
+    // VideoThumbnailWorker) tak NIKDY nemůže sáhnout na uvolněnou položku,
+    // ať už ji smazala kterákoli cesta (use-after-free viděný v crash
+    // reportech v setVideoThumbnail).
+    QHash<QString, QPersistentModelIndex> m_pathToIndex;
+    // Bezpečný převod: vrátí položku pro cestu, nebo nullptr (neexistuje /
+    // řádek už byl smazán).
+    QListWidgetItem *itemForPath(const QString &path) const;
 };
 
 } // namespace pictureviewer

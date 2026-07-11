@@ -1,5 +1,7 @@
 #include "app/SettingsManager.hpp"
 
+#include "app/PredefinedColors.hpp"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QSettings>
@@ -362,7 +364,7 @@ bool SettingsManager::addFavoriteFolder(const QString &folderPath, const QString
         while (colors.size() < favorites.size() - 1) {
             colors.append(QString());  // doplnit prázdné pro předchozí záznamy
         }
-        colors.append(colorHex.isEmpty() ? QStringLiteral("#4ECDC4") : colorHex);
+        colors.append(colorHex.isEmpty() ? defaultItemColor() : colorHex);
         m_settings->setValue(kFavoriteColorsKey, colors);
         syncToDisk();
     }

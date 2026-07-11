@@ -172,7 +172,7 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
 
     ++m_generation;
     clear();
-    m_pathToItem.clear();
+    m_pathToIndex.clear();
 
     QStringList imagePaths;
     for (const QString &path : paths) {
@@ -191,10 +191,19 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         }
 
         addItem(item);
-        m_pathToItem[path] = item;
+        m_pathToIndex[path] = QPersistentModelIndex(indexFromItem(item));
     }
 
     startThumbnailLoader(imagePaths);
+}
+
+QListWidgetItem *ThumbnailPanel::itemForPath(const QString &path) const
+{
+    const QPersistentModelIndex idx = m_pathToIndex.value(path);
+    if (!idx.isValid()) {
+        return nullptr;   // cesta neznámá, nebo řádek už byl smazán
+    }
+    return item(idx.row());
 }
 
 void ThumbnailPanel::setCurrentIndex(int index)
@@ -217,20 +226,17 @@ void ThumbnailPanel::removeImage(int index)
 {
     if (index >= 0 && index < count()) {
         const QString path = item(index)->data(Qt::UserRole).toString();
-        m_pathToItem.remove(path);
+        m_pathToIndex.remove(path);
         delete takeItem(index);
     }
 }
 
 void ThumbnailPanel::updateImagePath(const QString &oldPath, const QString &newPath)
 {
-    auto it = m_pathToItem.find(oldPath);
-    if (it != m_pathToItem.end()) {
-        QListWidgetItem *target = *it;
+    if (QListWidgetItem *target = itemForPath(oldPath)) {
         target->setData(Qt::UserRole, newPath);
         target->setToolTip(newPath.section('/', -1));
-        m_pathToItem.remove(oldPath);
-        m_pathToItem[newPath] = target;
+        m_pathToIndex[newPath] = m_pathToIndex.take(oldPath);
     }
 }
 
@@ -271,9 +277,8 @@ void ThumbnailPanel::onThumbnailReady(int generation, const QString &path, const
         return;
     }
 
-    auto it = m_pathToItem.find(path);
-    if (it != m_pathToItem.end()) {
-        (*it)->setIcon(QIcon(QPixmap::fromImage(image)));
+    if (QListWidgetItem *target = itemForPath(path)) {
+        target->setIcon(QIcon(QPixmap::fromImage(image)));
     }
 }
 
@@ -291,9 +296,8 @@ void ThumbnailPanel::setVideoThumbnail(int generation, const QString &path, cons
     if (generation != m_generation || image.isNull()) {
         return;
     }
-    auto it = m_pathToItem.find(path);
-    if (it != m_pathToItem.end()) {
-        (*it)->setIcon(QIcon(QPixmap::fromImage(image)));
+    if (QListWidgetItem *target = itemForPath(path)) {
+        target->setIcon(QIcon(QPixmap::fromImage(image)));
     }
 }
 

@@ -126,7 +126,12 @@ private:
     void setupStatusBar();
     void setupToolbar();
     bool showDeleteConfirmationDialog();
-    void removeImageFromList(int index);
+    // Odebere soubor ze seznamu i panelu náhledů. showNext=false odloží
+    // zobrazení dalšího souboru na volajícího (hromadné operace tak nedekódují
+    // obrázek po každém odebrání) — volající pak zavolá showCurrentAfterRemoval().
+    void removeImageFromList(int index, bool showNext = true);
+    // Zobrazí soubor na (zaokrouhleném) indexu po sérii removeImageFromList(…, false).
+    void showCurrentAfterRemoval(int anchorIndex);
     void updateConfirmationActionState();
     void disableImageBrowsing();
     void enableImageBrowsing();
@@ -205,6 +210,12 @@ private:
     QStringList resolveCompanionSet(const QString &activeFile, const QString &verb,
                                     bool &cancelled);
     void onMoveCompanionToggled(bool checked);
+
+    // Vrátí poslední skupinu z dané undo historie zpět na původní umístění
+    // (sdíleno mezi ↩ Přesun a ♻ recyklace z Delete — logika je identická).
+    // Nic nedělá, je-li historie prázdná; skupinu z historie odebere vždy,
+    // kromě případu obsazeného původního umístění (pak ji ponechá k opakování).
+    void undoLastGroup(QList<MoveGroup> &history, const QString &notFoundMessage);
 
     // ── Navigace mezi složkami (Folder nav toolbar) ──────────────────────────
     enum class FolderNavDirection { Left, Right, Up, Down };

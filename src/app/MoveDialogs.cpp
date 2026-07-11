@@ -1,5 +1,7 @@
 #include "app/MoveDialogs.hpp"
 
+#include "app/PredefinedColors.hpp"
+
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -12,14 +14,6 @@
 #include <QVBoxLayout>
 
 namespace pictureviewer {
-
-// 20 předdefinovaných barev (hex) — stejné jako CategoryDialogs / oblíbené.
-static constexpr const char *PredefinedColors[] = {
-    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8",
-    "#F7DC6F", "#BB8FCE", "#85C1E2", "#F8B88B", "#A9DFBF",
-    "#F5B7B1", "#D7BDE2", "#F9E79F", "#AED6F1", "#F8B4B8",
-    "#B7E8D6", "#FDBFED", "#D4EFDF", "#FADBD8", "#EBD5B4"
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // NewMoveButtonDialog
@@ -64,14 +58,14 @@ void NewMoveButtonDialog::setupUI()
         btn->setFixedSize(40, 40);
         btn->setStyleSheet(
             QString("background-color: %1; border: 2px solid #ccc; border-radius: 4px;")
-                .arg(PredefinedColors[i])
+                .arg(kPredefinedColors[i])
         );
 
         connect(btn, &QPushButton::clicked, this, [this, i] {
-            m_selectedColor = QColor(PredefinedColors[i]);
+            m_selectedColor = QColor(kPredefinedColors[i]);
             for (int j = 0; j < 20; ++j) {
                 QString style = QString("background-color: %1; border: %2px solid %3; border-radius: 4px;")
-                    .arg(PredefinedColors[j])
+                    .arg(kPredefinedColors[j])
                     .arg(i == j ? 3 : 2)
                     .arg(i == j ? "#333" : "#ccc");
                 m_colorButtons[j]->setStyleSheet(style);

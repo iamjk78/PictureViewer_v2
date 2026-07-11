@@ -77,7 +77,6 @@ private:
     QString m_connectionName;   // unikátní název SQL připojení (umožňuje více instancí / přepínání profilů)
     mutable QString m_lastError;
     static constexpr int MaxCategoriesPerImage = 5;
-    static constexpr int PredefinedColorCount = 20;
 };
 
 } // namespace pictureviewer

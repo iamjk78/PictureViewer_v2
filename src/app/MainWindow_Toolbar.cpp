@@ -5,6 +5,7 @@
 #include "app/MainWindow.hpp"
 
 #include "app/ImageView.hpp"
+#include "app/PredefinedColors.hpp"
 #include "app/ScreenCapture.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
@@ -26,7 +27,6 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QRandomGenerator>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QStyle>
@@ -275,28 +275,9 @@ void MainWindow::setupStatusBar()
     });
 }
 
-// ── 20 predefined favorite colors ────────────────────────────────────────────
-static constexpr const char *FavPredefinedColors[] = {
-    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8",
-    "#F7DC6F", "#BB8FCE", "#85C1E2", "#F8B88B", "#A9DFBF",
-    "#F5B7B1", "#D7BDE2", "#F9E79F", "#AED6F1", "#F8B4B8",
-    "#B7E8D6", "#FDBFED", "#D4EFDF", "#FADBD8", "#EBD5B4"
-};
-static constexpr int FavPredefinedColorCount = 20;
-
 QString MainWindow::pickRandomUnusedFavoriteColor() const
 {
-    QStringList usedColors = m_settingsManager->favoriteFolderColors();
-
-    for (int attempt = 0; attempt < FavPredefinedColorCount; ++attempt) {
-        int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
-        QString colorHex = FavPredefinedColors[idx];
-        if (!usedColors.contains(colorHex)) {
-            return colorHex;
-        }
-    }
-    int idx = QRandomGenerator::global()->bounded(FavPredefinedColorCount);
-    return FavPredefinedColors[idx];
+    return pickRandomUnusedColor(m_settingsManager->favoriteFolderColors());
 }
 
 void MainWindow::setupFavoritesToolbar()
@@ -354,7 +335,7 @@ void MainWindow::refreshFavoriteButtons()
         const QString &path = folders.at(i);
         QString colorHex = (i < colors.size() && !colors.at(i).isEmpty())
                            ? colors.at(i)
-                           : QStringLiteral("#4ECDC4");
+                           : defaultItemColor();
 
         QString displayName = QDir(path).dirName();
         if (displayName.isEmpty()) {

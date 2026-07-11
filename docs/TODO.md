@@ -1,8 +1,15 @@
 # TODO – náměty na budoucí vylepšení
 
+> **Poznámka:** Historický dokument pokrývající verze ~0.5–0.8. Novější změny
+> (profily, oblíbené, přesun do složky, navigace mezi složkami, párové soubory,
+> auto-aktualizace…) jsou dokumentovány v changelogu aplikace
+> (Nápověda → Co je nového, `src/app/HelpDialog.cpp`) a v `README.md`.
+> Sekce „Nové funkce – zbývá" na konci je stále platný seznam námětů.
+
 Sepsáno 2026-06-10 na základě revize logiky aplikace.
 Aktualizováno po implementaci výkonových vylepšení (verze 0.5).
 Aktualizováno po code review a bug fixech (verze 0.6).
+Aktualizováno 2026-07-11 (v0.25) — doplněna úvodní poznámka o rozsahu.
 
 ## Hotovo ✓
 

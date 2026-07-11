@@ -1,22 +1,15 @@
 #include "app/CategoryManager.hpp"
 
+#include "app/PredefinedColors.hpp"
+
 #include <QColor>
 #include <QDebug>
-#include <QRandomGenerator>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
 
 namespace pictureviewer {
-
-// 20 předdefinovaných barev (hex)
-static constexpr const char *PredefinedColors[] = {
-    "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8",
-    "#F7DC6F", "#BB8FCE", "#85C1E2", "#F8B88B", "#A9DFBF",
-    "#F5B7B1", "#D7BDE2", "#F9E79F", "#AED6F1", "#F8B4B8",
-    "#B7E8D6", "#FDBFED", "#D4EFDF", "#FADBD8", "#EBD5B4"
-};
 
 CategoryManager::CategoryManager(const QString &dbPath)
     : m_dbPath(dbPath)
@@ -168,7 +161,7 @@ QList<Category> CategoryManager::allCategories() const
 QColor CategoryManager::pickRandomUnusedColor() const
 {
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
-    QList<QString> usedColors;
+    QStringList usedColors;
 
     if (db.isOpen()) {
         QSqlQuery query(db);
@@ -179,18 +172,7 @@ QColor CategoryManager::pickRandomUnusedColor() const
         }
     }
 
-    // Vybrat náhodnou nepoužitou barvu
-    for (int attempt = 0; attempt < PredefinedColorCount; ++attempt) {
-        int idx = QRandomGenerator::global()->bounded(PredefinedColorCount);
-        QString colorHex = PredefinedColors[idx];
-        if (!usedColors.contains(colorHex)) {
-            return QColor(colorHex);
-        }
-    }
-
-    // Fallback (všechny barvy použity) — vybrat prostě náhodně
-    int idx = QRandomGenerator::global()->bounded(PredefinedColorCount);
-    return QColor(PredefinedColors[idx]);
+    return QColor(pictureviewer::pickRandomUnusedColor(usedColors));
 }
 
 Category CategoryManager::addCategory(const QString &name, const QColor &color)

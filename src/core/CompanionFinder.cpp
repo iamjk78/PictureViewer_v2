@@ -1,11 +1,10 @@
 #include "core/CompanionFinder.hpp"
 
+#include "core/Collation.hpp"
 #include "core/ImageFormats.hpp"
 
-#include <QCollator>
 #include <QDir>
 #include <QFileInfo>
-#include <QLocale>
 
 namespace pictureviewer {
 
@@ -39,11 +38,8 @@ QStringList CompanionFinder::findCompanions(const QString &filePath)
         }
     }
 
-    // Locale-aware řazení (stejný vzor jako FolderNavigator / ImageCatalog).
-    QLocale enLocale(QLocale::English);
-    QCollator collator(enLocale);
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    // Locale-aware řazení (sdílený collator — viz core/Collation.hpp).
+    const QCollator collator = makeNaturalCollator();
     std::sort(companions.begin(), companions.end(),
               [&collator](const QString &a, const QString &b) {
                   return collator.compare(a, b) < 0;

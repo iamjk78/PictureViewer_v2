@@ -1,9 +1,8 @@
 #include "core/ImageCatalog.hpp"
 
-#include "app/CategoryManager.hpp"
+#include "core/Collation.hpp"
 #include "core/ImageFormats.hpp"
 
-#include <QCollator>
 #include <QDir>
 #include <QFileInfo>
 #include <QFileInfoList>
@@ -16,8 +15,6 @@ namespace pictureviewer {
 
 QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
                                      SortKey sortKey, bool ascending,
-                                     const QList<int> &categoryIds,
-                                     CategoryManager *categoryManager,
                                      bool includeImages, bool includeVideos) const
 {
     const QDir directory(folderPath);
@@ -30,15 +27,6 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
         QDir::Files | QDir::NoDotAndDotDot
     );
 
-    // Pokud máme filtrování podle kategorií, nejdřív získat seznam cest
-    QSet<QString> categoryFilteredPaths;
-    if (!categoryIds.isEmpty() && categoryManager) {
-        categoryFilteredPaths = QSet<QString>(
-            categoryManager->imagePathsWithAllCategories(categoryIds).begin(),
-            categoryManager->imagePathsWithAllCategories(categoryIds).end()
-        );
-    }
-
     // Pracujeme s QFileInfo, ať pro řazení podle data/velikosti nečteme stat
     // v komparátoru opakovaně.
     QFileInfoList supported;
@@ -47,22 +35,11 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
         if (!isSupported(entry, includePdf, includeImages, includeVideos)) {
             continue;
         }
-
-        // Pokud máme kategoriální filtr, ověřit že cesta je v seznamu
-        if (!categoryIds.isEmpty() && !categoryFilteredPaths.contains(entry.absoluteFilePath())) {
-            continue;
-        }
-
         supported.append(entry);
     }
 
-    // QCollator s numericMode řadí číselné úseky podle hodnoty (img2 < img10),
-    // ne lexikograficky. Explicitní locale "en" zajistí numeric mode i na
-    // systémech bez nastaveného LANG (Linux CI s LANG=C).
-    QLocale enLocale(QLocale::English);
-    QCollator collator(enLocale);
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    // Přirozené locale-aware řazení (sdílený collator — viz core/Collation.hpp).
+    const QCollator collator = makeNaturalCollator();
 
     auto byName = [&collator](const QFileInfo &a, const QFileInfo &b) {
         return collator.compare(a.fileName(), b.fileName()) < 0;

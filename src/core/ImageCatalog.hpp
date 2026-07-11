@@ -18,14 +18,12 @@ class ImageCatalog
 public:
     // loadFolder: řídí co se načítá pomocí bool přepínačů.
     // sortKey + ascending určují pořadí výsledného seznamu.
-    // categoryIds: filtrování podle kategorií (AND logika). Prázdný = bez filtrování.
-    // categoryManager: potřebný pro filtrování; pokud nullptr, filtrování se přeskočí.
+    // Filtrování podle štítků se dělá až nad výsledkem v app vrstvě
+    // (MainWindow::onScanComplete) — core nesmí záviset na CategoryManager.
     QStringList loadFolder(const QString &folderPath,
                            bool includePdf = true,
                            SortKey sortKey = SortKey::Name,
                            bool ascending = true,
-                           const QList<int> &categoryIds = {},
-                           class CategoryManager *categoryManager = nullptr,
                            bool includeImages = true,
                            bool includeVideos = false) const;
     bool isSupported(const QFileInfo &fileInfo,

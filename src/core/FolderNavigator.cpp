@@ -1,9 +1,9 @@
 #include "core/FolderNavigator.hpp"
 
-#include <QCollator>
+#include "core/Collation.hpp"
+
 #include <QDir>
 #include <QFileInfo>
-#include <QLocale>
 
 namespace {
 
@@ -14,19 +14,14 @@ bool isDeleteFolder(const QString &name)
     return QString::compare(name, QStringLiteral("Delete"), Qt::CaseInsensitive) == 0;
 }
 
-// Vrátí podsložky daného adresáře, locale-aware setříděné, bez "Delete".
-// Stejný QCollator vzor jako ImageCatalog::loadFolder (numericMode zajišťuje
-// přirozené řazení typu "Složka 2" < "Složka 10").
+// Vrátí podsložky daného adresáře, locale-aware setříděné, bez "Delete"
+// (sdílený collator — viz core/Collation.hpp).
 QStringList sortedSubfolders(const QDir &dir)
 {
     QStringList names = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::NoSort);
     names.removeIf(isDeleteFolder);
 
-    QLocale enLocale(QLocale::English);
-    QCollator collator(enLocale);
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
-
+    const QCollator collator = makeNaturalCollator();
     std::sort(names.begin(), names.end(), [&collator](const QString &a, const QString &b) {
         return collator.compare(a, b) < 0;
     });

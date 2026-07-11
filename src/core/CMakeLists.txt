@@ -1,4 +1,5 @@
 set(CORE_SOURCES
+    Collation.hpp
     ImageInfo.hpp
     ImageFormats.hpp
     ImageMetadataReader.hpp

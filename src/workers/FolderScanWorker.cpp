@@ -41,7 +41,7 @@ void FolderScanWorker::run()
     try {
         ImageCatalog catalog;
         const QStringList paths = catalog.loadFolder(
-            m_folderPath, m_includePdf, m_sortKey, m_ascending, {}, nullptr,
+            m_folderPath, m_includePdf, m_sortKey, m_ascending,
             m_includeImages, m_includeVideos);
         if (!m_cancelled.load()) {
             emit scanComplete(m_generation, paths);

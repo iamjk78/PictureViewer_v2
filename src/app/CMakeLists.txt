@@ -6,6 +6,7 @@ set(APP_SOURCES
     CategoryDialogs.hpp
     CategoryDialogs.cpp
     ClipboardHelper.hpp
+    FileRetry.hpp
     HelpDialog.hpp
     HelpDialog.cpp
     ImageLoader.hpp
@@ -23,6 +24,7 @@ set(APP_SOURCES
     MetadataPanel.cpp
     MoveDialogs.hpp
     MoveDialogs.cpp
+    PredefinedColors.hpp
     ProfileManager.hpp
     ProfileManager.cpp
     ImageView.hpp
