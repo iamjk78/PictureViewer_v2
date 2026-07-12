@@ -172,6 +172,13 @@ MainWindow::MainWindow(QWidget *parent)
             this, [this](const QString &message) {
                 m_statusLabel->setText(message);
             });
+    connect(m_videoPlayer, &VideoPlayer::playbackRetryStarted,
+            this, [this](int attempt, int maxAttempts) {
+                const QString name = QFileInfo(m_videoPlayer->currentPath()).fileName();
+                m_statusLabel->setText(
+                    tr("Video %1 se nepodařilo přehrát. Opakuji pokus %2/%3…")
+                        .arg(name).arg(attempt).arg(maxAttempts));
+            });
     connect(m_videoPlayer, &VideoPlayer::fullscreenToggleRequested,
             this, &MainWindow::toggleFullscreen);
     connect(m_videoPlayer, &VideoPlayer::videoMetadataReady,

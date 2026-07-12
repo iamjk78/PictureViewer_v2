@@ -167,17 +167,23 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     connect(m_player, &QMediaPlayer::positionChanged,  this, &VideoPlayer::onPositionChanged);
     connect(m_player, &QMediaPlayer::durationChanged,  this, &VideoPlayer::onDurationChanged);
     connect(m_player, &QMediaPlayer::errorOccurred, this,
-            [this](QMediaPlayer::Error /*e*/, const QString &msg) {
-                m_loadTimeoutTimer->stop();
-                m_bufferOverlay->hide();
-                const QString name = QFileInfo(m_currentPath).fileName();
-                // stopPlayback() → stopped() → MainWindow přepíše status bar;
-                // chybu proto emitovat až PO něm, aby zůstala viditelná.
-                stopPlayback();
-                emit playbackError(
-                    msg.isEmpty()
-                        ? tr("Video %1 nelze přehrát — soubor je poškozený nebo v nepodporovaném formátu.").arg(name)
-                        : tr("Video %1 nelze přehrát: %2").arg(name, msg));
+            [this](QMediaPlayer::Error /*e*/, const QString & /*msg*/) {
+                if (m_playAttempt < MaxPlayAttempts) {
+                    m_playAttempt++;
+                    m_loadTimeoutTimer->stop();
+                    m_bufferOverlay->hide();
+                    emit playbackRetryStarted(m_playAttempt, MaxPlayAttempts);
+                    QTimer::singleShot(RetryDelayMs, this, &VideoPlayer::retryPlayFile);
+                } else {
+                    m_playAttempt = 0;
+                    m_loadTimeoutTimer->stop();
+                    m_bufferOverlay->hide();
+                    stopPlayback();
+                    const QString name = QFileInfo(m_currentPath).fileName();
+                    emit playbackError(
+                        tr("Video %1 se nepodařilo načíst ani po %2 pokusech.")
+                            .arg(name).arg(MaxPlayAttempts));
+                }
             });
 
     // Metadata videa — backend je vydává postupně; posloucháme na obou místech.
@@ -224,6 +230,7 @@ void VideoPlayer::setSettingsManager(SettingsManager *settings)
 
 void VideoPlayer::playFile(const QString &path)
 {
+    m_playAttempt = 0;
     m_currentPath  = path;
     m_rotationDeg  = 0;
     m_videoItem->setRotation(0);
@@ -238,6 +245,7 @@ void VideoPlayer::playFile(const QString &path)
 
 void VideoPlayer::stopPlayback()
 {
+    m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
     m_player->stop();
     m_player->setSource(QUrl());
@@ -246,6 +254,7 @@ void VideoPlayer::stopPlayback()
 
 void VideoPlayer::stopQuietly()
 {
+    m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
     m_stoppingQuietly = true;
     m_player->stop();
@@ -477,6 +486,16 @@ void VideoPlayer::positionOverlay()
     const int x = viewPos.x() + (m_view->width()  - m_bufferOverlay->width())  / 2;
     const int y = viewPos.y() + (m_view->height() - m_bufferOverlay->height()) / 2;
     m_bufferOverlay->move(x, y);
+}
+
+void VideoPlayer::retryPlayFile()
+{
+    if (m_currentPath.isEmpty()) {
+        return;
+    }
+    m_player->setSource(QUrl::fromLocalFile(m_currentPath));
+    m_player->play();
+    m_loadTimeoutTimer->start();
 }
 
 // ── Pomocné ──────────────────────────────────────────────────────────────────

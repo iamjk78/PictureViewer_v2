@@ -52,6 +52,9 @@ public:
     // Zastaví přehrávání BEZ emitu stopped() — pro navigaci na jiný soubor.
     void stopQuietly();
 
+    // Vrátí cestu aktuálně přehrávaného videa.
+    QString currentPath() const { return m_currentPath; }
+
     // Vizuální rotace o 90° (nepíše do souboru).
     void rotateLeft();
     void rotateRight();
@@ -65,6 +68,8 @@ signals:
     void videoMetadataReady(const pictureviewer::VideoMeta &meta);
     // Přehrávání selhalo (poškozený soubor, nepodporovaný kodek, timeout).
     void playbackError(const QString &message);
+    // Zahájit pokus o opakované načtení videa (informace pro uživatele).
+    void playbackRetryStarted(int attempt, int maxAttempts);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -79,6 +84,7 @@ private:
     void onMediaStatusChanged(int status);
     void positionOverlay();
     void emitVideoMeta();
+    void retryPlayFile();
 
     // Zoom: delta je absolutní přírůstek (kladný = zvětšit, záporný = zmenšit).
     void zoomBy(double delta);
@@ -114,6 +120,11 @@ private:
 
     // Timeout pro případ zaseknutého/poškozeného souboru (15 s).
     QTimer *m_loadTimeoutTimer = nullptr;
+
+    // Retry mechanismus pro případ selhání přehrávání
+    int m_playAttempt = 0;
+    static constexpr int MaxPlayAttempts = 3;
+    static constexpr int RetryDelayMs = 250;
 };
 
 } // namespace pictureviewer
