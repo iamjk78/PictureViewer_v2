@@ -136,6 +136,7 @@ private:
     void disableImageBrowsing();
     void enableImageBrowsing();
     void applyGrayscaleEffect(bool enable);
+    bool deleteFolderExists() const;
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
     // ── Profily ────────────────────────────────────────────────────────────────

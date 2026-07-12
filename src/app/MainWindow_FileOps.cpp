@@ -730,13 +730,13 @@ void MainWindow::renameCurrentImage()
 
 void MainWindow::onDeleteFolder()
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+    // Složka Delete se smaže i když je aktuální složka prázdná (m_imagePaths.isEmpty()).
+    // Použijeme m_currentFolder místo odvozování cesty z m_imagePaths.
+    if (m_currentFolder.isEmpty()) {
         return;
     }
 
-    const QString currentPath = m_imagePaths.at(m_currentIndex);
-    const QString folderPath = currentPath.section('/', 0, -2);
-    const QString deleteFolderPath = folderPath + "/Delete";
+    const QString deleteFolderPath = m_currentFolder + "/Delete";
 
     QDir deleteFolder(deleteFolderPath);
     if (!deleteFolder.exists()) {

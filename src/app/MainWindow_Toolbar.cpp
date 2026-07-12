@@ -668,7 +668,9 @@ void MainWindow::enableImageBrowsing()
     m_enableDeleteImageAction->setEnabled(true);
     m_enableMoveToDeleteAction->setEnabled(true);
     m_deletePictureAction->setEnabled(!m_imagePaths.isEmpty());
-    m_deleteFolderAction->setEnabled(!m_imagePaths.isEmpty());
+    // Tlačítko Delete je dostupné, když Delete složka existuje, nezávisle na tom,
+    // jsou-li v aktuální složce nějaké soubory.
+    m_deleteFolderAction->setEnabled(deleteFolderExists());
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(!m_currentFolder.isEmpty());
 
     if (m_thumbnailDock) {
@@ -685,6 +687,14 @@ void MainWindow::applyGrayscaleEffect(bool enable)
     } else {
         setWindowOpacity(1.0);
     }
+}
+
+bool MainWindow::deleteFolderExists() const
+{
+    if (m_currentFolder.isEmpty()) {
+        return false;
+    }
+    return QDir(m_currentFolder + "/Delete").exists();
 }
 
 } // namespace pictureviewer
