@@ -22,7 +22,7 @@ VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCa
     setupPlayer();
 
     m_timeoutTimer->setSingleShot(true);
-    m_timeoutTimer->setInterval(8000);
+    m_timeoutTimer->setInterval(15000);
     connect(m_timeoutTimer, &QTimer::timeout, this, &VideoThumbnailWorker::onTimeout);
 }
 
