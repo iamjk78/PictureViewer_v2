@@ -44,7 +44,7 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setRenderHint(QPainter::Antialiasing, false);
-    m_view->setRenderHint(QPainter::SmoothPixmapTransform, false);
+    m_view->setRenderHint(QPainter::SmoothPixmapTransform, true);
     // Pro video je překreslení celého viewportu každý snímek efektivnější
     // než počítání minimálních dirty regionů.
     m_view->setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
