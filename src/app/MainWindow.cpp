@@ -683,6 +683,10 @@ void MainWindow::updateConfirmationActionState()
 void MainWindow::enterFullscreen()
 {
     m_isFullscreen = true;
+    // showNormal() po showFullScreen() na macOS/Qt nevrací spolehlivě přesně
+    // stejnou pozici/velikost okna — uložit geometrii a po exitFullscreen()
+    // ji vynuceně obnovit.
+    m_geometryBeforeFullscreen = geometry();
 
     // Zapamatovat viditelnost PŘED hide() — sekundární toolbary (Oblíbené,
     // Štítky, Přesun, Navigace) se musí po návratu z fullscreenu vrátit do
@@ -710,6 +714,9 @@ void MainWindow::exitFullscreen()
 {
     m_isFullscreen = false;
     showNormal();
+    if (m_geometryBeforeFullscreen.isValid()) {
+        setGeometry(m_geometryBeforeFullscreen);
+    }
     menuBar()->show();
     // Viditelnost hlavního toolbaru, docků a status baru řídí aktuální rozložení —
     // bezpodmínečné show() by např. v imerzivním režimu vrátilo chrome zpět.

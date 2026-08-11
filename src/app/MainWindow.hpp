@@ -7,6 +7,7 @@
 
 #include <QKeyEvent>
 #include <QMainWindow>
+#include <QRect>
 #include <QStringList>
 #include <QUrl>
 
@@ -263,6 +264,10 @@ private:
     int m_lastPrefetchIndex = -1;   // pro detekci směru listování
     int m_scanGeneration = 0;
     bool m_isFullscreen = false;
+    // Geometrie okna před vstupem do fullscreenu — showNormal() po showFullScreen()
+    // na macOS/Qt spolehlivě nevrací přesně stejnou pozici/velikost, proto se
+    // ukládá a po exitFullscreen() se vynuceně obnoví.
+    QRect m_geometryBeforeFullscreen;
     bool m_shuttingDown = false;
     bool m_thumbnailDockWasVisible = true;   // stav panelu před vstupem do fullscreenu
     // Stav sekundárních toolbarů před vstupem do fullscreenu (viz enterFullscreen/exitFullscreen).
