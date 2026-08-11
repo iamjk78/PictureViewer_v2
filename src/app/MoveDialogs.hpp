@@ -49,22 +49,33 @@ class MoveConflictDialog : public QDialog
     Q_OBJECT
 
 public:
+    // isBatch: true, když se přesouvá víc než jeden vybraný soubor najednou —
+    // pak dialog nabídne i "Zrušit vše" pro přerušení celé zbývající fronty
+    // (ne jen skupiny aktivní soubor + páry).
     MoveConflictDialog(const QString &activePath, const QString &targetFolder,
-                        const QStringList &companionPaths = {}, QWidget *parent = nullptr);
+                        const QStringList &companionPaths = {}, bool isBatch = false,
+                        QWidget *parent = nullptr);
 
     // True, pokud uživatel zvolil přejmenování (viz newFileName()).
-    // False = zrušit přesun celé skupiny (aktivní soubor i páry).
+    // False = zrušit přesun této skupiny (aktivní soubor i páry) — viz abortBatch().
     bool renameConfirmed() const { return m_renameConfirmed; }
     // Nový název AKTIVNÍHO souboru (s jeho příponou) — základ jména (bez přípony)
     // se použije i pro páry, každý se svou vlastní příponou.
     QString newFileName() const;
 
+    // Relevantní jen když renameConfirmed() == false a isBatch bylo true:
+    // True u "Zrušit vše" — přeruší se i zpracování zbývajících vybraných
+    // souborů ve frontě. False u "Zrušit" — zruší se jen tato skupina,
+    // fronta pokračuje dalším souborem.
+    bool abortBatch() const { return m_abortBatch; }
+
 private:
     void setupUI(const QString &activePath, const QString &targetFolder,
-                const QStringList &companionPaths);
+                const QStringList &companionPaths, bool isBatch);
 
     QLineEdit *m_nameEdit = nullptr;
     bool m_renameConfirmed = false;
+    bool m_abortBatch = false;
 };
 
 // Dialog při nálezu více párových souborů (obrázek/video se stejným názvem).

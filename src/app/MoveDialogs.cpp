@@ -161,17 +161,18 @@ QString fileInfoSummary(const QFileInfo &info)
 } // namespace
 
 MoveConflictDialog::MoveConflictDialog(const QString &activePath, const QString &targetFolder,
-                                        const QStringList &companionPaths, QWidget *parent)
+                                        const QStringList &companionPaths, bool isBatch,
+                                        QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle(tr("Soubor již existuje"));
     setModal(true);
     setMinimumWidth(460);
-    setupUI(activePath, targetFolder, companionPaths);
+    setupUI(activePath, targetFolder, companionPaths, isBatch);
 }
 
 void MoveConflictDialog::setupUI(const QString &activePath, const QString &targetFolder,
-                                 const QStringList &companionPaths)
+                                 const QStringList &companionPaths, bool isBatch)
 {
     const QFileInfo activeInfo(activePath);
     const QString sourceFolder = activeInfo.absolutePath();
@@ -235,7 +236,7 @@ void MoveConflictDialog::setupUI(const QString &activePath, const QString &targe
     QPushButton *renameBtn = new QPushButton(hasCompanions
         ? tr("Přejmenovat a přesunout vše") : tr("Přejmenovat a přesunout"));
     QPushButton *cancelBtn = new QPushButton(hasCompanions
-        ? tr("Zrušit vše") : tr("Zrušit přesun"));
+        ? tr("Zrušit") : tr("Zrušit přesun"));
 
     connect(renameBtn, &QPushButton::clicked, this, [this] {
         if (m_nameEdit->text().trimmed().isEmpty()) {
@@ -247,12 +248,26 @@ void MoveConflictDialog::setupUI(const QString &activePath, const QString &targe
     });
     connect(cancelBtn, &QPushButton::clicked, this, [this] {
         m_renameConfirmed = false;
+        m_abortBatch = false;
         reject();
     });
 
     buttonLayout->addStretch();
     buttonLayout->addWidget(renameBtn);
     buttonLayout->addWidget(cancelBtn);
+
+    // Při dávkovém přesunu (víc vybraných souborů) navíc nabídnout přerušení
+    // celé zbývající fronty, ne jen přeskočení této skupiny.
+    if (isBatch) {
+        QPushButton *cancelAllBtn = new QPushButton(tr("Zrušit vše"));
+        connect(cancelAllBtn, &QPushButton::clicked, this, [this] {
+            m_renameConfirmed = false;
+            m_abortBatch = true;
+            reject();
+        });
+        buttonLayout->addWidget(cancelAllBtn);
+    }
+
     mainLayout->addLayout(buttonLayout);
 }
 

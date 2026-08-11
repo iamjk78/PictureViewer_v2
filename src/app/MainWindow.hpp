@@ -202,8 +202,11 @@ private:
     // konfliktní dialog za celou skupinu — buď se přejmenují všechny naráz
     // (stejný základ jména, vlastní přípona), nebo se akce zcela zruší. Žádné
     // další dotazy per-soubor. cancelled=true → nic se nemá přesouvat, vrací {}.
+    // isBatch: true, když uživatel vybral víc souborů najednou — dialog pak
+    // nabídne i "Zrušit vše" pro přerušení celé zbývající fronty (abortBatch=true).
     QStringList resolveGroupTargetPaths(const QStringList &filesInAction,
-                                        const QString &targetFolder, bool &cancelled);
+                                        const QString &targetFolder, bool isBatch,
+                                        bool &cancelled, bool &abortBatch);
     // Provede samotný přesun (rename+retry) na už vyřešenou cílovou cestu
     // (viz resolveGroupTargetPaths). Úspěšný přesun zapíše do `group` (kvůli
     // skupinovému undo); vrací true při úspěchu.

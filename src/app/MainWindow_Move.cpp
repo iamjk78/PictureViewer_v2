@@ -267,9 +267,11 @@ void MainWindow::onMoveButtonDelete(int moveButtonId)
 }
 
 QStringList MainWindow::resolveGroupTargetPaths(const QStringList &filesInAction,
-                                                const QString &targetFolder, bool &cancelled)
+                                                const QString &targetFolder, bool isBatch,
+                                                bool &cancelled, bool &abortBatch)
 {
     cancelled = false;
+    abortBatch = false;
 
     if (!QDir(targetFolder).exists()) {
         if (!QDir().mkpath(targetFolder)) {
@@ -301,9 +303,10 @@ QStringList MainWindow::resolveGroupTargetPaths(const QStringList &filesInAction
     const QStringList companionPaths = filesInAction.mid(1);
 
     while (true) {
-        MoveConflictDialog conflictDialog(activeFile, targetFolder, companionPaths, this);
+        MoveConflictDialog conflictDialog(activeFile, targetFolder, companionPaths, isBatch, this);
         if (conflictDialog.exec() != QDialog::Accepted || !conflictDialog.renameConfirmed()) {
             cancelled = true;
+            abortBatch = conflictDialog.abortBatch();
             return {};
         }
 
@@ -448,11 +451,18 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
         // Vyřeší cílové cesty pro CELOU skupinu (aktivní soubor + páry) najednou —
         // koliduje-li kterýkoli z nich, zobrazí se jeden dialog za celou skupinu
         // a přejmenování (stejný základ jména) se použije na všechny, aby si
-        // zachovaly shodný název. Bez dalších dotazů per-soubor.
+        // zachovaly shodný název. Bez dalších dotazů per-soubor. Při dávkovém
+        // přesunu (více vybraných souborů) může uživatel navíc zvolit "Zrušit
+        // vše" — pak se přeruší i zpracování zbývajících souborů ve frontě.
         bool groupCancelled = false;
-        const QStringList targetPaths = resolveGroupTargetPaths(filesInAction, button.folder, groupCancelled);
+        bool abortBatch = false;
+        const QStringList targetPaths = resolveGroupTargetPaths(
+            filesInAction, button.folder, filesToMove.size() > 1, groupCancelled, abortBatch);
         if (groupCancelled) {
             handled.insert(activeFile);
+            if (abortBatch) {
+                break;
+            }
             continue;
         }
 
