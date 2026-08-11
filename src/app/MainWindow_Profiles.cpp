@@ -11,7 +11,6 @@
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
-#include "workers/FolderNavWorker.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
 
@@ -178,8 +177,6 @@ void MainWindow::switchProfile(const QString &profileName)
     m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
     if (m_folderNavToolbar->isVisible()) {
         refreshFolderNavData();
-    } else if (m_folderNavWorker != nullptr) {
-        m_folderNavWorker->cancel();
     }
 
     // Synchronizovat zaškrtávací volby v menu Nastavení s NOVÝM profilem —
@@ -379,8 +376,6 @@ void MainWindow::manageProfiles()
                 m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
                 if (m_folderNavToolbar->isVisible()) {
                     refreshFolderNavData();
-                } else if (m_folderNavWorker != nullptr) {
-                    m_folderNavWorker->cancel();
                 }
 
                 m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());

@@ -33,7 +33,6 @@ class CategoryManager;
 class ImageLoader;
 class ImageView;
 class FolderScanWorker;
-class FolderNavWorker;
 class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
@@ -241,12 +240,12 @@ private:
     enum class FolderNavDirection { Left, Right, Up, Down };
     void setupFolderNavToolbar();
     void onToggleFolderNavToolbar();
-    // Spustí (nebo zruší běžící a znovu spustí) FolderNavWorker pro aktuální
-    // složku — jen pokud je toolbar viditelný. Nahoru se počítá synchronně.
-    // Aktualizuje jen ZOBRAZENÍ tlačítek (název/počet) — není zdrojem pravdy
-    // pro navigaci, ta se vždy přepočítá čerstvě až v okamžiku kliknutí.
+    // Přepočítá stav všech čtyř tlačítek pro aktuální složku — jen pokud je
+    // toolbar viditelný. Synchronně na hlavním vlákně (viz komentář u
+    // implementace — čtení jmen podsložek i po síti je levné). Aktualizuje jen
+    // ZOBRAZENÍ tlačítek (název/počet) — není zdrojem pravdy pro navigaci, ta
+    // se vždy přepočítá čerstvě až v okamžiku kliknutí.
     void refreshFolderNavData();
-    void onFolderNavDataReady(int generation, FolderNavResult left, FolderNavResult right, FolderNavResult down);
     // Při kliknutí vždy nejdřív znovu zjistí aktuální stav adresářové
     // struktury (rychlé synchronní čtení) a teprve s čerstvým výsledkem
     // naviguje — tlačítko tak nikdy nepoužije zastaralou (např. mezitím
@@ -259,8 +258,6 @@ private:
     QPushButton *m_folderNavRightButton = nullptr;
     QPushButton *m_folderNavUpButton = nullptr;
     QPushButton *m_folderNavDownButton = nullptr;
-    FolderNavWorker *m_folderNavWorker = nullptr;
-    int m_folderNavGeneration = 0;
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)

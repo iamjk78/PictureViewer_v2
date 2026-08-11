@@ -6,11 +6,10 @@
 #include "app/MainWindow.hpp"
 
 #include "app/SettingsManager.hpp"
-#include "workers/FolderNavWorker.hpp"
+#include "core/FolderNavigator.hpp"
 
 #include <QAction>
 #include <QLabel>
-#include <QThreadPool>
 #include <QToolBar>
 
 namespace pictureviewer {
@@ -79,9 +78,6 @@ void MainWindow::onToggleFolderNavToolbar()
 
     if (willBeVisible) {
         refreshFolderNavData();
-    } else if (m_folderNavWorker != nullptr) {
-        // Toolbar skrytý — přestat počítat adresářovou strukturu na pozadí.
-        m_folderNavWorker->cancel();
     }
 }
 
@@ -98,9 +94,6 @@ void MainWindow::refreshFolderNavData()
         // Žádná aktuální složka (např. po přepnutí na profil bez zapamatované
         // složky) — tlačítka musí zobrazit prázdný stav, ne si držet zastaralá
         // data z předchozího profilu/složky.
-        if (m_folderNavWorker != nullptr) {
-            m_folderNavWorker->cancel();
-        }
         updateFolderNavButton(m_folderNavUpButton,    QStringLiteral("▲"), {}, false);
         updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), {}, false);
         updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), {}, false);
@@ -113,33 +106,15 @@ void MainWindow::refreshFolderNavData()
     const FolderNavResult up = FolderNavigator::parentFolder(m_currentFolder);
     updateFolderNavButton(m_folderNavUpButton, QStringLiteral("▲"), up, false);
 
-    if (m_folderNavWorker != nullptr) {
-        m_folderNavWorker->cancel();
-    }
-    ++m_folderNavGeneration;
-
-    updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), {}, true);
-    updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), {}, true);
-    updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), {}, true);
-
-    auto *worker = new FolderNavWorker(m_currentFolder, m_folderNavGeneration, nullptr);
-    connect(worker, &FolderNavWorker::navDataReady, this, &MainWindow::onFolderNavDataReady);
-    connect(worker, &FolderNavWorker::finished, worker, &FolderNavWorker::deleteLater);
-    connect(worker, &FolderNavWorker::finished, this, [this, worker](int) {
-        if (m_folderNavWorker == worker) {
-            m_folderNavWorker = nullptr;
-        }
-    });
-    m_folderNavWorker = worker;
-    QThreadPool::globalInstance()->start(worker);
-}
-
-void MainWindow::onFolderNavDataReady(int generation, FolderNavResult left, FolderNavResult right, FolderNavResult down)
-{
-    if (generation != m_folderNavGeneration || m_folderNavToolbar == nullptr
-        || m_folderNavToolbar->isHidden()) {
-        return;
-    }
+    // POZNÁMKA: doleva/doprava/dolů dřív běžely na pozadí (QThreadPool), ale na
+    // některých síťových discích (SMB/AFP) čtení obsahu složky z vedlejšího
+    // vlákna vracelo prázdný výsledek (tlačítka natrvalo zůstala zakázaná,
+    // fungovalo jen "nahoru", které obsah nečte). Počítá se proto synchronně
+    // na hlavním vlákně stejně jako "nahoru" — čtení jen jmen podsložek je
+    // levné i po síti, na rozdíl od generování náhledů.
+    const FolderNavResult left  = FolderNavigator::siblingBefore(m_currentFolder);
+    const FolderNavResult right = FolderNavigator::siblingAfter(m_currentFolder);
+    const FolderNavResult down  = FolderNavigator::firstSubfolder(m_currentFolder);
     updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), left, false);
     updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), right, false);
     updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), down, false);
