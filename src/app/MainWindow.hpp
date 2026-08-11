@@ -126,6 +126,13 @@ private:
     void setupMenu();
     void setupStatusBar();
     void setupToolbar();
+    // Přidá na pravý konec toolbaru přepínatelné tlačítko špendlíku — je-li
+    // aktivní, toolbar zůstane viditelný i v režimu celé obrazovky (enterFullscreen()
+    // jej nemá skrýt). Stav se ukládá per-profil (toolbarId = klíč v SettingsManager).
+    // Volat jako VŮBEC POSLEDNÍ akci přidanou do daného toolbaru (u m_mainToolbar
+    // až po všech setup*Toolbar() voláních, protože ty do něj ještě přidávají
+    // své přepínací akce).
+    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId);
     bool showDeleteConfirmationDialog();
     // Odebere soubor ze seznamu i panelu náhledů. showNext=false odloží
     // zobrazení dalšího souboru na volajícího (hromadné operace tak nedekódují
@@ -297,6 +304,7 @@ private:
     QStackedWidget *m_centralStack = nullptr;
     QToolBar *m_mainToolbar = nullptr;
     QToolBar *m_favoritesToolbar = nullptr;    // Sekundární toolbar pro oblíbené složky
+    QList<QPushButton*> m_favoriteButtons;     // dynamická tlačítka oblíbených složek
     QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)
     QToolBar *m_moveToolbar = nullptr;         // Sekundární toolbar pro rychlý přesun do složky
     QMap<int, QPushButton*> m_moveButtons;     // mapa: moveButtonId → tlačítko

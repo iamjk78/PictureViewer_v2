@@ -61,6 +61,8 @@ void MainWindow::setupFolderNavToolbar()
     toggleNavAction->setToolTip(tr("Zobrazit/skrýt panel navigace mezi složkami"));
     connect(toggleNavAction, &QAction::triggered, this, &MainWindow::onToggleFolderNavToolbar);
 
+    addFullscreenPinAction(m_folderNavToolbar, QStringLiteral("folderNav"));
+
     // Viditelnost je per-profil (config.ini), stejně jako Oblíbené/Štítky/Přesun.
     const bool visible = m_settingsManager->navigationToolbarVisible();
     m_folderNavToolbar->setVisible(visible);

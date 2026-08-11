@@ -27,6 +27,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QStyle>
@@ -316,17 +317,58 @@ void MainWindow::setupFavoritesToolbar()
         m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
     });
 
+    addFullscreenPinAction(m_favoritesToolbar, QStringLiteral("favorites"));
+
     m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
     m_favoritesToolbar->setStyleSheet(iconButtonStyle);
 }
 
+void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId)
+{
+    // Roztáhnout mezeru, aby špendlík byl vždy na pravém konci toolbaru bez
+    // ohledu na to, kolik místa zaberou předchozí (i dynamicky měněné) prvky.
+    QWidget *spacer = new QWidget(toolbar);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    toolbar->addWidget(spacer);
+
+    QAction *pinAction = new QAction(QStringLiteral("📌"), this);
+    pinAction->setCheckable(true);
+    pinAction->setToolTip(tr("Ponechat viditelné i v režimu celé obrazovky"));
+    const bool pinned = m_settingsManager->toolbarPinnedFullscreen(toolbarId);
+    pinAction->setChecked(pinned);
+    toolbar->setProperty("fullscreenPinned", pinned);
+    connect(pinAction, &QAction::toggled, this, [this, toolbar, toolbarId](bool checked) {
+        toolbar->setProperty("fullscreenPinned", checked);
+        m_settingsManager->setToolbarPinnedFullscreen(toolbarId, checked);
+    });
+    toolbar->addAction(pinAction);
+}
+
 void MainWindow::refreshFavoriteButtons()
 {
-    while (m_favoritesToolbar->actions().size() > 2) {
-        QAction *last = m_favoritesToolbar->actions().last();
-        m_favoritesToolbar->removeAction(last);
-        delete last;
+    QAction *oldContainerAction = nullptr;
+    for (QAction *action : m_favoritesToolbar->actions()) {
+        QWidget *widget = m_favoritesToolbar->widgetForAction(action);
+        if (widget && widget->objectName() == "favoriteButtonsContainer") {
+            oldContainerAction = action;
+            break;
+        }
     }
+
+    for (QPushButton *btn : m_favoriteButtons) {
+        btn->deleteLater();
+    }
+    m_favoriteButtons.clear();
+
+    if (oldContainerAction) {
+        m_favoritesToolbar->removeAction(oldContainerAction);
+    }
+
+    QWidget *newContainer = new QWidget(this);
+    newContainer->setObjectName("favoriteButtonsContainer");
+    QHBoxLayout *containerLayout = new QHBoxLayout(newContainer);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(4);
 
     const QStringList folders = m_settingsManager->favoriteFolders();
     const QStringList colors  = m_settingsManager->favoriteFolderColors();
@@ -377,7 +419,15 @@ void MainWindow::refreshFavoriteButtons()
             menu.exec(QCursor::pos());
         });
 
-        m_favoritesToolbar->addWidget(btn);
+        containerLayout->addWidget(btn);
+        m_favoriteButtons.append(btn);
+    }
+
+    QList<QAction*> actions = m_favoritesToolbar->actions();
+    if (actions.size() >= 2) {
+        m_favoritesToolbar->insertWidget(actions.at(1), newContainer);
+    } else {
+        m_favoritesToolbar->addWidget(newContainer);
     }
 }
 
@@ -524,6 +574,9 @@ void MainWindow::setupPdfToolbar()
     m_pdfToolbar->addAction(gotoAction);
     m_pdfToolbar->addSeparator();
     m_pdfToolbar->addAction(screenshotAction);
+    m_pdfToolbar->addSeparator();
+
+    addFullscreenPinAction(m_pdfToolbar, QStringLiteral("pdf"));
 
     const QString style =
         "QToolButton {"

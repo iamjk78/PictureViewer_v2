@@ -589,6 +589,22 @@ void SettingsManager::setNavigationToolbarVisible(bool visible)
     syncToDisk();
 }
 
+// ── Připnutí toolbarů viditelných i v režimu celé obrazovky ────────────────
+// toolbarId je interní identifikátor toolbaru ("main", "favorites",
+// "categories", "move", "folderNav", "pdf") — jeden generický pár klíč/hodnota
+// místo samostatných getterů/setterů pro každý toolbar.
+
+bool SettingsManager::toolbarPinnedFullscreen(const QString &toolbarId) const
+{
+    return m_settings->value(QStringLiteral("FullscreenPin/") + toolbarId, false).toBool();
+}
+
+void SettingsManager::setToolbarPinnedFullscreen(const QString &toolbarId, bool pinned)
+{
+    m_settings->setValue(QStringLiteral("FullscreenPin/") + toolbarId, pinned);
+    syncToDisk();
+}
+
 // ── Settings version ─────────────────────────────────────────────────────────
 
 int SettingsManager::settingsVersion() const

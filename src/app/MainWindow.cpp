@@ -252,6 +252,9 @@ MainWindow::MainWindow(QWidget *parent)
     setupMoveToolbar();
     setupFolderNavToolbar();
     setupPdfToolbar();
+    // Až PO všech setup*Toolbar() voláních výše — ty do m_mainToolbar ještě
+    // přidávají své přepínací akce (⭐ 🏷️ ➡️ 🧭), špendlík musí být poslední.
+    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"));
     setupStatusBar();
     setupOverlayToolbar();
 
@@ -698,6 +701,10 @@ void MainWindow::enterFullscreen()
 
     menuBar()->hide();
     for (QToolBar *toolbar : findChildren<QToolBar *>()) {
+        // Připnuté toolbary (📌) zůstávají viditelné i ve fullscreenu.
+        if (toolbar->property("fullscreenPinned").toBool()) {
+            continue;
+        }
         toolbar->hide();
     }
     if (m_thumbnailDock != nullptr) {

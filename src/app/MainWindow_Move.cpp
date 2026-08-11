@@ -86,6 +86,8 @@ void MainWindow::setupMoveToolbar()
         m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());
     });
 
+    addFullscreenPinAction(m_moveToolbar, QStringLiteral("move"));
+
     m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());
     m_moveToolbar->setStyleSheet(iconButtonStyle);
 }

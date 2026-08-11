@@ -93,6 +93,8 @@ void MainWindow::setupCategoriesToolbar()
         }
     });
 
+    addFullscreenPinAction(m_categoriesToolbar, QStringLiteral("categories"));
+
     bool wasVisible = m_settingsManager->categoriesToolbarVisible();
     m_categoriesToolbar->setVisible(wasVisible);
     m_categoriesToolbar->setStyleSheet(iconButtonStyle);

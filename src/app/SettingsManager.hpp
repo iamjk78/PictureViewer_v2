@@ -124,6 +124,11 @@ public:
     bool navigationToolbarVisible() const;
     void setNavigationToolbarVisible(bool visible);
 
+    // ── Připnutí toolbaru pro fullscreen ─────────────────────────────────────
+    // toolbarId: "main", "favorites", "categories", "move", "folderNav", "pdf".
+    bool toolbarPinnedFullscreen(const QString &toolbarId) const;
+    void setToolbarPinnedFullscreen(const QString &toolbarId, bool pinned);
+
     // ── Settings version ─────────────────────────────────────────────────────
     // Zvyšte kCurrentSettingsVersion při každé změně formátu nastavení
     // a přidejte migraci do SettingsManager konstruktoru.
