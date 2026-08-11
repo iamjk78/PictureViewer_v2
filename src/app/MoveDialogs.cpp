@@ -160,47 +160,82 @@ QString fileInfoSummary(const QFileInfo &info)
 
 } // namespace
 
-MoveConflictDialog::MoveConflictDialog(const QString &sourcePath, const QString &targetPath,
-                                        QWidget *parent)
+MoveConflictDialog::MoveConflictDialog(const QString &activePath, const QString &targetFolder,
+                                        const QStringList &companionPaths, QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle(tr("Soubor již existuje"));
     setModal(true);
-    setMinimumWidth(440);
-    setupUI(sourcePath, targetPath);
+    setMinimumWidth(460);
+    setupUI(activePath, targetFolder, companionPaths);
 }
 
-void MoveConflictDialog::setupUI(const QString &sourcePath, const QString &targetPath)
+void MoveConflictDialog::setupUI(const QString &activePath, const QString &targetFolder,
+                                 const QStringList &companionPaths)
 {
-    const QFileInfo sourceInfo(sourcePath);
-    const QFileInfo targetInfo(targetPath);
+    const QFileInfo activeInfo(activePath);
+    const QString sourceFolder = activeInfo.absolutePath();
+    const bool hasCompanions = !companionPaths.isEmpty();
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    mainLayout->addWidget(new QLabel(
-        tr("Soubor '%1' už v cílové složce existuje.").arg(sourceInfo.fileName())));
+    mainLayout->addWidget(new QLabel(hasCompanions
+        ? tr("V cílové složce už existuje soubor se stejným názvem jako '%1'"
+             " nebo některý z jeho párových souborů.").arg(activeInfo.fileName())
+        : tr("Soubor '%1' už v cílové složce existuje.").arg(activeInfo.fileName())));
 
     mainLayout->addSpacing(10);
 
-    QLabel *sourceLabel = new QLabel(tr("<b>Přesouvaný soubor</b><br>%1").arg(fileInfoSummary(sourceInfo)));
-    mainLayout->addWidget(sourceLabel);
+    QLabel *fromLabel = new QLabel(tr("<b>Z adresáře</b><br>%1").arg(sourceFolder));
+    fromLabel->setWordWrap(true);
+    mainLayout->addWidget(fromLabel);
 
     mainLayout->addSpacing(6);
 
-    QLabel *targetLabel = new QLabel(tr("<b>Existující soubor v cíli</b><br>%1").arg(fileInfoSummary(targetInfo)));
-    mainLayout->addWidget(targetLabel);
+    QLabel *toLabel = new QLabel(tr("<b>Do adresáře</b><br>%1").arg(targetFolder));
+    toLabel->setWordWrap(true);
+    mainLayout->addWidget(toLabel);
+
+    // Vypsat stav aktivního souboru a všech párů — kolize může nastat u
+    // kteréhokoli z nich, i když aktivní soubor sám o sobě nekoliduje.
+    auto appendFileStatus = [&](const QString &label, const QFileInfo &info) {
+        const QString targetPath = targetFolder + QStringLiteral("/") + info.fileName();
+        const QFileInfo targetInfo(targetPath);
+
+        mainLayout->addSpacing(10);
+        mainLayout->addWidget(new QLabel(tr("<b>%1 '%2'</b><br>%3")
+            .arg(label, info.fileName(), fileInfoSummary(info))));
+        mainLayout->addWidget(new QLabel(targetInfo.exists()
+            ? tr("V cíli už existuje:<br>%1").arg(fileInfoSummary(targetInfo))
+            : tr("V cílové složce zatím neexistuje.")));
+    };
+
+    appendFileStatus(tr("Přesouvaný soubor"), activeInfo);
+    for (const QString &companionPath : companionPaths) {
+        appendFileStatus(tr("Párový soubor"), QFileInfo(companionPath));
+    }
 
     mainLayout->addSpacing(15);
 
     mainLayout->addWidget(new QLabel(tr("Nový název (pokud přejmenujete):")));
-    m_nameEdit = new QLineEdit(suggestUniqueFileName(targetInfo.absolutePath(), sourceInfo.fileName()));
+    m_nameEdit = new QLineEdit(suggestUniqueFileName(targetFolder, activeInfo.fileName()));
     mainLayout->addWidget(m_nameEdit);
+
+    if (hasCompanions) {
+        mainLayout->addSpacing(6);
+        mainLayout->addWidget(new QLabel(
+            tr("Stejný základ jména (jen s vlastní příponou) se použije i na %1"
+               " párový soubor, aby zůstaly jmény spárované.", "", companionPaths.size())
+                .arg(companionPaths.size())));
+    }
 
     mainLayout->addSpacing(15);
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    QPushButton *renameBtn = new QPushButton(tr("Přejmenovat a přesunout"));
-    QPushButton *cancelBtn = new QPushButton(tr("Zrušit přesun"));
+    QPushButton *renameBtn = new QPushButton(hasCompanions
+        ? tr("Přejmenovat a přesunout vše") : tr("Přejmenovat a přesunout"));
+    QPushButton *cancelBtn = new QPushButton(hasCompanions
+        ? tr("Zrušit vše") : tr("Zrušit přesun"));
 
     connect(renameBtn, &QPushButton::clicked, this, [this] {
         if (m_nameEdit->text().trimmed().isEmpty()) {

@@ -266,39 +266,72 @@ void MainWindow::onMoveButtonDelete(int moveButtonId)
     refreshMoveButtons();
 }
 
-bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo &button,
-                                   MoveGroup &group)
+QStringList MainWindow::resolveGroupTargetPaths(const QStringList &filesInAction,
+                                                const QString &targetFolder, bool &cancelled)
 {
-    const QFileInfo fileInfo(filePath);
-    const QString targetFolder = button.folder;
+    cancelled = false;
 
     if (!QDir(targetFolder).exists()) {
         if (!QDir().mkpath(targetFolder)) {
             m_statusLabel->setText(tr("Nelze vytvořit cílovou složku: %1").arg(targetFolder));
-            return false;
+            cancelled = true;
+            return {};
         }
     }
-
     if (!QFileInfo(targetFolder).isWritable()) {
         m_statusLabel->setText(tr("Cílová složka nemá práva pro zápis: %1").arg(targetFolder));
-        return false;
+        cancelled = true;
+        return {};
     }
 
-    QString targetPath = targetFolder + QStringLiteral("/") + fileInfo.fileName();
+    QStringList targets;
+    bool anyConflict = false;
+    for (const QString &f : filesInAction) {
+        const QString t = targetFolder + QStringLiteral("/") + QFileInfo(f).fileName();
+        targets.append(t);
+        if (QFile::exists(t)) {
+            anyConflict = true;
+        }
+    }
+    if (!anyConflict) {
+        return targets;
+    }
 
-    if (QFile::exists(targetPath)) {
-        MoveConflictDialog conflictDialog(filePath, targetPath, this);
+    const QString activeFile = filesInAction.first();
+    const QStringList companionPaths = filesInAction.mid(1);
+
+    while (true) {
+        MoveConflictDialog conflictDialog(activeFile, targetFolder, companionPaths, this);
         if (conflictDialog.exec() != QDialog::Accepted || !conflictDialog.renameConfirmed()) {
-            return false;   // uživatel zrušil přesun tohoto souboru
+            cancelled = true;
+            return {};
         }
-        targetPath = targetFolder + QStringLiteral("/") + conflictDialog.newFileName();
-        if (QFile::exists(targetPath)) {
-            m_statusLabel->setText(tr("Zvolený název už také existuje, přesun zrušen: %1")
-                .arg(fileInfo.fileName()));
-            return false;
-        }
-    }
 
+        const QString newBase = QFileInfo(conflictDialog.newFileName()).completeBaseName();
+        QStringList candidateTargets;
+        bool stillConflicts = false;
+        for (const QString &f : filesInAction) {
+            const QFileInfo fi(f);
+            const QString ext = fi.suffix();
+            const QString name = ext.isEmpty() ? newBase : newBase + QStringLiteral(".") + ext;
+            const QString t = targetFolder + QStringLiteral("/") + name;
+            candidateTargets.append(t);
+            if (QFile::exists(t)) {
+                stillConflicts = true;
+            }
+        }
+        if (!stillConflicts) {
+            return candidateTargets;
+        }
+        QMessageBox::warning(this, tr("Název stále koliduje"),
+            tr("Zvolený název už také existuje (u aktivního nebo párového souboru)."
+               " Zadejte jiný."));
+        // Vrátit se na dialog znovu se stejnými daty (kolize se mezitím vyřeší jinak).
+    }
+}
+
+bool MainWindow::performSingleMove(const QString &filePath, const QString &targetPath, MoveGroup &group)
+{
     if (tryWithRetry([&] { return QFile::rename(filePath, targetPath); })) {
         if (m_categoryManager) {
             m_categoryManager->renameImagePath(filePath, targetPath);
@@ -307,6 +340,7 @@ bool MainWindow::performSingleMove(const QString &filePath, const MoveButtonInfo
         return true;
     }
 
+    const QFileInfo fileInfo(filePath);
     QString reason;
     if (!QFile::exists(filePath)) {
         reason = tr("soubor již neexistuje");
@@ -411,13 +445,25 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
             continue;
         }
 
+        // Vyřeší cílové cesty pro CELOU skupinu (aktivní soubor + páry) najednou —
+        // koliduje-li kterýkoli z nich, zobrazí se jeden dialog za celou skupinu
+        // a přejmenování (stejný základ jména) se použije na všechny, aby si
+        // zachovaly shodný název. Bez dalších dotazů per-soubor.
+        bool groupCancelled = false;
+        const QStringList targetPaths = resolveGroupTargetPaths(filesInAction, button.folder, groupCancelled);
+        if (groupCancelled) {
+            handled.insert(activeFile);
+            continue;
+        }
+
         MoveGroup group;
-        for (const QString &f : filesInAction) {
+        for (int i = 0; i < filesInAction.size(); ++i) {
+            const QString &f = filesInAction.at(i);
             // Na Windows se přehrávané video drží v paměti — zastavit PŘED
             // každým pokusem o přesun (video mohlo být auto-přehráno i uvnitř
             // smyčky přechodem na další soubor), jinak by bylo zamčené.
             stopVideoIfPlaying();
-            if (performSingleMove(f, button, group)) {
+            if (performSingleMove(f, targetPaths.at(i), group)) {
                 ++movedCount;
                 handled.insert(f);
                 // Odebrat z UI jen pokud je pár součástí aktuálního seznamu

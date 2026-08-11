@@ -34,24 +34,34 @@ private:
     QString m_selectedFolder;
 };
 
-// Dialog při kolizi jmen — zobrazí velikost a datum vytvoření obou souborů,
-// nabídne přejmenování (s návrhem nového jména) nebo zrušení přesunu.
-// Nikdy nenabízí přepsání.
+// Dialog při kolizi jmen — zobrazí velikost, datum vytvoření a zdrojovou i
+// cílovou složku, nabídne přejmenování (s návrhem nového jména) nebo zrušení
+// přesunu. Nikdy nenabízí přepsání.
+//
+// Když jsou v akci i párové soubory (companionPaths), dialog kontroluje kolizi
+// pro AKTIVNÍ soubor i pro KAŽDÝ pár (i když aktivní sám o sobě nekoliduje —
+// stačí, že koliduje jeden z párů) a vypíše stav všech. Přejmenování i zrušení
+// je vždy jedna volba pro celou skupinu — nový základ jména (stejný, jen jiná
+// přípona) se použije na aktivní soubor i na všechny páry, aby si zachovaly
+// shodný název; žádný další dotaz per-soubor se už nezobrazuje.
 class MoveConflictDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    MoveConflictDialog(const QString &sourcePath, const QString &targetPath,
-                        QWidget *parent = nullptr);
+    MoveConflictDialog(const QString &activePath, const QString &targetFolder,
+                        const QStringList &companionPaths = {}, QWidget *parent = nullptr);
 
     // True, pokud uživatel zvolil přejmenování (viz newFileName()).
-    // False = zrušit přesun tohoto souboru.
+    // False = zrušit přesun celé skupiny (aktivní soubor i páry).
     bool renameConfirmed() const { return m_renameConfirmed; }
+    // Nový název AKTIVNÍHO souboru (s jeho příponou) — základ jména (bez přípony)
+    // se použije i pro páry, každý se svou vlastní příponou.
     QString newFileName() const;
 
 private:
-    void setupUI(const QString &sourcePath, const QString &targetPath);
+    void setupUI(const QString &activePath, const QString &targetFolder,
+                const QStringList &companionPaths);
 
     QLineEdit *m_nameEdit = nullptr;
     bool m_renameConfirmed = false;

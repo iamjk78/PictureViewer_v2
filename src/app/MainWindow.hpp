@@ -196,10 +196,18 @@ private:
     void onMoveButtonChangeColor(int moveButtonId);
     void onMoveButtonChangeFolder(int moveButtonId);
     void onMoveButtonDelete(int moveButtonId);
-    // Provede přesun jednoho souboru do složky tlačítka. Úspěšný přesun zapíše
-    // do `group` (kvůli skupinovému undo); vrací true při úspěchu.
-    bool performSingleMove(const QString &filePath, const MoveButtonInfo &button,
-                           MoveGroup &group);
+    // Zjistí cílové cesty pro CELOU skupinu souborů (aktivní soubor + jeho páry)
+    // v cílové složce tlačítka. Pokud kterýkoli z nich koliduje se stávajícím
+    // souborem (i jen jeden z párů, klidně bez aktivního), zobrazí se JEDEN
+    // konfliktní dialog za celou skupinu — buď se přejmenují všechny naráz
+    // (stejný základ jména, vlastní přípona), nebo se akce zcela zruší. Žádné
+    // další dotazy per-soubor. cancelled=true → nic se nemá přesouvat, vrací {}.
+    QStringList resolveGroupTargetPaths(const QStringList &filesInAction,
+                                        const QString &targetFolder, bool &cancelled);
+    // Provede samotný přesun (rename+retry) na už vyřešenou cílovou cestu
+    // (viz resolveGroupTargetPaths). Úspěšný přesun zapíše do `group` (kvůli
+    // skupinovému undo); vrací true při úspěchu.
+    bool performSingleMove(const QString &filePath, const QString &targetPath, MoveGroup &group);
     void onUndoMove();
     void updateMoveUndoButtonState();
     QString pickRandomUnusedMoveColor() const;
