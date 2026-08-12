@@ -14,3 +14,6 @@ venv/
 *.log
 .DS_Store
 build_test/
+
+# Dočasné podkladové soubory pro testování — nikdy neposílat na GitHub
+Temp/

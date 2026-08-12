@@ -138,7 +138,7 @@ private:
     // Volat jako VŮBEC POSLEDNÍ akci přidanou do daného toolbaru (u m_mainToolbar
     // až po všech setup*Toolbar() voláních, protože ty do něj ještě přidávají
     // své přepínací akce).
-    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId);
+    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId, int buttonSize = 28);
     // Přidá widget do toolbaru tak, aby skončil PŘED špendlíkem (ten musí
     // zůstat úplně vpravo). Používat pro veškerý dynamicky přestavovaný obsah
     // toolbarů — přímé addWidget() by ho přilepilo až za špendlík.

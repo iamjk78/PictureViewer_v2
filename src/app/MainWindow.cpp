@@ -261,7 +261,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Až PO všech setup*Toolbar() voláních výše — ty do m_mainToolbar ještě
     // přidávají své přepínací akce (⭐ 🏷️ ➡️ 🧭), špendlík musí být poslední.
-    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"));
+    // 44 musí odpovídat ICON_SIZE v setupToolbar().
+    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"), 44);
     setupStatusBar();
     setupOverlayToolbar();
 
@@ -789,14 +790,12 @@ void MainWindow::toggleSlideshow()
 {
     m_slideshowController->toggle();
     if (m_slideshowController->isRunning()) {
-        // Jednoznaková ikona — toolbar má pro všechny akce pevnou šířku 28px
-        // (viz toolButtonStyle v setupToolbar()), delší text by se elidoval na "...".
-        m_toggleSlideshowAction->setText(QStringLiteral("⏸"));
+        m_toggleSlideshowAction->setIcon(QIcon(QStringLiteral(":/icons/icon_stop_slideshow.png")));
         m_toggleSlideshowAction->setToolTip(tr("Zastavit slideshow (S)"));
         return;
     }
 
-    m_toggleSlideshowAction->setText(QStringLiteral("▶️"));
+    m_toggleSlideshowAction->setIcon(QIcon(QStringLiteral(":/icons/icon_play_slideshow.png")));
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 }
 

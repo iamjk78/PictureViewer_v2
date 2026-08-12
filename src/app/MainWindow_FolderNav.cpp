@@ -9,8 +9,10 @@
 #include "core/FolderNavigator.hpp"
 
 #include <QAction>
+#include <QIcon>
 #include <QLabel>
 #include <QToolBar>
+#include <QToolButton>
 
 namespace pictureviewer {
 
@@ -54,9 +56,17 @@ void MainWindow::setupFolderNavToolbar()
     updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), {}, false);
 
     m_mainToolbar->addSeparator();
-    QAction *toggleNavAction = m_mainToolbar->addAction(QStringLiteral("🧭"));
+    QAction *toggleNavAction = m_mainToolbar->addAction(
+        QIcon(QStringLiteral(":/icons/icon_navigation.png")), QString());
     toggleNavAction->setToolTip(tr("Zobrazit/skrýt panel navigace mezi složkami"));
     connect(toggleNavAction, &QAction::triggered, this, &MainWindow::onToggleFolderNavToolbar);
+    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 44×44 pro
+    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
+    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
+    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleNavAction))) {
+        btn->setFixedSize(44, 44);
+        btn->setIconSize(QSize(42, 42));
+    }
 
     addFullscreenPinAction(m_folderNavToolbar, QStringLiteral("folderNav"));
 

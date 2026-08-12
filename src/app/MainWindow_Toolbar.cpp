@@ -50,12 +50,12 @@ void MainWindow::setupToolbar()
     // poměru stran zdrojového .ico (delete_folder_icon.ico má jiný poměr stran
     // než delete_picture_icon.ico/rename.ico), takže bitmapové ikony vypadaly
     // v toolbaru různě velké. Pevná velikost sjednotí všechny QIcon-akce.
-    toolbar->setIconSize(QSize(20, 20));
+    constexpr int ICON_SIZE = 44;
+    toolbar->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 
-    constexpr int ICON_SIZE = 28;
     const QString iconButtonStyle = QStringLiteral(
         "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
-        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
         "  background: transparent; } "
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); }")
         .arg(ICON_SIZE);
@@ -65,15 +65,17 @@ void MainWindow::setupToolbar()
     // což je vizuálně sjednotí s ostatními emoji ikonami (🗑 ➕ 💾 ⭐ ♻).
     // ⟲ ⟳ žádnou emoji variantu nemají — ty se řeší zvlášť větším písmem níže.
     m_previousImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Left));
-    m_previousImageAction->setText(QStringLiteral("◀️"));
+    m_previousImageAction->setIcon(QIcon(QStringLiteral(":/icons/icon_previous.png")));
+    m_previousImageAction->setText(QString());
     m_previousImageAction->setToolTip(tr("Předchozí obrázek (Shift+←)"));
 
     m_nextImageAction->setShortcut(QKeySequence(Qt::ShiftModifier | Qt::Key_Right));
-    m_nextImageAction->setText(QStringLiteral("▶️"));
+    m_nextImageAction->setIcon(QIcon(QStringLiteral(":/icons/icon_next.png")));
+    m_nextImageAction->setText(QString());
     m_nextImageAction->setToolTip(tr("Další obrázek (Shift+→)"));
 
     m_toggleSlideshowAction->setShortcut(QKeySequence("S"));
-    m_toggleSlideshowAction->setText(QStringLiteral("▶️"));
+    m_toggleSlideshowAction->setIcon(QIcon(QStringLiteral(":/icons/icon_play_slideshow.png")));
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 
     m_intervalSpinBox->setRange(1, 60);
@@ -88,19 +90,19 @@ void MainWindow::setupToolbar()
         m_slideshowController->setInterval(seconds * 1000);
     });
 
-    m_openFolderAction->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    m_openFolderAction->setIcon(QIcon(QStringLiteral(":/icons/icon_open_folder.png")));
     m_openFolderAction->setText(QString());
     m_openFolderAction->setToolTip(tr("Otevřít složku (Ctrl+O)"));
     toolbar->addAction(m_openFolderAction);
 
-    m_reloadFolderAction = new QAction(QStringLiteral("🔄"), this);
+    m_reloadFolderAction = new QAction(QIcon(QStringLiteral(":/icons/icon_reload.png")), QString(), this);
     m_reloadFolderAction->setToolTip(tr("Znovu načíst složku (F5)"));
     m_reloadFolderAction->setShortcut(QKeySequence(Qt::Key_F5));
     m_reloadFolderAction->setEnabled(false);
     connect(m_reloadFolderAction, &QAction::triggered, this, &MainWindow::reloadCurrentFolder);
     toolbar->addAction(m_reloadFolderAction);
 
-    m_screenshotAction = new QAction(QStringLiteral("📷"), this);
+    m_screenshotAction = new QAction(QIcon(QStringLiteral(":/icons/icon_screenshot.png")), QString(), this);
     m_screenshotAction->setToolTip(tr("Snímek výřezu obrazovky (i mimo aplikaci)"));
     connect(m_screenshotAction, &QAction::triggered, this, &MainWindow::onScreenshotCapture);
     toolbar->addAction(m_screenshotAction);
@@ -169,12 +171,12 @@ void MainWindow::setupToolbar()
     toolbar->addWidget(m_sortButton);
     toolbar->addSeparator();
 
-    m_rotateLeftAction = new QAction(QStringLiteral("⟲"), this);
+    m_rotateLeftAction = new QAction(QIcon(QStringLiteral(":/icons/icon_rotate_left.png")), QString(), this);
     m_rotateLeftAction->setToolTip(tr("Otočit doleva ([ nebo L)"));
     m_rotateLeftAction->setShortcuts({QKeySequence(Qt::Key_BracketLeft), QKeySequence(Qt::Key_L)});
     connect(m_rotateLeftAction, &QAction::triggered, this, &MainWindow::onRotateLeft);
 
-    m_rotateRightAction = new QAction(QStringLiteral("⟳"), this);
+    m_rotateRightAction = new QAction(QIcon(QStringLiteral(":/icons/icon_rotate_right.png")), QString(), this);
     m_rotateRightAction->setToolTip(tr("Otočit doprava (])"));
     m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
     connect(m_rotateRightAction, &QAction::triggered, this, &MainWindow::onRotateRight);
@@ -188,21 +190,7 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_rotateRightAction);
     toolbar->addSeparator();
 
-    // ⟲ ⟳ nemají emoji variantu (na rozdíl od ◀️ ▶️ ✂️ ↕️ výše), takže bez
-    // zásahu vypadají mnohem menší než ostatní ikony — kompenzujeme větším písmem.
-    const QString rotateGlyphStyle = QStringLiteral(
-        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
-        "  padding: 2px; min-width: 28px; width: 28px; min-height: 28px; height: 28px; "
-        "  background: transparent; font-size: 30px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }");
-    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(m_rotateLeftAction))) {
-        btn->setStyleSheet(rotateGlyphStyle);
-    }
-    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(m_rotateRightAction))) {
-        btn->setStyleSheet(rotateGlyphStyle);
-    }
-
-    m_cropAction = new QAction(QStringLiteral("✂️"), this);
+    m_cropAction = new QAction(QIcon(QStringLiteral(":/icons/icon_crop.png")), QString(), this);
     m_cropAction->setToolTip(tr("Ořez obrázku — označte oblast myší"));
     m_cropAction->setCheckable(true);
     connect(m_cropAction, &QAction::toggled, this, [this](bool checked) {
@@ -250,14 +238,29 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_recycleAction);
 
     // Apply consistent icon-only styling to all toolbar buttons.
-    // font-size zvětšeno na 20px, aby textové/emoji glyfy (◀ ▶ ⟲ ✂ …) vizuálně
-    // odpovídaly velikosti bitmapových ikon (setIconSize 20×20 výše).
+    // font-size škáluje s ICON_SIZE, aby textové/emoji glyfy (◀ ▶ ⟲ ✂ …) vizuálně
+    // odpovídaly velikosti bitmapových ikon (setIconSize výše).
     const QString toolButtonStyle = QStringLiteral(
         "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
-        "  padding: 2px; min-width: 28px; width: 28px; min-height: 28px; height: 28px; "
-        "  background: transparent; font-size: 20px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }");
+        "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  background: transparent; font-size: 26px; } "
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        .arg(ICON_SIZE);
     toolbar->setStyleSheet(toolButtonStyle);
+
+    // Nativní macOS styl tlačítek (QMacStyle) nemusí plně respektovat CSS
+    // width/height/padding — vlastní vnitřní chrome mu může "ukusovat" místo
+    // bez ohledu na stylesheet, takže ikony i přes výše nastavené rozměry
+    // vypadaly menší, než mají. setFixedSize()/setIconSize() přímo na widgetu
+    // je tvrdé C++ omezení, které styl obejít nemůže.
+    for (QAction *action : toolbar->actions()) {
+        if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(action))) {
+            btn->setFixedSize(ICON_SIZE, ICON_SIZE);
+            if (!btn->icon().isNull()) {
+                btn->setIconSize(QSize(ICON_SIZE - 2, ICON_SIZE - 2));
+            }
+        }
+    }
 }
 
 void MainWindow::setupStatusBar()
@@ -323,13 +326,16 @@ void MainWindow::setupFavoritesToolbar()
     m_favoritesToolbar->setStyleSheet(iconButtonStyle);
 }
 
-void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId)
+void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId, int buttonSize)
 {
-    // Sjednotit velikost ikony špendlíku napříč toolbary — sekundární toolbary
-    // nemají vlastní setIconSize() (hlavní má 20×20), takže by tam byl špendlík
-    // větší. Ostatní tlačítka sekundárních toolbarů jsou textové/emoji glyfy
-    // stylované přes CSS font-size, takže je toto nastavení neovlivní.
-    toolbar->setIconSize(QSize(20, 20));
+    // Hlavní toolbar si vlastní velikost ikon spravuje sám (setupToolbar()) —
+    // QToolBar::setIconSize() mění efektivní velikost VŠECH tlačítek na
+    // toolbaru (i těch s vlastním setIconSize() na widgetu), takže by tohle
+    // volání jeho nastavení přepsalo. U sekundárních toolbarů (bez vlastního
+    // setIconSize()) je špendlík jediná ikona, tak si o velikost řekne sám.
+    if (toolbar != m_mainToolbar) {
+        toolbar->setIconSize(QSize(buttonSize, buttonSize));
+    }
 
     // Roztáhnout mezeru, aby špendlík byl vždy na pravém konci toolbaru bez
     // ohledu na to, kolik místa zaberou předchozí (i dynamicky měněné) prvky.
@@ -363,6 +369,13 @@ void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolba
         }
     });
     toolbar->addAction(pinAction);
+
+    // Přímo na widgetu (ne přes QSS) — nativní styl (QMacStyle) by CSS
+    // width/height/padding mohl ignorovat, viz stejný důvod v setupToolbar().
+    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(pinAction))) {
+        btn->setFixedSize(buttonSize, buttonSize);
+        btn->setIconSize(QSize(buttonSize - 2, buttonSize - 2));
+    }
 }
 
 QAction *MainWindow::addToolbarContent(QToolBar *toolbar, QWidget *widget)

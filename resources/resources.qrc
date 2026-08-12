@@ -6,5 +6,16 @@
         <file alias="icons/rename.ico">icons/rename.ico</file>
         <file alias="icons/pin_red.png">icons/pin_red.png</file>
         <file alias="icons/pin_green.png">icons/pin_green.png</file>
+        <file alias="icons/icon_open_folder.png">icons/icon_open_folder.png</file>
+        <file alias="icons/icon_previous.png">icons/icon_previous.png</file>
+        <file alias="icons/icon_next.png">icons/icon_next.png</file>
+        <file alias="icons/icon_screenshot.png">icons/icon_screenshot.png</file>
+        <file alias="icons/icon_crop.png">icons/icon_crop.png</file>
+        <file alias="icons/icon_navigation.png">icons/icon_navigation.png</file>
+        <file alias="icons/icon_play_slideshow.png">icons/icon_play_slideshow.png</file>
+        <file alias="icons/icon_stop_slideshow.png">icons/icon_stop_slideshow.png</file>
+        <file alias="icons/icon_reload.png">icons/icon_reload.png</file>
+        <file alias="icons/icon_rotate_left.png">icons/icon_rotate_left.png</file>
+        <file alias="icons/icon_rotate_right.png">icons/icon_rotate_right.png</file>
     </qresource>
 </RCC>
