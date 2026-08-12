@@ -54,7 +54,7 @@ void MainWindow::setupToolbar()
     toolbar->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 
     const QString iconButtonStyle = QStringLiteral(
-        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "QToolButton { border: none; border-radius: 3px; "
         "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
         "  background: transparent; } "
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); }")
@@ -241,10 +241,11 @@ void MainWindow::setupToolbar()
     // font-size škáluje s ICON_SIZE, aby textové/emoji glyfy (◀ ▶ ⟲ ✂ …) vizuálně
     // odpovídaly velikosti bitmapových ikon (setIconSize výše).
     const QString toolButtonStyle = QStringLiteral(
-        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "QToolButton { border: none; border-radius: 3px; "
         "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
         "  background: transparent; font-size: 26px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
+        "QToolBar::separator { background: transparent; width: 0px; }")
         .arg(ICON_SIZE);
     toolbar->setStyleSheet(toolButtonStyle);
 
@@ -294,10 +295,11 @@ void MainWindow::setupFavoritesToolbar()
 
     constexpr int ICON_SIZE = 28;
     const QString iconButtonStyle = QStringLiteral(
-        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "QToolButton { border: none; border-radius: 3px; "
         "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
         "  background: transparent; font-size: 14px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
+        "QToolBar::separator { background: transparent; width: 0px; }")
         .arg(ICON_SIZE);
 
     QAction *addAction = m_favoritesToolbar->addAction(QStringLiteral("➕"));
@@ -626,7 +628,8 @@ void MainWindow::setupPdfToolbar()
         "QToolButton {"
         "  font-size: 14px; font-weight: bold;"
         "  min-height: 30px; padding: 2px 10px; border-radius: 4px;"
-        "}";
+        "}"
+        "QToolBar::separator { background: transparent; width: 0px; }";
     m_pdfToolbar->setStyleSheet(style);
 }
 

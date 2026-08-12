@@ -30,10 +30,11 @@ void MainWindow::setupCategoriesToolbar()
 
     constexpr int ICON_SIZE = 28;
     const QString iconButtonStyle = QStringLiteral(
-        "QToolButton { border: 0.5px solid #ccc; border-radius: 3px; "
+        "QToolButton { border: none; border-radius: 3px; "
         "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
         "  background: transparent; font-size: 14px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); border: 0.5px solid #999; }")
+        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
+        "QToolBar::separator { background: transparent; width: 0px; }")
         .arg(ICON_SIZE);
 
     QAction *newCatAction = m_categoriesToolbar->addAction(QStringLiteral("➕"));
