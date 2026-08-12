@@ -5,6 +5,7 @@
 #include "core/ImageCatalog.hpp"
 #include "core/ImageMetadataReader.hpp"
 
+#include <QHash>
 #include <QKeyEvent>
 #include <QMainWindow>
 #include <QRect>
@@ -138,6 +139,10 @@ private:
     // až po všech setup*Toolbar() voláních, protože ty do něj ještě přidávají
     // své přepínací akce).
     void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId);
+    // Přidá widget do toolbaru tak, aby skončil PŘED špendlíkem (ten musí
+    // zůstat úplně vpravo). Používat pro veškerý dynamicky přestavovaný obsah
+    // toolbarů — přímé addWidget() by ho přilepilo až za špendlík.
+    QAction *addToolbarContent(QToolBar *toolbar, QWidget *widget);
     bool showDeleteConfirmationDialog();
     // Odebere soubor ze seznamu i panelu náhledů. showNext=false odloží
     // zobrazení dalšího souboru na volajícího (hromadné operace tak nedekódují
@@ -306,6 +311,8 @@ private:
     bool m_galleryGridActive = false;        // panel je v centrálním stacku (režim Galerie)
     QStackedWidget *m_centralStack = nullptr;
     QToolBar *m_mainToolbar = nullptr;
+    // Toolbar → akce roztahovací mezery před špendlíkem (viz addToolbarContent).
+    QHash<QToolBar*, QAction*> m_pinSpacerActions;
     QToolBar *m_favoritesToolbar = nullptr;    // Sekundární toolbar pro oblíbené složky
     QList<QPushButton*> m_favoriteButtons;     // dynamická tlačítka oblíbených složek
     QToolBar *m_categoriesToolbar = nullptr;   // Sekundární toolbar pro kategorie (skrytá/viditelná)

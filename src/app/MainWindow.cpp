@@ -258,6 +258,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupMoveToolbar();
     setupFolderNavToolbar();
     setupPdfToolbar();
+
     // Až PO všech setup*Toolbar() voláních výše — ty do m_mainToolbar ještě
     // přidávají své přepínací akce (⭐ 🏷️ ➡️ 🧭), špendlík musí být poslední.
     addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"));
@@ -284,6 +285,17 @@ MainWindow::MainWindow(QWidget *parent)
         if (!savedState.isEmpty()) {
             restoreState(savedState);
         }
+    }
+
+    // Každý toolbar musí být na vlastním řádku. Vynutit až ZDE, po
+    // restoreState() — ten obnoví staré uložené rozdělení toolbarů do řádků
+    // (kde se PDF toolbar dělil o řádek s navigačním) a přepsal by jakékoli
+    // zlomy nastavené dřív. insertToolBarBreak(t) váže zlom přímo na daný
+    // toolbar, na rozdíl od addToolBarBreak(), který ho jen připne na konec
+    // tehdejšího seznamu.
+    for (QToolBar *toolbar : {m_favoritesToolbar, m_categoriesToolbar, m_moveToolbar,
+                              m_folderNavToolbar, m_pdfToolbar}) {
+        insertToolBarBreak(toolbar);
     }
 
     // restoreState() by mohlo (podle staré uložené geometrie okna) přepsat

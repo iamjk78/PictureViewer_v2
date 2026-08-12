@@ -42,8 +42,6 @@ QString MainWindow::pickRandomUnusedMoveColor() const
 
 void MainWindow::setupMoveToolbar()
 {
-    addToolBarBreak();
-
     m_moveToolbar = addToolBar(tr("Přesun"));
     m_moveToolbar->setObjectName("moveToolbar");
     m_moveToolbar->setMovable(false);
@@ -170,7 +168,7 @@ void MainWindow::refreshMoveButtons()
     if (actions.size() >= 2) {
         m_moveToolbar->insertWidget(actions.at(1), newContainer);
     } else {
-        m_moveToolbar->addWidget(newContainer);
+        addToolbarContent(m_moveToolbar, newContainer);
     }
 }
 

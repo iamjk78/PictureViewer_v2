@@ -4,5 +4,7 @@
         <file alias="icons/delete_folder_icon.ico">icons/delete_folder_icon.ico</file>
         <file alias="icons/delete_picture_icon.ico">icons/delete_picture_icon.ico</file>
         <file alias="icons/rename.ico">icons/rename.ico</file>
+        <file alias="icons/pin_red.png">icons/pin_red.png</file>
+        <file alias="icons/pin_green.png">icons/pin_green.png</file>
     </qresource>
 </RCC>

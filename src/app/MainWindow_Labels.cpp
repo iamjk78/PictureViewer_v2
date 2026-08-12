@@ -24,8 +24,6 @@ namespace pictureviewer {
 
 void MainWindow::setupCategoriesToolbar()
 {
-    addToolBarBreak();
-
     m_categoriesToolbar = addToolBar(tr("Štítky"));
     m_categoriesToolbar->setObjectName("categoriesToolbar");
     m_categoriesToolbar->setMovable(false);
@@ -193,7 +191,7 @@ void MainWindow::refreshCategoryButtons()
     if (actions.size() >= 2) {
         m_categoriesToolbar->insertWidget(actions.at(1), newContainer);
     } else {
-        m_categoriesToolbar->addWidget(newContainer);
+        addToolbarContent(m_categoriesToolbar, newContainer);
     }
 
     updateCategoryButtonStates();
@@ -343,22 +341,13 @@ void MainWindow::updateCategoryFilterButtons()
 
     layout->addStretch();
 
-    QList<QAction*> actions = m_categoriesToolbar->actions();
-    QAction *afterLabel = nullptr;
-    for (int i = 0; i < actions.size(); ++i) {
-        if (i > 0 && actions.at(i - 1)->text() == tr("Filtr:")) {
-            afterLabel = actions.at(i);
-            break;
-        }
-    }
-
-    if (afterLabel) {
-        m_categoriesToolbar->insertWidget(afterLabel, newContainer);
-    } else {
-        m_categoriesToolbar->addWidget(newContainer);
-    }
-
+    // Kontejner patří na konec obsahu (za popisek „Filtr:"), ale VŽDY před
+    // špendlík — addToolbarContent() to zajistí. (Dřív se sem hledala kotva
+    // podle textu akce popisku, jenže ten je přidaný jako widget a jeho akce
+    // má prázdný text, takže se nikdy nenašla a kontejner skončil až za
+    // špendlíkem — ten pak vypadal posunutý doprostřed řádku.)
     m_filterButtonsContainer = newContainer;
+    addToolbarContent(m_categoriesToolbar, newContainer);
 }
 
 void MainWindow::onCategoryFilterToggled(int categoryId)

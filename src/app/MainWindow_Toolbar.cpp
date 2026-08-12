@@ -285,8 +285,6 @@ QString MainWindow::pickRandomUnusedFavoriteColor() const
 
 void MainWindow::setupFavoritesToolbar()
 {
-    addToolBarBreak();
-
     m_favoritesToolbar = addToolBar(tr("Oblíbené složky"));
     m_favoritesToolbar->setObjectName("favoritesToolbar");
     m_favoritesToolbar->setMovable(false);
@@ -327,23 +325,55 @@ void MainWindow::setupFavoritesToolbar()
 
 void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId)
 {
+    // Sjednotit velikost ikony špendlíku napříč toolbary — sekundární toolbary
+    // nemají vlastní setIconSize() (hlavní má 20×20), takže by tam byl špendlík
+    // větší. Ostatní tlačítka sekundárních toolbarů jsou textové/emoji glyfy
+    // stylované přes CSS font-size, takže je toto nastavení neovlivní.
+    toolbar->setIconSize(QSize(20, 20));
+
     // Roztáhnout mezeru, aby špendlík byl vždy na pravém konci toolbaru bez
     // ohledu na to, kolik místa zaberou předchozí (i dynamicky měněné) prvky.
     QWidget *spacer = new QWidget(toolbar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    toolbar->addWidget(spacer);
+    // Zapamatovat si akci mezery — dynamicky přestavovaný obsah (tlačítka
+    // štítků/filtru/přesunu) se musí vkládat PŘED ni, jinak skončí až za
+    // špendlíkem a ten pak vypadá "posunutý doleva" (viz addToolbarContent()).
+    m_pinSpacerActions.insert(toolbar, toolbar->addWidget(spacer));
 
-    QAction *pinAction = new QAction(QStringLiteral("📌"), this);
+    // Dvě hotové ikony místo emoji 📌 — barvu emoji glyfu nelze přes QSS měnit,
+    // takže by z tlačítka nebylo poznat, jestli je špendlík aktivní.
+    static const QIcon pinIconOff = QIcon(QStringLiteral(":/icons/pin_red.png"));
+    static const QIcon pinIconOn  = QIcon(QStringLiteral(":/icons/pin_green.png"));
+
+    QAction *pinAction = new QAction(this);
     pinAction->setCheckable(true);
     pinAction->setToolTip(tr("Ponechat viditelné i v režimu celé obrazovky"));
     const bool pinned = m_settingsManager->toolbarPinnedFullscreen(toolbarId);
     pinAction->setChecked(pinned);
+    pinAction->setIcon(pinned ? pinIconOn : pinIconOff);
     toolbar->setProperty("fullscreenPinned", pinned);
-    connect(pinAction, &QAction::toggled, this, [this, toolbar, toolbarId](bool checked) {
+    connect(pinAction, &QAction::toggled, this, [this, toolbar, toolbarId, pinAction](bool checked) {
+        pinAction->setIcon(checked ? pinIconOn : pinIconOff);
         toolbar->setProperty("fullscreenPinned", checked);
         m_settingsManager->setToolbarPinnedFullscreen(toolbarId, checked);
+        // Přepnutí špendlíku PŘÍMO ve fullscreenu se má projevit okamžitě, ne
+        // až při příštím vstupu/výstupu z celoobrazovkového režimu.
+        if (m_isFullscreen) {
+            toolbar->setVisible(checked);
+        }
     });
     toolbar->addAction(pinAction);
+}
+
+QAction *MainWindow::addToolbarContent(QToolBar *toolbar, QWidget *widget)
+{
+    // Vložit PŘED roztahovací mezeru se špendlíkem (viz addFullscreenPinAction),
+    // aby nový obsah skončil vlevo od špendlíku, ne za ním. Toolbar bez
+    // špendlíku (ještě nezaregistrovaný) obsah prostě přidá na konec.
+    if (QAction *spacerAction = m_pinSpacerActions.value(toolbar)) {
+        return toolbar->insertWidget(spacerAction, widget);
+    }
+    return toolbar->addWidget(widget);
 }
 
 void MainWindow::refreshFavoriteButtons()
@@ -429,7 +459,7 @@ void MainWindow::refreshFavoriteButtons()
     if (actions.size() >= 2) {
         m_favoritesToolbar->insertWidget(actions.at(1), newContainer);
     } else {
-        m_favoritesToolbar->addWidget(newContainer);
+        addToolbarContent(m_favoritesToolbar, newContainer);
     }
 }
 
@@ -545,7 +575,6 @@ void MainWindow::setupPdfToolbar()
     m_pdfToolbar = new QToolBar(tr("PDF"), this);
     m_pdfToolbar->setObjectName("pdfToolbar");
     m_pdfToolbar->setMovable(false);
-    addToolBarBreak(Qt::TopToolBarArea);
     addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
     m_pdfToolbar->hide();
 

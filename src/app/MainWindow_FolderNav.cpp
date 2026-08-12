@@ -16,8 +16,6 @@ namespace pictureviewer {
 
 void MainWindow::setupFolderNavToolbar()
 {
-    addToolBarBreak();
-
     m_folderNavToolbar = addToolBar(tr("Navigace mezi složkami"));
     m_folderNavToolbar->setObjectName("folderNavToolbar");
     m_folderNavToolbar->setMovable(false);
