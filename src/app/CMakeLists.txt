@@ -7,6 +7,8 @@ set(APP_SOURCES
     CategoryDialogs.cpp
     ClipboardHelper.hpp
     FileRetry.hpp
+    FolderDeleteDialog.hpp
+    FolderDeleteDialog.cpp
     HelpDialog.hpp
     HelpDialog.cpp
     ImageLoader.hpp

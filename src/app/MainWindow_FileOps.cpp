@@ -6,6 +6,7 @@
 
 #include "app/CategoryManager.hpp"
 #include "app/FileRetry.hpp"
+#include "app/FolderDeleteDialog.hpp"
 #include "app/ImageLoader.hpp"
 #include "app/ImageView.hpp"
 #include "app/MetadataPanel.hpp"
@@ -13,6 +14,7 @@
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/FolderNavigator.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
@@ -55,6 +57,25 @@ void removeQuarantine(const QString &path)
 }
 } // namespace
 #endif
+
+namespace {
+// Rekurzivně zjistí, jestli složka obsahuje ALESPOŇ JEDEN soubor kdekoli ve
+// svém podstromu (prázdné podsložky samy o sobě "prázdnost" neruší).
+bool folderHasAnyFileRecursive(const QDir &dir)
+{
+    const QFileInfoList entries = dir.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot);
+    for (const QFileInfo &entry : entries) {
+        if (entry.isDir()) {
+            if (folderHasAnyFileRecursive(QDir(entry.absoluteFilePath()))) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
 
 namespace pictureviewer {
 
@@ -798,6 +819,72 @@ void MainWindow::onDeleteFolder()
             m_statusLabel->setText(tr("Nepodařilo se smazat složku Delete."));
         }
     }
+}
+
+void MainWindow::onDeleteCurrentFolder()
+{
+    if (m_currentFolder.isEmpty()) {
+        return;
+    }
+
+    const QString folderToDelete = m_currentFolder;
+    QDir dir(folderToDelete);
+    if (!dir.exists()) {
+        return;
+    }
+
+    // Cíl navigace po smazání se musí zjistit PŘED smazáním — potřebuje ještě
+    // existující adresářovou strukturu (sourozence i rodiče).
+    FolderNavResult next = FolderNavigator::siblingAfter(folderToDelete);
+    if (!next.available) {
+        next = FolderNavigator::siblingBefore(folderToDelete);
+    }
+    if (!next.available) {
+        next = FolderNavigator::parentFolder(folderToDelete);
+    }
+
+    if (folderHasAnyFileRecursive(dir)) {
+        const QFileInfoList topLevel = dir.entryInfoList(
+            QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsFirst);
+        QStringList entryNames;
+        entryNames.reserve(topLevel.size());
+        for (const QFileInfo &info : topLevel) {
+            entryNames.append(info.isDir() ? tr("📁 %1").arg(info.fileName()) : info.fileName());
+        }
+
+        FolderDeleteConfirmDialog dialog(folderToDelete, entryNames, this);
+        if (dialog.exec() != QDialog::Accepted || !dialog.confirmed()) {
+            return;
+        }
+    }
+
+    stopVideoIfPlaying();
+
+    if (!tryWithRetry([&] { return QFile::moveToTrash(folderToDelete); })) {
+        m_statusLabel->setText(tr("Nepodařilo se smazat složku '%1'.").arg(folderToDelete));
+        return;
+    }
+
+    const QString deletedName = QFileInfo(folderToDelete).fileName();
+
+    if (next.available && QDir(next.path).exists()) {
+        loadFolder(next.path);
+        m_statusLabel->setText(tr("Složka '%1' byla smazána.").arg(deletedName));
+        return;
+    }
+
+    // Není kam navigovat (žádný sourozenec ani rodič) — vyprázdnit stav
+    // stejným způsobem jako při přepnutí na profil bez zapamatované složky.
+    m_imagePaths.clear();
+    m_unfilteredImagePaths.clear();
+    m_categoryFilterIds.clear();
+    m_currentIndex = -1;
+    m_currentFolder.clear();
+    m_imageView->clearImage();
+    m_thumbnailPanel->loadImages({});
+    updateCategoryFilterButtons();
+    refreshFolderNavData();
+    m_statusLabel->setText(tr("Složka '%1' byla smazána. Žádná další složka k zobrazení.").arg(deletedName));
 }
 
 bool MainWindow::stopVideoIfPlaying()

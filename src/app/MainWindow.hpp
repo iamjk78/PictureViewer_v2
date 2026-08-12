@@ -94,6 +94,12 @@ private slots:
     void moveImageToDeleteFolder();
     void renameCurrentImage();
     void onDeleteFolder();
+    // Smaže CELOU aktuálně otevřenou složku (do koše) — jiná akce než
+    // onDeleteFolder(), který maže jen interní podsložku "Delete". Je-li
+    // složka prázdná (žádný soubor nikde v podstromu), smaže bez dotazu;
+    // jinak zobrazí seznam obsahu a vyžádá potvrzení. Po smazání otevře
+    // následující/předchozí sourozeneckou složku, jinak nadřazenou.
+    void onDeleteCurrentFolder();
     void onImageDecoded(const QString &path, const QImage &image);
     void onPlayVideo();
     void onVideoStopped();
@@ -340,6 +346,7 @@ private:
     QAction *m_enableImagesAction = nullptr;
     QAction *m_enableVideosAction = nullptr;
     QAction *m_deleteFolderAction;
+    QAction *m_deleteCurrentFolderAction = nullptr;
     QAction *m_deletePictureAction;
     QAction *m_recycleAction = nullptr;
     // Zásobník smazaných souborů (do složky Delete), po skupinách (viz MoveGroup).

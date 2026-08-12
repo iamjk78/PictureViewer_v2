@@ -138,6 +138,13 @@ MainWindow::MainWindow(QWidget *parent)
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     connect(m_deleteFolderAction, &QAction::triggered, this, &MainWindow::onDeleteFolder);
 
+    // Odlišné od m_deleteFolderAction výše (❌ maže jen interní podsložku "Delete") —
+    // tohle maže CELOU aktuálně otevřenou složku i s obsahem. Jednoznaková emoji —
+    // dvouznaková sekvence (📁🗑) se v pevné šířce tlačítka elidovala na "...".
+    m_deleteCurrentFolderAction = new QAction(QStringLiteral("🚮"), this);
+    m_deleteCurrentFolderAction->setToolTip(tr("Smazat celou aktuální složku (do koše)"));
+    connect(m_deleteCurrentFolderAction, &QAction::triggered, this, &MainWindow::onDeleteCurrentFolder);
+
     m_deletePictureAction->setIcon(QIcon(":/icons/delete_picture_icon.ico"));
     m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);

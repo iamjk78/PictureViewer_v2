@@ -241,6 +241,8 @@ void MainWindow::setupToolbar()
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     toolbar->addAction(m_deleteFolderAction);
 
+    toolbar->addAction(m_deleteCurrentFolderAction);
+
     m_recycleAction = new QAction(QStringLiteral("♻"), this);
     m_recycleAction->setToolTip(tr("Vrátit poslední soubor"));
     m_recycleAction->setEnabled(false);
@@ -699,6 +701,7 @@ void MainWindow::disableImageBrowsing()
     m_enableMoveToDeleteAction->setEnabled(false);
     m_deletePictureAction->setEnabled(false);
     m_deleteFolderAction->setEnabled(false);
+    if (m_deleteCurrentFolderAction) m_deleteCurrentFolderAction->setEnabled(false);
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(false);
 
     m_slideshowController->stop();
@@ -724,6 +727,9 @@ void MainWindow::enableImageBrowsing()
     // Tlačítko Delete je dostupné, když Delete složka existuje, nezávisle na tom,
     // jsou-li v aktuální složce nějaké soubory.
     m_deleteFolderAction->setEnabled(deleteFolderExists());
+    // Smazání aktuální složky je dostupné, kdykoli je nějaká složka otevřená —
+    // nezávisle na tom, jsou-li v ní zobrazené soubory (viz onDeleteCurrentFolder()).
+    if (m_deleteCurrentFolderAction) m_deleteCurrentFolderAction->setEnabled(!m_currentFolder.isEmpty());
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(!m_currentFolder.isEmpty());
 
     if (m_thumbnailDock) {
