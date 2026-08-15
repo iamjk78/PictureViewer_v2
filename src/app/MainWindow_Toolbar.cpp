@@ -10,6 +10,7 @@
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/ToolbarStyle.hpp"
 #include "app/VideoPlayer.hpp"
 
 #include <QAction>
@@ -51,7 +52,7 @@ void MainWindow::setupToolbar()
     // poměru stran zdrojového .ico (delete_folder_icon.ico má jiný poměr stran
     // než delete_picture_icon.ico/rename.ico), takže bitmapové ikony vypadaly
     // v toolbaru různě velké. Pevná velikost sjednotí všechny QIcon-akce.
-    constexpr int ICON_SIZE = 35;
+    constexpr int ICON_SIZE = kMainToolbarIconSize;
     toolbar->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 
     const QString iconButtonStyle = QStringLiteral(
@@ -270,16 +271,15 @@ void MainWindow::setupToolbar()
         .arg(ICON_SIZE);
     toolbar->setStyleSheet(toolButtonStyle);
 
-    // Nativní macOS styl tlačítek (QMacStyle) nemusí plně respektovat CSS
-    // width/height/padding — vlastní vnitřní chrome mu může "ukusovat" místo
-    // bez ohledu na stylesheet, takže ikony i přes výše nastavené rozměry
-    // vypadaly menší, než mají. setFixedSize()/setIconSize() přímo na widgetu
-    // je tvrdé C++ omezení, které styl obejít nemůže.
+    // Viz applyToolbarButtonSize() — CSS rozměry samy o sobě na macOS nestačí.
+    // Textovým/emoji tlačítkům se nastaví jen velikost boxu (jejich glyf řídí
+    // font-size ve stylu výše), ikonovým i velikost ikony.
     for (QAction *action : toolbar->actions()) {
         if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(action))) {
-            btn->setFixedSize(ICON_SIZE, ICON_SIZE);
-            if (!btn->icon().isNull()) {
-                btn->setIconSize(QSize(ICON_SIZE - 2, ICON_SIZE - 2));
+            if (btn->icon().isNull()) {
+                btn->setFixedSize(ICON_SIZE, ICON_SIZE);
+            } else {
+                applyToolbarButtonSize(btn, ICON_SIZE);
             }
         }
     }
@@ -364,14 +364,7 @@ void MainWindow::setupFavoritesToolbar()
     m_favoritesToolbar->setObjectName("favoritesToolbar");
     m_favoritesToolbar->setMovable(false);
 
-    constexpr int ICON_SIZE = 28;
-    const QString iconButtonStyle = QStringLiteral(
-        "QToolButton { border: none; border-radius: 3px; "
-        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
-        "  background: transparent; font-size: 14px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
-        "QToolBar::separator { background: transparent; width: 0px; }")
-        .arg(ICON_SIZE);
+    const QString iconButtonStyle = secondaryToolbarStyle();
 
     QAction *addAction = m_favoritesToolbar->addAction(QStringLiteral("➕"));
     addAction->setToolTip(tr("Přidat aktuální složku do oblíbených"));
@@ -389,13 +382,10 @@ void MainWindow::setupFavoritesToolbar()
     QAction *toggleFavoritesAction = m_mainToolbar->addAction(
         QIcon(QStringLiteral(":/icons/icon_favorites_folders.png")), QString());
     toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
-    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
-    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
-    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
-    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleFavoritesAction))) {
-        btn->setFixedSize(35, 35);
-        btn->setIconSize(QSize(33, 33));
-    }
+    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
+    applyToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleFavoritesAction)),
+        kMainToolbarIconSize);
     connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
         m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
         m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
@@ -451,12 +441,8 @@ void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolba
     });
     toolbar->addAction(pinAction);
 
-    // Přímo na widgetu (ne přes QSS) — nativní styl (QMacStyle) by CSS
-    // width/height/padding mohl ignorovat, viz stejný důvod v setupToolbar().
-    if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(pinAction))) {
-        btn->setFixedSize(buttonSize, buttonSize);
-        btn->setIconSize(QSize(buttonSize - 2, buttonSize - 2));
-    }
+    applyToolbarButtonSize(
+        qobject_cast<QToolButton *>(toolbar->widgetForAction(pinAction)), buttonSize);
 }
 
 QAction *MainWindow::addToolbarContent(QToolBar *toolbar, QWidget *widget)
@@ -773,6 +759,10 @@ void MainWindow::onPdfScreenshot()
 
 void MainWindow::onScreenshotCapture()
 {
+    // Snímky jsou dočasné (pro trvalé uložení slouží Uložit jako) — uklidit ty
+    // starší, jinak by se v temp složce hromadily donekonečna.
+    pruneOldScreenshots();
+
     const ScreenCaptureResult result = captureScreenRegion(this);
 
     if (result.image.isNull()) {

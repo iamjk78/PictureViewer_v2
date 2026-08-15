@@ -70,8 +70,6 @@ bool PictureViewerApplication::event(QEvent *event)
         auto fileEvent = dynamic_cast<QFileOpenEvent *>(event);
         if (fileEvent) {
             const QString filePath = fileEvent->file();
-            qDebug() << "FileOpen event:" << filePath << "- starting:" << m_isStarting;
-
             // During startup (right after launch), open in this instance
             if (m_isStarting) {
                 if (m_mainWindow == nullptr) {
@@ -85,7 +83,6 @@ bool PictureViewerApplication::event(QEvent *event)
             }
 
             // App already running, spawn new instance
-            qDebug() << "App running - spawning new instance";
             QProcess::startDetached(qApp->applicationFilePath(), QStringList() << filePath);
             return true;
         }
@@ -126,7 +123,6 @@ int Application::run()
     const QStringList args = m_qtApplication->arguments();
     if (args.size() > 1) {
         const QString filePath = args.at(1);
-        qDebug() << "Opening file from command line:" << filePath;
         m_mainWindow->openFile(filePath);
     }
 

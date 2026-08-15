@@ -53,12 +53,12 @@ namespace pictureviewer {
 // ── Inicializace z init-listu ─────────────────────────────────────────────────
 // Vytvoří ProfileManager v adresáři config souboru, provede migraci staré ploché
 // struktury a vrátí SettingsManager pro aktivní profil.
-SettingsManager *MainWindow::createProfileAndSettings()
+std::unique_ptr<SettingsManager> MainWindow::createProfileAndSettings()
 {
     const QString appConfigDir =
         QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
 
-    m_profileManager = new ProfileManager(appConfigDir);
+    m_profileManager = std::make_unique<ProfileManager>(appConfigDir);
     m_profileManager->migrateIfNeeded();
 
     // Při režimu pevného profilu přepnout na něj hned při startu.
@@ -70,7 +70,7 @@ SettingsManager *MainWindow::createProfileAndSettings()
     }
 
     const QString active = m_profileManager->activeProfile();
-    return new SettingsManager(m_profileManager->configPath(active), active);
+    return std::make_unique<SettingsManager>(m_profileManager->configPath(active), active);
 }
 
 // ── Menu ──────────────────────────────────────────────────────────────────────
@@ -132,14 +132,13 @@ void MainWindow::switchProfile(const QString &profileName)
     // Přepnout profil.
     m_profileManager->setActiveProfile(profileName);
 
-    // Znovu vytvořit SettingsManager.
-    delete m_settingsManager;
-    m_settingsManager = new SettingsManager(
+    // Znovu vytvořit SettingsManager (přiřazení uvolní ten starý).
+    m_settingsManager = std::make_unique<SettingsManager>(
         m_profileManager->configPath(profileName), profileName);
 
     // VideoPlayer drží ukazatel na SettingsManager — bez aktualizace by další
     // změna hlasitosti zapisovala do právě uvolněné paměti.
-    m_videoPlayer->setSettingsManager(m_settingsManager);
+    m_videoPlayer->setSettingsManager(m_settingsManager.get());
 
     // Znovu vytvořit CategoryManager (destruktor uzavře a odregistruje starou DB).
     m_categoryManager = std::make_unique<CategoryManager>(
@@ -353,10 +352,9 @@ void MainWindow::manageProfiles()
                     m_centralStack->setCurrentWidget(m_imageView);
                 }
                 const QString newActive = m_profileManager->activeProfile();
-                delete m_settingsManager;
-                m_settingsManager = new SettingsManager(
+                m_settingsManager = std::make_unique<SettingsManager>(
                     m_profileManager->configPath(newActive), newActive);
-                m_videoPlayer->setSettingsManager(m_settingsManager);
+                m_videoPlayer->setSettingsManager(m_settingsManager.get());
                 m_categoryManager = std::make_unique<CategoryManager>(
                     m_profileManager->dbPath(newActive));
                 m_moveHistory.clear();

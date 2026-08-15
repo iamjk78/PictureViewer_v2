@@ -41,6 +41,8 @@ set(APP_SOURCES
     SettingsManager.cpp
     ThumbnailCacheManager.hpp
     ThumbnailCacheManager.cpp
+    ToolbarStyle.hpp
+    ToolbarStyle.cpp
     UpdateChecker.hpp
     UpdateChecker.cpp
     VideoPlayer.hpp

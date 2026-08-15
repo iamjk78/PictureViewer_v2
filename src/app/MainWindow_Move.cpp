@@ -11,6 +11,7 @@
 #include "app/PredefinedColors.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "app/ToolbarStyle.hpp"
 #include "core/CompanionFinder.hpp"
 
 #include <QColorDialog>
@@ -47,14 +48,7 @@ void MainWindow::setupMoveToolbar()
     m_moveToolbar->setObjectName("moveToolbar");
     m_moveToolbar->setMovable(false);
 
-    constexpr int ICON_SIZE = 28;
-    const QString iconButtonStyle = QStringLiteral(
-        "QToolButton { border: none; border-radius: 3px; "
-        "  padding: 2px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
-        "  background: transparent; font-size: 14px; } "
-        "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
-        "QToolBar::separator { background: transparent; width: 0px; }")
-        .arg(ICON_SIZE);
+    const QString iconButtonStyle = secondaryToolbarStyle();
 
     QAction *addAction = m_moveToolbar->addAction(QStringLiteral("➕"));
     addAction->setToolTip(tr("Vytvořit nové tlačítko přesunu"));
@@ -82,13 +76,10 @@ void MainWindow::setupMoveToolbar()
     QAction *toggleMoveAction = m_mainToolbar->addAction(
         QIcon(QStringLiteral(":/icons/icon_move_folder.png")), QString());
     toggleMoveAction->setToolTip(tr("Zobrazit/skrýt panel přesunů"));
-    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
-    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
-    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
-    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleMoveAction))) {
-        btn->setFixedSize(35, 35);
-        btn->setIconSize(QSize(33, 33));
-    }
+    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
+    applyToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleMoveAction)),
+        kMainToolbarIconSize);
     connect(toggleMoveAction, &QAction::triggered, this, [this] {
         m_moveToolbar->setVisible(!m_moveToolbar->isVisible());
         m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());
@@ -496,7 +487,7 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
             }
         }
         if (!group.isEmpty()) {
-            m_moveHistory.append(group);
+            appendToHistory(m_moveHistory, group);
         }
     }
 
@@ -506,6 +497,14 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     updateMoveUndoButtonState();
     if (movedCount > 1) {
         m_statusLabel->setText(tr("Přesunuto %1 souborů do '%2'.").arg(movedCount).arg(button.name));
+    }
+}
+
+void MainWindow::appendToHistory(QList<MoveGroup> &history, const MoveGroup &group)
+{
+    history.append(group);
+    while (history.size() > kMaxUndoHistory) {
+        history.removeFirst();
     }
 }
 

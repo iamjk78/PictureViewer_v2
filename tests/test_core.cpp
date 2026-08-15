@@ -12,6 +12,7 @@
 #include "app/CategoryManager.hpp"
 #include "app/ImageLoader.hpp"
 #include "app/ProfileManager.hpp"
+#include "app/ScreenCapture.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
@@ -1009,6 +1010,36 @@ private slots:
         // Záměrně nespustit — žádný signál nesmí přijít
         QTest::qWait(200);
         QCOMPARE(spy.count(), 0);
+    }
+
+    // ── ScreenCapture: úklid dočasných snímků ────────────────────────────────
+    // Snímky jsou dočasné (trvale se ukládají přes Uložit jako), bez úklidu by
+    // se v temp složce hromadily donekonečna.
+    void screenCapture_prunesOldScreenshotsOnly()
+    {
+        const QDir dir(screenshotTempDir());
+        QVERIFY(dir.exists());
+
+        const QString oldFile   = dir.filePath(QStringLiteral("screenshot_pruneTestOld.png"));
+        const QString freshFile = dir.filePath(QStringLiteral("screenshot_pruneTestFresh.png"));
+        QVERIFY(writeFileOfSize(oldFile, 1));
+        QVERIFY(writeFileOfSize(freshFile, 1));
+
+        // Starému souboru posunout čas změny o 48 h zpět.
+        {
+            QFile f(oldFile);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-48 * 3600),
+                                  QFileDevice::FileModificationTime));
+            f.close();
+        }
+
+        pruneOldScreenshots(/*maxAgeHours=*/24);
+
+        QVERIFY(!QFile::exists(oldFile));    // starší než limit → smazán
+        QVERIFY(QFile::exists(freshFile));   // čerstvý → zůstává
+
+        QFile::remove(freshFile);
     }
 
     // ── ProfileManager ───────────────────────────────────────────────────────

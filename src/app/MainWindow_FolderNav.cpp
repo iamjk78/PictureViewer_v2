@@ -6,6 +6,7 @@
 #include "app/MainWindow.hpp"
 
 #include "app/SettingsManager.hpp"
+#include "app/ToolbarStyle.hpp"
 #include "core/FolderNavigator.hpp"
 
 #include <QAction>
@@ -60,13 +61,10 @@ void MainWindow::setupFolderNavToolbar()
         QIcon(QStringLiteral(":/icons/icon_navigation.png")), QString());
     toggleNavAction->setToolTip(tr("Zobrazit/skrýt panel navigace mezi složkami"));
     connect(toggleNavAction, &QAction::triggered, this, &MainWindow::onToggleFolderNavToolbar);
-    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
-    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
-    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
-    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleNavAction))) {
-        btn->setFixedSize(35, 35);
-        btn->setIconSize(QSize(33, 33));
-    }
+    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
+    applyToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleNavAction)),
+        kMainToolbarIconSize);
 
     addFullscreenPinAction(m_folderNavToolbar, QStringLiteral("folderNav"));
 

@@ -29,7 +29,6 @@ bool PdfHandler::load(const QString &filePath)
         return false;
     }
 
-    qDebug() << "PDF loaded successfully:" << filePath << "Pages:" << m_document->pageCount();
     return true;
 }
 

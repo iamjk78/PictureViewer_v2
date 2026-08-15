@@ -16,24 +16,7 @@
 
 namespace pictureviewer {
 
-namespace {
-
-QString screenshotTempDir()
-{
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString dir  = QDir(base).filePath(QStringLiteral("PictureViewer_Screenshots"));
-    QDir().mkpath(dir);
-    return dir;
-}
-
-QString makeScreenshotPath()
-{
-    const QString name = QStringLiteral("screenshot_%1.png")
-        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
-    return QDir(screenshotTempDir()).filePath(name);
-}
-
-} // namespace
+// screenshotTempDir() / makeScreenshotPath() jsou sdílené — viz ScreenCapture.cpp.
 
 ScreenCaptureResult captureScreenRegion(QWidget *parentWindow)
 {

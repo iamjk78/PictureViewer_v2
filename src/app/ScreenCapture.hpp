@@ -25,4 +25,13 @@ struct ScreenCaptureResult
 // parentWindow je po dobu výběru dočasně skryto, aby nepřekáželo. Smí být null.
 ScreenCaptureResult captureScreenRegion(QWidget *parentWindow);
 
+// Adresář pro dočasné PNG snímky (vytvoří se, pokud neexistuje) a cesta pro
+// nový snímek. Sdíleno mezi platformními implementacemi výše.
+QString screenshotTempDir();
+QString makeScreenshotPath();
+
+// Smaže snímky starší než maxAgeHours. Snímky jsou dočasné (pro trvalé uložení
+// slouží Uložit jako), takže bez úklidu by se ve složce hromadily donekonečna.
+void pruneOldScreenshots(int maxAgeHours = 24);
+
 } // namespace pictureviewer

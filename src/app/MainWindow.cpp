@@ -163,7 +163,7 @@ MainWindow::MainWindow(QWidget *parent)
     //   index 1 = VideoPlayer (přehrávání videa inline)
     // V režimu Galerie se dočasně přidá ThumbnailPanel jako index 2.
     m_centralStack = new QStackedWidget(this);
-    m_videoPlayer  = new VideoPlayer(m_settingsManager, this);
+    m_videoPlayer  = new VideoPlayer(m_settingsManager.get(), this);
     m_centralStack->addWidget(m_imageView);
     m_centralStack->addWidget(m_videoPlayer);
     setCentralWidget(m_centralStack);
@@ -278,8 +278,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Až PO všech setup*Toolbar() voláních výše — ty do m_mainToolbar ještě
     // přidávají své přepínací akce (⭐ 🏷️ ➡️ 🧭), špendlík musí být poslední.
-    // 35 musí odpovídat ICON_SIZE v setupToolbar().
-    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"), 35);
+    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"), kMainToolbarIconSize);
     setupStatusBar();
     setupOverlayToolbar();
 
@@ -330,10 +329,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Only restore last folder if no image file is being opened
     // This prevents race condition when opening image from Finder
+    // Se souborem v argumentech se otevře ten, ne zapamatovaná složka.
     if (qApp->arguments().size() <= 1) {
         restoreLastFolder();
-    } else {
-        qDebug() << "Skipping restoreLastFolder() - image file passed as argument";
     }
 
     setupUpdateChecker();

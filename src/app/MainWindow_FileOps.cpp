@@ -109,25 +109,18 @@ void MainWindow::openFileDialog()
 
 void MainWindow::openFile(const QString &filePath)
 {
-    qDebug() << "openFile() called with:" << filePath;
-    qDebug() << "MainWindow initialized:" << (m_imageView != nullptr);
-
     if (filePath.isEmpty()) {
-        qDebug() << "ERROR: Empty file path received!";
         return;
     }
 
     QString cleanPath = filePath;
     if (cleanPath.startsWith("file://")) {
         cleanPath = QUrl(cleanPath).toLocalFile();
-        qDebug() << "Converted file URL to local path:" << cleanPath;
     }
 
     const QString canonical = QFileInfo(cleanPath).canonicalFilePath();
     m_requestedFile = canonical.isEmpty() ? cleanPath : canonical;
-    const QString folderPath = m_requestedFile.section('/', 0, -2);
-    qDebug() << "Extracted folder path:" << folderPath;
-    loadFolder(folderPath);
+    loadFolder(m_requestedFile.section('/', 0, -2));
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
@@ -221,32 +214,20 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
 
     int index = 0;
     if (!m_requestedFile.isEmpty()) {
-        qDebug() << "Looking for requested file:" << m_requestedFile;
-        qDebug() << "Total images found:" << paths.count();
-
         int requestedIndex = paths.indexOf(m_requestedFile);
-        qDebug() << "Exact match index:" << requestedIndex;
-
         if (requestedIndex < 0) {
+            // Cesta se nemusí shodovat znak po znaku (symlink, jiná normalizace
+            // unicode v názvu) — zkusit dohledat aspoň podle jména souboru.
             const QString requestedFileName = QFileInfo(m_requestedFile).fileName();
-            qDebug() << "Trying to match filename:" << requestedFileName;
-
             for (int i = 0; i < paths.count(); ++i) {
                 if (QFileInfo(paths.at(i)).fileName() == requestedFileName) {
                     requestedIndex = i;
-                    qDebug() << "Found match at index:" << i;
                     break;
                 }
             }
         }
-
         if (requestedIndex >= 0) {
             index = requestedIndex;
-        } else {
-            qDebug() << "File not found in list. First few paths:";
-            for (int i = 0; i < qMin(3, paths.count()); ++i) {
-                qDebug() << "  " << i << ":" << paths.at(i);
-            }
         }
         m_requestedFile.clear();
     }
@@ -309,7 +290,7 @@ void MainWindow::loadFolder(const QString &folderPath)
         m_folderScanWorker = nullptr;
     }
 
-    auto *worker = new FolderScanWorker(m_settingsManager, folderPath, m_scanGeneration, nullptr);
+    auto *worker = new FolderScanWorker(m_settingsManager.get(), folderPath, m_scanGeneration, nullptr);
     connect(worker, &FolderScanWorker::scanComplete, this, &MainWindow::onScanComplete);
     connect(worker, &FolderScanWorker::scanError, this, &MainWindow::onScanError);
     connect(worker, &FolderScanWorker::finished, this, &MainWindow::onScanFinished);
@@ -717,7 +698,7 @@ void MainWindow::moveImageToDeleteFolder()
         showCurrentAfterRemoval(anchorIndex);
     }
     if (!group.isEmpty()) {
-        m_deleteHistory.append(group);
+        appendToHistory(m_deleteHistory, group);
         updateRecycleButtonState();
     }
 }

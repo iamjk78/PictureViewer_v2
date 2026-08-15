@@ -1,9 +1,47 @@
-// Windows / Linux implementace výřezu obrazovky přes Qt overlay.
-// macOS má vlastní implementaci v ScreenCapture_mac.mm.
-
-#ifndef __APPLE__
+// Windows / Linux implementace výřezu obrazovky přes Qt overlay
+// (macOS má vlastní v ScreenCapture_mac.mm) + sdílená správa dočasných snímků,
+// která se kompiluje na všech platformách.
 
 #include "ScreenCapture.hpp"
+
+#include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+
+namespace pictureviewer {
+
+QString screenshotTempDir()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    const QString dir  = QDir(base).filePath(QStringLiteral("PictureViewer_Screenshots"));
+    QDir().mkpath(dir);
+    return dir;
+}
+
+QString makeScreenshotPath()
+{
+    const QString name = QStringLiteral("screenshot_%1.png")
+        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
+    return QDir(screenshotTempDir()).filePath(name);
+}
+
+void pruneOldScreenshots(int maxAgeHours)
+{
+    const QDateTime cutoff = QDateTime::currentDateTime().addSecs(-3600LL * maxAgeHours);
+    const QDir dir(screenshotTempDir());
+    const QFileInfoList entries =
+        dir.entryInfoList({QStringLiteral("screenshot_*.png")}, QDir::Files);
+    for (const QFileInfo &entry : entries) {
+        if (entry.lastModified() < cutoff) {
+            QFile::remove(entry.absoluteFilePath());
+        }
+    }
+}
+
+} // namespace pictureviewer
+
+#ifndef __APPLE__
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -25,21 +63,6 @@
 namespace pictureviewer {
 
 namespace {
-
-QString screenshotTempDir()
-{
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString dir  = QDir(base).filePath(QStringLiteral("PictureViewer_Screenshots"));
-    QDir().mkpath(dir);
-    return dir;
-}
-
-QString makeScreenshotPath()
-{
-    const QString name = QStringLiteral("screenshot_%1.png")
-        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
-    return QDir(screenshotTempDir()).filePath(name);
-}
 
 // Celoobrazovkový overlay přes virtuální plochu všech monitorů.
 class CaptureOverlay : public QWidget

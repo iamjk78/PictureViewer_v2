@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/ProfileManager.hpp"
+#include "app/ToolbarStyle.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageMetadataReader.hpp"
@@ -139,7 +140,10 @@ private:
     // Volat jako VŮBEC POSLEDNÍ akci přidanou do daného toolbaru (u m_mainToolbar
     // až po všech setup*Toolbar() voláních, protože ty do něj ještě přidávají
     // své přepínací akce).
-    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId, int buttonSize = 35);
+    // buttonSize výchozí = kMainToolbarIconSize (ToolbarStyle.hpp); hlavní
+    // toolbar si ho předává explicitně, sekundární používají tuto hodnotu.
+    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId,
+                                int buttonSize = kMainToolbarIconSize);
     // Přidá widget do toolbaru tak, aby skončil PŘED špendlíkem (ten musí
     // zůstat úplně vpravo). Používat pro veškerý dynamicky přestavovaný obsah
     // toolbarů — přímé addWidget() by ho přilepilo až za špendlík.
@@ -175,7 +179,7 @@ private:
     UpdateChecker *m_updateChecker = nullptr;
     // Vytvoří ProfileManager, provede migraci a vrátí SettingsManager pro aktivní
     // profil. Volá se z member-initializer listu (proto vrací pointer).
-    SettingsManager *createProfileAndSettings();
+    std::unique_ptr<SettingsManager> createProfileAndSettings();
     QMenu *m_profileMenu = nullptr;
 
     // ── Oblíbené složky toolbar ──────────────────────────────────────────────
@@ -301,8 +305,8 @@ private:
     ImageView *m_imageView;
     // Pozn.: m_profileManager MUSÍ být deklarován před m_settingsManager —
     // pořadí inicializace v konstruktoru odpovídá pořadí deklarace zde.
-    ProfileManager *m_profileManager = nullptr;
-    SettingsManager *m_settingsManager;
+    std::unique_ptr<ProfileManager> m_profileManager;
+    std::unique_ptr<SettingsManager> m_settingsManager;
     std::unique_ptr<CategoryManager> m_categoryManager;
     VideoPlayer *m_videoPlayer = nullptr;
     VideoThumbnailWorker *m_videoThumbnailWorker = nullptr;
@@ -322,6 +326,11 @@ private:
     QAction *m_moveUndoAction = nullptr;
     // Zásobník přesunutých souborů (přes Move toolbar), po skupinách (viz MoveGroup).
     QList<MoveGroup> m_moveHistory;
+    // Strop obou historií (přesun i mazání). Vracet se o stovky kroků zpět
+    // stejně nikdo nebude a bez stropu by seznam při hromadném třídění tisíců
+    // souborů rostl donekonečna. Nejstarší záznamy se zahazují.
+    static constexpr int kMaxUndoHistory = 200;
+    void appendToHistory(QList<MoveGroup> &history, const MoveGroup &group);
     QToolBar *m_pdfToolbar = nullptr;          // Toolbar pro PDF — viditelný jen při PDF
     QDockWidget *m_metadataDock = nullptr;
     MetadataPanel *m_metadataPanel = nullptr;
