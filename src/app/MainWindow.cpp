@@ -894,7 +894,7 @@ bool MainWindow::showDeleteConfirmationDialog()
     return result == QMessageBox::Yes;
 }
 
-QString MainWindow::runSaveAsDialog(const QString &originalPath)
+QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &targetExtension)
 {
     const QString origDir  = QFileInfo(originalPath).absolutePath();
     const QString origBase = QFileInfo(originalPath).completeBaseName();
@@ -948,24 +948,26 @@ QString MainWindow::runSaveAsDialog(const QString &originalPath)
         return {};
     }
 
-    // Sestavit cílovou cestu — odstranit případnou příponu ze vstupu
+    // Sestavit cílovou cestu — odstranit případnou příponu ze vstupu, pokud
+    // odpovídá cílové (jinak jde o tečku jako součást názvu, ne příponu —
+    // stejná konvence jako u přejmenování, viz completeBaseName()).
     QString baseName = nameEdit->text().trimmed();
     if (baseName.isEmpty()) {
         baseName = origBase;
     }
-    // Odebrat příponu pokud ji uživatel zadal
-    if (baseName.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive)
-        || baseName.endsWith(QLatin1String(".jpeg"), Qt::CaseInsensitive)) {
-        baseName = QFileInfo(baseName).completeBaseName();
+    const QFileInfo typed(baseName);
+    if (typed.suffix().compare(targetExtension, Qt::CaseInsensitive) == 0) {
+        baseName = typed.completeBaseName();
     }
 
-    QString targetPath = QDir(selectedDir).filePath(baseName + QStringLiteral(".jpg"));
+    const QString targetName = baseName + QStringLiteral(".") + targetExtension;
+    QString targetPath = QDir(selectedDir).filePath(targetName);
 
     // Pokud cílový soubor existuje, zeptat se
     if (QFile::exists(targetPath)) {
         const int ret = QMessageBox::question(
             this, tr("Soubor existuje"),
-            tr("Soubor '%1' již existuje.\nChcete ho přepsat?").arg(baseName + ".jpg"),
+            tr("Soubor '%1' již existuje.\nChcete ho přepsat?").arg(targetName),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (ret != QMessageBox::Yes) {
             return {};

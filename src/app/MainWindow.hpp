@@ -406,7 +406,7 @@ private:
     void saveImageToPath(const QString &targetPath);
     // Zobrazí dialog pro zadání názvu a výběr cílové složky.
     // Vrací absolutní cestu k cílovému souboru, nebo prázdný řetězec při zrušení.
-    QString runSaveAsDialog(const QString &originalPath);
+    QString runSaveAsDialog(const QString &originalPath, const QString &targetExtension);
 };
 
 } // namespace pictureviewer

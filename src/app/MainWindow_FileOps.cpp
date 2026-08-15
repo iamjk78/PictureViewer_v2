@@ -342,6 +342,17 @@ void MainWindow::showImage(int index)
         // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
         m_centralStack->setCurrentWidget(m_videoPlayer);
         updateStatus(path);
+        // Otočení a ořez pracují jen nad ImageView (skrytým, dokud hraje video)
+        // a nad videem nedávají smysl — deaktivovat, ať tlačítka nepůsobí, že
+        // něco udělají, když ve skutečnosti nic nezmění.
+        if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(false);
+        if (m_rotateRightAction) m_rotateRightAction->setEnabled(false);
+        if (m_cropAction)        m_cropAction->setEnabled(false);
+        // Stav Uložit/Uložit jako se dřív při přechodu na video vůbec
+        // nepřepočítal a zůstával "zaseknutý" podle naposledy zobrazeného
+        // obrázku — updateSaveButtonStates() teď pozná video podle přípony
+        // aktuální cesty, ne podle (nezměněného) obsahu ImageView.
+        updateSaveButtonStates();
         // Debounce — viz komentář u m_videoSwitchTimer v MainWindow.hpp. Rychlé
         // prolétnutí šipkami přes více videí tak skutečně přehraje jen to, na
         // kterém se navigace ustálí.
@@ -356,6 +367,9 @@ void MainWindow::showImage(int index)
         m_videoPlayer->stopQuietly();
         m_centralStack->setCurrentWidget(m_imageView);
     }
+    if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(true);
+    if (m_rotateRightAction) m_rotateRightAction->setEnabled(true);
+    if (m_cropAction)        m_cropAction->setEnabled(true);
     // Žádné video už nehraje — náhledy se můžou dogenerovat, jakmile se
     // navigace ustálí (odloženo, aby rychlé střídání obrázek/video worker
     // zbytečně nerozjíždělo a zase nezahazovalo).
@@ -978,13 +992,22 @@ void MainWindow::updateRecycleButtonState()
 
 void MainWindow::updateSaveButtonStates()
 {
+    const bool hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
+    // Podle přípony aktuální cesty, ne podle obsahu ImageView — ten se při
+    // přechodu na video nemaže a dál by vracel poslední zobrazený obrázek.
+    const bool isVideo = hasCurrentFile && isVideoFile(
+        QStringLiteral(".") + QFileInfo(m_imagePaths.at(m_currentIndex)).suffix());
+
     const bool hasStaticImage =
+        !isVideo &&
         m_currentIndex >= 0 &&
         !m_imageView->displayedImage().isNull() &&
         !m_imageView->isPdfLoaded();
 
+    // Uložit (přepsat originál) nedává u videa smysl — žádné úpravy se
+    // neprovádí. Uložit jako naopak ano: uloží kopii videa pod novým názvem.
     if (m_saveAction)   m_saveAction->setEnabled(hasStaticImage && m_imageModified);
-    if (m_saveAsAction) m_saveAsAction->setEnabled(hasStaticImage);
+    if (m_saveAsAction) m_saveAsAction->setEnabled(hasStaticImage || isVideo);
 }
 
 void MainWindow::saveImageToPath(const QString &targetPath)
@@ -1023,7 +1046,9 @@ void MainWindow::onSaveImage()
         m_imageModified = false;
         updateSaveButtonStates();
     } else if (msgBox.clickedButton() == btnRename) {
-        const QString targetPath = runSaveAsDialog(currentPath);
+        // Sem se lze dostat jen pro statický obrázek (tlačítko Uložit je pro
+        // video vždy neaktivní), výstup je tedy vždy JPEG.
+        const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"));
         if (!targetPath.isEmpty()) {
             saveImageToPath(targetPath);
             const QString targetDir = QFileInfo(targetPath).absolutePath();
@@ -1039,7 +1064,28 @@ void MainWindow::onSaveAsImage()
         return;
     }
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    const QString targetPath  = runSaveAsDialog(currentPath);
+    const QFileInfo currentInfo(currentPath);
+    const QString suffix = QStringLiteral(".") + currentInfo.suffix();
+
+    if (isVideoFile(suffix)) {
+        // Video se neupravuje — Uložit jako je tu čistá duplikace souboru pod
+        // novým názvem, ne re-enkódování přes ImageView (to u videa nic
+        // nezobrazuje, viz updateSaveButtonStates()).
+        const QString targetPath = runSaveAsDialog(currentPath, currentInfo.suffix());
+        if (targetPath.isEmpty()) {
+            return;
+        }
+        if (!QFile::copy(currentPath, targetPath)) {
+            QMessageBox::critical(this, tr("Chyba ukládání"),
+                tr("Soubor se nepodařilo uložit:\n%1").arg(targetPath));
+            return;
+        }
+        m_requestedFile = targetPath;
+        loadFolder(QFileInfo(targetPath).absolutePath());
+        return;
+    }
+
+    const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"));
     if (!targetPath.isEmpty()) {
         saveImageToPath(targetPath);
         const QString targetDir = QFileInfo(targetPath).absolutePath();

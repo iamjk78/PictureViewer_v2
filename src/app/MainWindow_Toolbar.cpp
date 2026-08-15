@@ -228,7 +228,7 @@ void MainWindow::setupToolbar()
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveImage);
 
     m_saveAsAction = new QAction(QIcon(QStringLiteral(":/icons/icon_save_as.png")), QString(), this);
-    m_saveAsAction->setToolTip(tr("Uložit jako nový soubor JPEG"));
+    m_saveAsAction->setToolTip(tr("Uložit jako nový soubor (obrázek jako JPEG, video jako kopie pod novým názvem)"));
     m_saveAsAction->setEnabled(false);
     connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAsImage);
 
