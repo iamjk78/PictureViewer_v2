@@ -35,6 +35,11 @@ public:
     void suspend();
     void resume();
 
+    // Nastavení diskové cache se dá měnit za běhu (menu Nastavení → Cache
+    // miniatur). Bez toho by generátor zůstal u hodnot z konstruktoru a psal
+    // do staré složky i po jejím přenastavení nebo vypnutí cache.
+    void setDiskCache(bool enabled, const QString &cacheDir);
+
 signals:
     void thumbnailReady(int generation, const QString &path, const QImage &image);
 

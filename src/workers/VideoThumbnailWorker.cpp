@@ -105,6 +105,12 @@ void VideoThumbnailWorker::suspend()
     discardPlayer();
 }
 
+void VideoThumbnailWorker::setDiskCache(bool enabled, const QString &cacheDir)
+{
+    m_diskCacheEnabled = enabled;
+    m_diskCacheDir = cacheDir;
+}
+
 void VideoThumbnailWorker::resume()
 {
     if (!m_suspended) {
@@ -120,23 +126,34 @@ void VideoThumbnailWorker::resume()
 
 void VideoThumbnailWorker::processNext()
 {
-    // m_suspended: fronta zůstává, jen se nesmí sáhnout na QMediaPlayer —
-    // resume() zpracování rozjede znovu od stejného místa.
-    if (m_cancelled || m_suspended || m_queue.isEmpty()) {
+    if (m_cancelled || m_queue.isEmpty()) {
         m_state = State::Idle;
         return;
     }
 
-    m_currentPath = m_queue.takeFirst();
-
-    const QImage cached = loadFromCache(m_currentPath);
+    // Miniatura z cache se vydává I BĚHEM SUSPENDU — je to čisté čtení souboru
+    // z disku, QMediaPlayer se nedotýká, takže s přehrávaným videem kolidovat
+    // nemůže. Suspend blokuje jen dekódování videa níže. (Dřív tudy neprošlo
+    // nic a ve složce s videi, kde se hned spustí přehrávání, se hotové
+    // miniatury nezobrazily, dokud se přehrávání nezastavilo.)
+    // Po jedné za průchod event loopou, ať se UI nezasekne u velké složky.
+    const QImage cached = loadFromCache(m_queue.first());
     if (!cached.isNull()) {
-        emit thumbnailReady(m_generation, m_currentPath, cached);
+        const QString path = m_queue.takeFirst();
+        emit thumbnailReady(m_generation, path, cached);
         QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
                                   Qt::QueuedConnection);
         return;
     }
 
+    // Zbytek už vyžaduje dekódování videa přes QMediaPlayer — to za suspendu
+    // nesmí běžet. Fronta zůstává, resume() naváže na stejném místě.
+    if (m_suspended) {
+        m_state = State::Idle;
+        return;
+    }
+
+    m_currentPath = m_queue.takeFirst();
     m_state = State::Loading;
     m_player->setSource(QUrl::fromLocalFile(m_currentPath));
     m_player->play();

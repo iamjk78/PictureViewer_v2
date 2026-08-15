@@ -4,6 +4,7 @@
 #include <QString>
 #include <QWidget>
 
+class QAudioOutput;
 class QGraphicsScene;
 class QGraphicsVideoItem;
 class QGraphicsView;
@@ -95,8 +96,14 @@ private:
 
     static QString formatTime(qint64 ms);
 
+    // Zahodí stávající QMediaPlayer i QGraphicsVideoItem a vyrobí čerstvé.
+    // Volá se z konstruktoru a před KAŽDÝM přehrávaným souborem — viz komentář
+    // u implementace (jinak macOS/AVFoundation padá na addOutput:).
+    void recreatePlayer();
+
     QString             m_currentPath;
     SettingsManager    *m_settings      = nullptr;
+    QAudioOutput       *m_audioOutput   = nullptr;   // přežívá recreatePlayer()
     QMediaPlayer       *m_player        = nullptr;
     QGraphicsScene     *m_scene         = nullptr;
     QGraphicsView      *m_view          = nullptr;

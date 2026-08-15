@@ -27,17 +27,15 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
 {
     setFocusPolicy(Qt::StrongFocus);
 
-    // ── Přehrávač ────────────────────────────────────────────────────────────
-    m_player = new QMediaPlayer(this);
-    auto *audioOutput = new QAudioOutput(this);
-    audioOutput->setVolume(m_settings->videoVolume() / 100.0f);
-    m_player->setAudioOutput(audioOutput);
+    // ── Zvukový výstup ───────────────────────────────────────────────────────
+    // Přežívá recreatePlayer(), aby se nastavená hlasitost neztrácela.
+    m_audioOutput = new QAudioOutput(this);
+    m_audioOutput->setVolume(m_settings->videoVolume() / 100.0f);
+    auto *audioOutput = m_audioOutput;   // pro lambdu posuvníku hlasitosti níže
 
     // ── Video plocha: QGraphicsView + QGraphicsVideoItem ─────────────────────
     // QGraphicsVideoItem umožňuje zoom a posun myší přes standardní transformace.
-    m_scene     = new QGraphicsScene(this);
-    m_videoItem = new QGraphicsVideoItem();
-    m_scene->addItem(m_videoItem);
+    m_scene = new QGraphicsScene(this);
 
     m_view = new QGraphicsView(m_scene, this);
     m_view->setFrameShape(QFrame::NoFrame);
@@ -52,17 +50,8 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     m_view->setBackgroundBrush(Qt::black);
     m_view->setInteractive(true);
 
-    m_player->setVideoOutput(m_videoItem);
-
-    // Po získání nativní velikosti videa přizpůsobit pohled.
-    connect(m_videoItem, &QGraphicsVideoItem::nativeSizeChanged,
-            this, [this](const QSizeF &size) {
-                if (size.isValid()) {
-                    m_videoItem->setPos(0, 0);
-                    m_scene->setSceneRect(QRectF(QPointF(0, 0), size));
-                    applyZoom();
-                }
-            });
+    // Přehrávač i video item — od teď se pro každý soubor vyrábí znovu.
+    recreatePlayer();
 
     // Debounce resize — layout se usadí asynchronně.
     m_resizeTimer = new QTimer(this);
@@ -148,48 +137,6 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     layout->addWidget(m_view, 1);
     layout->addWidget(controlBar);
 
-    // ── Signály přehrávače ────────────────────────────────────────────────────
-    connect(m_player, &QMediaPlayer::playbackStateChanged, this,
-            [this](QMediaPlayer::PlaybackState s) {
-                onPlaybackStateChanged(static_cast<int>(s));
-            });
-    connect(m_player, &QMediaPlayer::mediaStatusChanged, this,
-            [this](QMediaPlayer::MediaStatus s) {
-                onMediaStatusChanged(static_cast<int>(s));
-            });
-    connect(m_player, &QMediaPlayer::bufferProgressChanged, this,
-            [this](float progress) {
-                if (m_bufferOverlay->isVisible()) {
-                    m_bufferOverlay->setText(
-                        tr("Načítám…  %1 %").arg(qRound(progress * 100)));
-                }
-            });
-    connect(m_player, &QMediaPlayer::positionChanged,  this, &VideoPlayer::onPositionChanged);
-    connect(m_player, &QMediaPlayer::durationChanged,  this, &VideoPlayer::onDurationChanged);
-    connect(m_player, &QMediaPlayer::errorOccurred, this,
-            [this](QMediaPlayer::Error /*e*/, const QString & /*msg*/) {
-                if (m_playAttempt < MaxPlayAttempts) {
-                    m_playAttempt++;
-                    m_loadTimeoutTimer->stop();
-                    m_bufferOverlay->hide();
-                    emit playbackRetryStarted(m_playAttempt, MaxPlayAttempts);
-                    QTimer::singleShot(RetryDelayMs, this, &VideoPlayer::retryPlayFile);
-                } else {
-                    m_playAttempt = 0;
-                    m_loadTimeoutTimer->stop();
-                    m_bufferOverlay->hide();
-                    stopPlayback();
-                    const QString name = QFileInfo(m_currentPath).fileName();
-                    emit playbackError(
-                        tr("Video %1 se nepodařilo načíst ani po %2 pokusech.")
-                            .arg(name).arg(MaxPlayAttempts));
-                }
-            });
-
-    // Metadata videa — backend je vydává postupně; posloucháme na obou místech.
-    connect(m_player, &QMediaPlayer::metaDataChanged, this, &VideoPlayer::emitVideoMeta);
-
-
     // Seek slider
     connect(m_seekSlider, &QSlider::sliderPressed,  this, [this] { m_dragging = true;  });
     connect(m_seekSlider, &QSlider::sliderReleased, this, [this] {
@@ -226,6 +173,99 @@ void VideoPlayer::setSettingsManager(SettingsManager *settings)
     }
 }
 
+// ── recreatePlayer ────────────────────────────────────────────────────────────
+// Každý přehrávaný soubor dostane ČERSTVÝ QMediaPlayer i QGraphicsVideoItem.
+//
+// Proč tak drasticky: macOS/AVFoundation backend recykluje jeden
+// AVPlayerItemVideoOutput napříč změnami zdroje. Při rychlém střídání souborů
+// se ho pokusí připojit k nové AVPlayerItem dřív, než se odpojil od staré, a
+// -[AVPlayerItem addOutput:] vyhodí NSInvalidArgumentException, kterou Qt
+// nechytá → celá aplikace spadne (EXC_CRASH v AVFVideoRendererControl::
+// updateVideoFrame). Pouhé setSource(prázdné)/setVideoOutput(nullptr) nestačí,
+// protože sahají pořád na TENTÝŽ video item, takže se pod ním recykluje i
+// tentýž nativní output. Nový item = nový output = žádná kolize.
+//
+// Stejný recept už v projektu funguje ve VideoThumbnailWorker::discardPlayer().
+void VideoPlayer::recreatePlayer()
+{
+    if (m_player != nullptr) {
+        // disconnect MUSÍ být PŘED deleteLater — to jen odloží destrukci na
+        // příští běh event loopy, takže by starý přehrávač mezitím stihl
+        // emitovat do našich slotů už za nového videa.
+        disconnect(m_player, nullptr, this, nullptr);
+        m_player->stop();               // jinak by starý dohrával, než ho smaže event loop
+        m_player->setVideoOutput(nullptr);
+        m_player->deleteLater();
+        m_player = nullptr;
+    }
+    if (m_videoItem != nullptr) {
+        disconnect(m_videoItem, nullptr, this, nullptr);
+        m_scene->removeItem(m_videoItem);   // vlastnictví přebíráme ze scény
+        m_videoItem->deleteLater();
+        m_videoItem = nullptr;
+    }
+
+    m_videoItem = new QGraphicsVideoItem();
+    m_scene->addItem(m_videoItem);
+
+    m_player = new QMediaPlayer(this);
+    m_player->setAudioOutput(m_audioOutput);
+    m_player->setVideoOutput(m_videoItem);
+
+    // Po získání nativní velikosti videa přizpůsobit pohled.
+    connect(m_videoItem, &QGraphicsVideoItem::nativeSizeChanged,
+            this, [this](const QSizeF &size) {
+                if (size.isValid()) {
+                    m_videoItem->setPos(0, 0);
+                    m_scene->setSceneRect(QRectF(QPointF(0, 0), size));
+                    applyZoom();
+                }
+            });
+
+    // ── Signály přehrávače ───────────────────────────────────────────────────
+    // Musí se napojit znovu při každém vytvoření — proto jsou tady, ne
+    // v konstruktoru.
+    connect(m_player, &QMediaPlayer::playbackStateChanged, this,
+            [this](QMediaPlayer::PlaybackState s) {
+                onPlaybackStateChanged(static_cast<int>(s));
+            });
+    connect(m_player, &QMediaPlayer::mediaStatusChanged, this,
+            [this](QMediaPlayer::MediaStatus s) {
+                onMediaStatusChanged(static_cast<int>(s));
+            });
+    connect(m_player, &QMediaPlayer::bufferProgressChanged, this,
+            [this](float progress) {
+                if (m_bufferOverlay->isVisible()) {
+                    m_bufferOverlay->setText(
+                        tr("Načítám…  %1 %").arg(qRound(progress * 100)));
+                }
+            });
+    connect(m_player, &QMediaPlayer::positionChanged, this, &VideoPlayer::onPositionChanged);
+    connect(m_player, &QMediaPlayer::durationChanged, this, &VideoPlayer::onDurationChanged);
+    connect(m_player, &QMediaPlayer::errorOccurred, this,
+            [this](QMediaPlayer::Error /*e*/, const QString & /*msg*/) {
+                if (m_playAttempt < MaxPlayAttempts) {
+                    m_playAttempt++;
+                    m_loadTimeoutTimer->stop();
+                    m_bufferOverlay->hide();
+                    emit playbackRetryStarted(m_playAttempt, MaxPlayAttempts);
+                    QTimer::singleShot(RetryDelayMs, this, &VideoPlayer::retryPlayFile);
+                } else {
+                    m_playAttempt = 0;
+                    m_loadTimeoutTimer->stop();
+                    m_bufferOverlay->hide();
+                    stopPlayback();
+                    const QString name = QFileInfo(m_currentPath).fileName();
+                    emit playbackError(
+                        tr("Video %1 se nepodařilo načíst ani po %2 pokusech.")
+                            .arg(name).arg(MaxPlayAttempts));
+                }
+            });
+
+    // Metadata videa — backend je vydává postupně; posloucháme na obou místech.
+    connect(m_player, &QMediaPlayer::metaDataChanged, this, &VideoPlayer::emitVideoMeta);
+}
+
 // ── Veřejné rozhraní ─────────────────────────────────────────────────────────
 
 void VideoPlayer::playFile(const QString &path)
@@ -233,13 +273,13 @@ void VideoPlayer::playFile(const QString &path)
     m_playAttempt = 0;
     m_currentPath  = path;
     m_rotationDeg  = 0;
+
+    // Čerstvý přehrávač i video item pro KAŽDÝ soubor — viz recreatePlayer().
+    // Bez toho aplikace při rychlém střídání videí padá uvnitř AVFoundation.
+    recreatePlayer();
+
     m_videoItem->setRotation(0);
     resetZoom();
-    // Znovu navázat video výstup — při rychlém střídání souborů (viz
-    // stopQuietly()) tím předejdeme tomu, aby displej-link doručil snímkový
-    // callback vázaný na už zahozenou položku předchozího videa (macOS/
-    // AVFoundation backend na to bez tohoto uměl spadnout na addOutput:).
-    m_player->setVideoOutput(m_videoItem);
     m_player->setSource(QUrl::fromLocalFile(path));
     m_player->setLoops(QMediaPlayer::Infinite);
     m_player->play();
@@ -252,9 +292,10 @@ void VideoPlayer::stopPlayback()
 {
     m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
-    m_player->stop();
-    m_player->setSource(QUrl());
-    m_player->setVideoOutput(nullptr);
+    // Přehrávač se zahodí celý — po zastavení nesmí zůstat živá AVFoundation
+    // položka, ke které by displej-link ještě doručoval snímky (viz
+    // recreatePlayer()). Nový, nečinný přehrávač je připravený na další soubor.
+    recreatePlayer();
     emit stopped();
 }
 
@@ -263,9 +304,7 @@ void VideoPlayer::stopQuietly()
     m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
     m_stoppingQuietly = true;
-    m_player->stop();
-    m_player->setSource(QUrl());
-    m_player->setVideoOutput(nullptr);
+    recreatePlayer();
     m_stoppingQuietly = false;
 }
 

@@ -231,7 +231,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_videoSwitchTimer->setSingleShot(true);
     m_videoSwitchTimer->setInterval(200);
     connect(m_videoSwitchTimer, &QTimer::timeout, this, [this] {
-        m_videoPlayer->stopQuietly();
+        // Bez stopQuietly() — playFile() si přehrávač stejně vyrábí odznova
+        // (viz VideoPlayer::recreatePlayer()), takže by to byl jen zbytečný
+        // druhý teardown navíc.
         m_videoPlayer->playFile(m_pendingVideoPath);
         // Přepnutí zdroje proběhlo — jakmile se přehrávání ustálí, můžou se
         // zase generovat náhledy (viz scheduleVideoThumbnailResume).
@@ -1102,6 +1104,10 @@ void MainWindow::setupMenu()
         m_settingsManager->setThumbnailCacheEnabled(checked);
         m_thumbnailPanel->setDiskCache(checked,
                                        m_settingsManager->effectiveThumbnailCacheDir());
+        if (m_videoThumbnailWorker) {
+            m_videoThumbnailWorker->setDiskCache(
+                checked, m_settingsManager->effectiveThumbnailCacheDir());
+        }
     });
 
     cacheMenu->addAction(tr("Vybrat složku pro cache…"), this, [this] {
@@ -1114,6 +1120,11 @@ void MainWindow::setupMenu()
         m_settingsManager->setThumbnailCacheRoot(folder);
         m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
                                        m_settingsManager->effectiveThumbnailCacheDir());
+        if (m_videoThumbnailWorker) {
+            m_videoThumbnailWorker->setDiskCache(
+                m_settingsManager->thumbnailCacheEnabled(),
+                m_settingsManager->effectiveThumbnailCacheDir());
+        }
         m_statusLabel->setText(tr("Cache miniatur: %1")
                                    .arg(m_settingsManager->effectiveThumbnailCacheDir()));
     });
