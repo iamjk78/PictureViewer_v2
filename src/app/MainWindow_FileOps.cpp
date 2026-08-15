@@ -593,6 +593,11 @@ void MainWindow::deleteImageToTrash()
     // Koš nemá undo (jako dosud) — jen smazat každý soubor sady.
     const int anchorIndex = m_currentIndex;
     bool removedAny = false;
+    // Na síťových discích bez podpory koše (viz stejný důvod u onDeleteCurrentFolder())
+    // moveToTrash spolehlivě selže pro každý soubor skupiny — zeptat se na trvalé
+    // smazání jen jednou a rozhodnutí uplatnit i na zbylé companion soubory.
+    bool permanentDeleteAsked = false;
+    bool permanentDeleteAllowed = false;
     for (const QString &filePath : filesToDelete) {
         if (!QFile::exists(filePath)) {
             continue;
@@ -600,7 +605,22 @@ void MainWindow::deleteImageToTrash()
         // Zastavit i video případně auto-přehrané předchozím odebráním —
         // jinak by na Windows zůstalo zamčené a moveToTrash by selhal.
         stopVideoIfPlaying();
-        if (tryWithRetry([&] { return QFile::moveToTrash(filePath); })) {
+        bool removed = tryWithRetry([&] { return QFile::moveToTrash(filePath); });
+        if (!removed) {
+            if (!permanentDeleteAsked) {
+                permanentDeleteAsked = true;
+                permanentDeleteAllowed = QMessageBox::question(
+                    this, QString(),
+                    tr("Soubor se nepodařilo přesunout do koše (síťový disk košem "
+                       "nedisponuje). Smazat trvale, bez možnosti obnovy?"),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No) == QMessageBox::Yes;
+            }
+            if (permanentDeleteAllowed) {
+                removed = QFile::remove(filePath);
+            }
+        }
+        if (removed) {
             if (m_categoryManager) {
                 m_categoryManager->unassignAll(filePath);
             }
@@ -861,8 +881,20 @@ void MainWindow::onDeleteCurrentFolder()
     stopVideoIfPlaying();
 
     if (!tryWithRetry([&] { return QFile::moveToTrash(folderToDelete); })) {
-        m_statusLabel->setText(tr("Nepodařilo se smazat složku '%1'.").arg(folderToDelete));
-        return;
+        // Síťové disky (typicky SMB sdílení bez podpory koše na straně NAS)
+        // moveToTrash spolehlivě odmítnou — NSFileManager/Qt to hlásí jako
+        // "volume doesn't have a trash". Nabídnout trvalé smazání jako fallback,
+        // stejně jako to dělá Finder u nekošovatelných síťových svazků.
+        const int result = QMessageBox::question(
+            this, QString(),
+            tr("Složku se nepodařilo přesunout do koše (síťový disk košem "
+               "nedisponuje). Smazat ji trvale, bez možnosti obnovy?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (result != QMessageBox::Yes || !QDir(folderToDelete).removeRecursively()) {
+            m_statusLabel->setText(tr("Nepodařilo se smazat složku '%1'.").arg(folderToDelete));
+            return;
+        }
     }
 
     const QString deletedName = QFileInfo(folderToDelete).fileName();
