@@ -304,12 +304,19 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
+    // PDF toolbar musí být VŽDY úplně dole, pod všemi ostatními. Pořadí z
+    // konstrukce (přidán jako poslední) na to nestačí — restoreState() výše
+    // obnoví uložené rozložení, které pořadí přebíjí a umí ho posunout klidně
+    // nad hlavní toolbar. insertToolBarBreak() to neřeší, ten jen zalamuje
+    // řádek, nikoli pořadí. Opětovné addToolBar() na už přidaný toolbar ho
+    // přesune na konec oblasti; viditelnost přitom nemění (skrytý zůstane
+    // skrytý, dokud se neotevře PDF).
+    addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
+
     // Každý toolbar musí být na vlastním řádku. Vynutit až ZDE, po
-    // restoreState() — ten obnoví staré uložené rozdělení toolbarů do řádků
-    // (kde se PDF toolbar dělil o řádek s navigačním) a přepsal by jakékoli
-    // zlomy nastavené dřív. insertToolBarBreak(t) váže zlom přímo na daný
-    // toolbar, na rozdíl od addToolBarBreak(), který ho jen připne na konec
-    // tehdejšího seznamu.
+    // restoreState() (viz výše) a po přesunu PDF toolbaru na konec.
+    // insertToolBarBreak(t) váže zlom přímo na daný toolbar, na rozdíl od
+    // addToolBarBreak(), který ho jen připne na konec tehdejšího seznamu.
     for (QToolBar *toolbar : {m_favoritesToolbar, m_categoriesToolbar, m_moveToolbar,
                               m_folderNavToolbar, m_pdfToolbar}) {
         insertToolBarBreak(toolbar);
