@@ -21,6 +21,7 @@ public:
 
     // Jednotlivé sekce nápovědy
     static void showAbout(QWidget *parent);
+    static void showToolbarGuide(QWidget *parent);
     static void showFormats(QWidget *parent);
     static void showShortcuts(QWidget *parent);
     static void showWhatsNew(QWidget *parent);

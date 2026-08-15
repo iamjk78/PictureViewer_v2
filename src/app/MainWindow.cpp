@@ -1110,6 +1110,7 @@ void MainWindow::setupMenu()
     // POZOR: Při přidání nových funkcí nebo zkratek aktualizuj HelpDialog.cpp!
     QMenu *helpMenu = menuBar()->addMenu(tr("&Nápověda"));
     helpMenu->addAction(tr("O programu"),            this, [this] { HelpDialog::showAbout(this);     });
+    helpMenu->addAction(tr("Přehled tlačítek toolbaru"), this, [this] { HelpDialog::showToolbarGuide(this); });
     helpMenu->addSeparator();
     helpMenu->addAction(tr("Podporované formáty"),   this, [this] { HelpDialog::showFormats(this);   });
     helpMenu->addAction(tr("Klávesové zkratky"),     this, [this] { HelpDialog::showShortcuts(this); });
