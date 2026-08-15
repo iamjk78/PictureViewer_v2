@@ -13,9 +13,12 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - Prohlížení PDF dokumentů s listováním stránek; **PDF toolbar** s tlačítky ◀/▶,
   indikátorem strany, skokem na konkrétní stranu a snímkem stránky jako JPEG
 - Přibližování a posun obrázků (zoom, pan) + **indikátor zoomu** ve status baru
+- **Zmenšit / zvětšit na okno** — dva přepínače ve status baru určují, jak se
+  obrázek zobrazí při načtení; vypnuté obojí zobrazí vše v originální velikosti
+  (1:1). Ruční zoom volbu dočasně přebije. Per-profil, netýká se PDF ani videa
 - **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
-- **Ořez obrázku** (✂) — výběr oblasti myší, zobrazení se ořízne na vybranou část
-- **Snímek výřezu obrazovky** (📷) — funguje i mimo aplikaci a napříč všemi monitory;
+- **Ořez obrázku** — výběr oblasti myší, zobrazení se ořízne na vybranou část
+- **Snímek výřezu obrazovky** — funguje i mimo aplikaci a napříč všemi monitory;
   označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky).
   macOS používá systémový `screencapture`, ostatní platformy vlastní overlay
 - **Přizpůsobitelná šířka panelu náhledů** — táhněte pravý okraj panelu doleva/doprava;
@@ -23,28 +26,30 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Uložit / Uložit jako** — uložení upraveného obrázku (ořez, otočení) jako JPEG;
   Uložit nabídne přepsání originálu nebo přejmenování; Uložit jako otevře dialog
   pro výběr názvu a cílové složky (originál nebo oblíbená)
-- **Recyklace (♻)** — vrácení souborů přesunutých do Delete zpět do původní složky
-  (LIFO — nejnovější jako první)
-- **Obnovit složku (🔄 / F5)** — znovu naskenuje složku a zobrazí přidané/odebrané soubory
-- **Řazení v toolbaru** — dropdown tlačítko (název / datum / velikost, ↑/↓)
+- **Vrátit poslední soubor** — vrácení souborů přesunutých do Delete zpět do
+  původní složky (LIFO — nejnovější jako první)
+- **Obnovit složku** (F5) — znovu naskenuje složku a zobrazí přidané/odebrané soubory
+- **Řazení v toolbaru** — rozbalovací nabídka (název / datum / velikost, vzestupně/sestupně)
 - **Drag & drop** složky nebo souboru do okna
 - **Kontextové menu** — Zobrazit ve Finderu, kopírovat obrázek / cestu
-- Slideshow s nastavitelným intervalem (1–60 s)
-- Mazání a přejmenování souborů
+- Slideshow s volitelným intervalem (1, 2, 3, 5, 10, 20 nebo 30 s) — tlačítko
+  s rozbalovací nabídkou v toolbaru
+- Mazání a přejmenování souborů; na discích bez podpory koše (síťová SMB sdílení)
+  aplikace nabídne trvalé smazání s potvrzením
 - **Štítky obrázků** — až 5 barevných štítků na obrázek; filtrování složky;
   správa (přejmenovat, změnit barvu, smazat) přes pravý klik
-- **Oblíbené složky** (⭐) — toolbar s barevnými tlačítky pro rychlé přepínání;
+- **Oblíbené složky** — toolbar s barevnými tlačítky pro rychlé přepínání;
   max 10 složek, klik otevře složku, pravý klik odebere
-- **Přesun do složky** (➡️) — vlastní tlačítka pro tematické roztřídění souborů
+- **Přesun do složky** — vlastní tlačítka pro tematické roztřídění souborů
   (název, barva, cílová složka); hromadný přesun přes výběr více souborů
   v náhledech (Ctrl/Shift+klik); ochrana proti přepsání při shodě jmen;
-  přesun lze vrátit zpět (↩, LIFO); tlačítka jsou per-profil
+  přesun lze vrátit zpět (LIFO); tlačítka jsou per-profil
 - **Párové soubory (obrázek/video)** — volitelné (per-profil): při přesunu nebo
   smazání souboru se přesunou/smažou i ostatní obrázky a videa se stejným názvem
   ve stejné složce (např. `123.jpg` + `123.mp4`); PDF se nikdy nepáruje; při více
-  nalezených párech dialog s volbou vše / jen aktivní / storno; undo (↩ i ♻) vrací
+  nalezených párech dialog s volbou vše / jen aktivní / storno; vrácení zpět vrací
   celou skupinu najednou
-- **Navigace mezi složkami** (🧭) — čtyři tlačítka pro pohyb v adresářové
+- **Navigace mezi složkami** — čtyři tlačítka pro pohyb v adresářové
   struktuře: ◀/▶ na sousední složku (abecedně), ▲ o úroveň výše, ▼ do první
   podsložky; u tlačítek je vidět název cíle a počet složek daným směrem;
   interní složka „Delete" je vyloučena; zjišťování struktury běží na pozadí
@@ -65,8 +70,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   vydání z GitHubu, ověří SHA256 a na Windows rovnou nainstaluje
 - **Pamatování velikosti okna** — obnoví polohu a velikost; při jiném rozlišení
   obrazovky se spustí v předvolené velikosti
-- **Jednotná výška toolbarů** — všechny lišty (Oblíbené, Štítky, PDF) mají
-  stejnou výšku a font jako hlavní toolbar
+- **Jednotný vzhled toolbarů** — vlastní barevné ikony, jednotná velikost tlačítek,
+  bez orámování a oddělovacích čar; PDF toolbar je vždy pod ostatními
 - Jednotkové testy jádra (Qt Test)
 
 ## Buildování
@@ -169,9 +174,9 @@ kopírovat obrázek / cestu). Složku nebo soubor lze také přetáhnout do okna
 
 ## Nastavení
 
-Konfigurace se ukládá v:
-- **macOS**: `~/Library/Preferences/JiriKrejci/PictureViewer/config.ini`
-- **Windows**: `%APPDATA%\JiriKrejci\PictureViewer\config.ini`
+Konfigurace je **per-profil** a ukládá se v:
+- **macOS**: `~/Library/Preferences/JiriKrejci/PictureViewer/profiles/<profil>/config.ini`
+- **Windows**: `%APPDATA%\JiriKrejci\PictureViewer\profiles\<profil>\config.ini`
 
 Menu Nastavení přistupuje k:
 - Vzhled aplikace (5 rozložení UI)
