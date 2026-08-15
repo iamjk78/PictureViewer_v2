@@ -333,6 +333,13 @@ private:
     // showImage() v MainWindow_FileOps.cpp).
     QTimer *m_videoSwitchTimer = nullptr;
     QString m_pendingVideoPath;
+    // Odložené obnovení generování video náhledů — každá další navigace ho
+    // posune, takže se worker rozjede až po ustálení (viz .cpp).
+    QTimer *m_videoThumbResumeTimer = nullptr;
+    // Pozastaví generování video náhledů na dobu přepínání zdroje ve
+    // VideoPlayeru a naplánuje jeho obnovení po ustálení.
+    void suspendVideoThumbnails();
+    void scheduleVideoThumbnailResume();
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QLabel *m_zoomLabel = nullptr;    // indikátor zoomu vpravo ve status baru

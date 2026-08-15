@@ -34,6 +34,10 @@ public:
 
     QString lastError() const { return m_lastError; }
 
+    // Veřejné kvůli předběžné validaci v dialogu správy profilů (a testům) —
+    // název jde přímo do cesty adresáře profilu, viz implementace.
+    bool nameIsValid(const QString &name) const;
+
     // Migrace ze staré ploché struktury (config.ini + categories.db → profiles/Výchozí/)
     void migrateIfNeeded();
 
@@ -42,7 +46,7 @@ public:
 private:
     void load();
     void save();
-    bool nameIsValid(const QString &name) const;
+    bool isPathInsideProfilesDir(const QString &path) const;
     bool copyDir(const QString &src, const QString &dst) const;
 
     QString     m_appConfigDir;

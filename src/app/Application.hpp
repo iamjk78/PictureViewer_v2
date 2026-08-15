@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <QApplication>
+#include <QString>
 
 class QFileOpenEvent;
 
@@ -26,6 +27,8 @@ protected:
 
 private:
     MainWindow *m_mainWindow = nullptr;
+    // FileOpen event doručený dřív, než existuje MainWindow (viz setMainWindow).
+    QString m_pendingOpenFile;
     bool m_isStarting = true;
 };
 

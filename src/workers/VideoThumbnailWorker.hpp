@@ -28,6 +28,13 @@ public:
     void enqueue(const QStringList &paths, int generation);
     void cancel();
 
+    // Pozastaví/obnoví zpracování fronty BEZ jejího zahození (na rozdíl od
+    // cancel()). Slouží k vzájemnému vyloučení s VideoPlayerem: dva souběžně
+    // pracující QMediaPlayery se na macOS/AVFoundation perou o teardown
+    // AVPlayerItem a shazují aplikaci — viz komentář v suspend().
+    void suspend();
+    void resume();
+
 signals:
     void thumbnailReady(int generation, const QString &path, const QImage &image);
 
@@ -43,9 +50,11 @@ private:
     void saveToCache(const QString &path, const QImage &image) const;
     void finishCurrent(const QImage &image);
     // Vytvoří nový QMediaPlayer/QVideoSink a připojí signály. Volá se z
-    // konstruktoru a znovu z cancel() (viz komentář tam) — nikdy se
-    // nepokračuje se starým přehrávačem po přerušení rozpracovaného videa.
+    // konstruktoru a znovu z discardPlayer() — nikdy se nepokračuje se starým
+    // přehrávačem po přerušení rozpracovaného videa.
     void setupPlayer();
+    // Zahodí rozpracovaný přehrávač a vyrobí čistý nový (viz komentář uvnitř).
+    void discardPlayer();
 
     enum class State { Idle, Loading, WaitingFrame };
 
@@ -57,6 +66,7 @@ private:
     int           m_generation = 0;
     State         m_state      = State::Idle;
     bool          m_cancelled  = false;
+    bool          m_suspended  = false;
     bool          m_diskCacheEnabled;
     QString       m_diskCacheDir;
 };

@@ -52,6 +52,15 @@ PictureViewerApplication::PictureViewerApplication(int &argc, char **argv)
 void PictureViewerApplication::setMainWindow(MainWindow *window)
 {
     m_mainWindow = window;
+
+    // Soubor, jehož FileOpen event dorazil ještě před dokončením konstrukce
+    // MainWindow (macOS umí událost doručit v libovolné vnořené event loopě),
+    // otevřít teprve teď — dřív nebylo kam.
+    if (m_mainWindow != nullptr && !m_pendingOpenFile.isEmpty()) {
+        const QString path = m_pendingOpenFile;
+        m_pendingOpenFile.clear();
+        m_mainWindow->openFile(path);
+    }
 }
 
 bool PictureViewerApplication::event(QEvent *event)
@@ -65,7 +74,12 @@ bool PictureViewerApplication::event(QEvent *event)
 
             // During startup (right after launch), open in this instance
             if (m_isStarting) {
-                qDebug() << "Opening in startup instance";
+                if (m_mainWindow == nullptr) {
+                    // MainWindow se ještě konstruuje — zapamatovat a otevřít
+                    // v setMainWindow(). Bez toho by tu byla null dereference.
+                    m_pendingOpenFile = filePath;
+                    return true;
+                }
                 m_mainWindow->openFile(filePath);
                 return true;
             }

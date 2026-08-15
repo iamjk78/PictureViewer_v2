@@ -160,12 +160,38 @@ bool ProfileManager::nameIsValid(const QString &name) const
     if (name.length() > kMaxNameLength) {
         return false;
     }
+    // Název jde přímo do cesty adresáře profilu — "." a ".." by ukazovaly mimo
+    // něj (profileDir("..") se rozvine na nadřazený adresář a deleteProfile()
+    // by pak rekurzivně smazal celou konfiguraci aplikace).
+    if (name == QLatin1String(".") || name == QLatin1String("..")) {
+        return false;
+    }
+    // Windows: název končící tečkou nebo mezerou se při vytváření souboru tiše
+    // ořízne, takže by adresář profilu neodpovídal uloženému jménu.
+    if (name != name.trimmed() || name.endsWith(QLatin1Char('.'))) {
+        return false;
+    }
     for (const QChar &c : name) {
         if (kInvalidChars.contains(c)) {
             return false;
         }
+        // Řídicí znaky (včetně NUL) v názvu adresáře.
+        if (c.unicode() < 0x20) {
+            return false;
+        }
     }
     return true;
+}
+
+// Obrana do hloubky: ověří, že cesta adresáře profilu skutečně leží uvnitř
+// m_profilesDir. Chrání destruktivní operace i proti názvu, který by se do
+// seznamu profilů dostal jinudy než přes nameIsValid() (např. ručně upravený
+// profiles.ini po aktualizaci ze starší verze).
+bool ProfileManager::isPathInsideProfilesDir(const QString &path) const
+{
+    const QString base = QDir(m_profilesDir).absolutePath();
+    const QString target = QDir(path).absolutePath();
+    return target != base && target.startsWith(base + QLatin1Char('/'));
 }
 
 // ── Kopírování adresáře ────────────────────────────────────────────────────────
@@ -283,6 +309,10 @@ bool ProfileManager::deleteProfile(const QString &name)
     }
 
     const QString dir = m_profilesDir + QStringLiteral("/") + name;
+    if (!isPathInsideProfilesDir(dir)) {
+        m_lastError = QStringLiteral("Neplatná cesta profilu — smazání zrušeno.");
+        return false;
+    }
     QDir(dir).removeRecursively();
 
     m_profiles.removeAll(name);

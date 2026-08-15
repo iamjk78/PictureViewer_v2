@@ -233,6 +233,18 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_videoSwitchTimer, &QTimer::timeout, this, [this] {
         m_videoPlayer->stopQuietly();
         m_videoPlayer->playFile(m_pendingVideoPath);
+        // Přepnutí zdroje proběhlo — jakmile se přehrávání ustálí, můžou se
+        // zase generovat náhledy (viz scheduleVideoThumbnailResume).
+        scheduleVideoThumbnailResume();
+    });
+
+    m_videoThumbResumeTimer = new QTimer(this);
+    m_videoThumbResumeTimer->setSingleShot(true);
+    m_videoThumbResumeTimer->setInterval(1200);
+    connect(m_videoThumbResumeTimer, &QTimer::timeout, this, [this] {
+        if (m_videoThumbnailWorker != nullptr) {
+            m_videoThumbnailWorker->resume();
+        }
     });
 
     // VideoThumbnailWorker žije na hlavním vlákně — QMediaPlayer potřebuje event loop.
@@ -328,6 +340,29 @@ MainWindow::MainWindow(QWidget *parent)
     scheduleStartupUpdateCheck();
 }
 
+// ── Souběh video náhledů a přehrávače ────────────────────────────────────────
+// Generátor náhledů i VideoPlayer používají každý vlastní QMediaPlayer.
+// Nebezpečné je jen OKNO PŘEPÍNÁNÍ ZDROJE (setSource/teardown AVPlayerItem) —
+// tam se macOS/AVFoundation backend dostane do race condition a aplikace spadne
+// na addOutput: (EXC_CRASH v AVFVideoRendererControl::updateVideoFrame).
+// Ustálené přehrávání souběh snese, proto se náhledy jen pozastaví po dobu
+// přepínání a po ustálení zase rozjedou. Trvalé pozastavení by ve složce jen
+// s videi znamenalo, že se náhledy nevygenerují nikdy.
+void MainWindow::suspendVideoThumbnails()
+{
+    m_videoThumbResumeTimer->stop();
+    if (m_videoThumbnailWorker != nullptr) {
+        m_videoThumbnailWorker->suspend();
+    }
+}
+
+void MainWindow::scheduleVideoThumbnailResume()
+{
+    if (m_videoThumbnailWorker != nullptr) {
+        m_videoThumbResumeTimer->start();
+    }
+}
+
 // ── cancelAllWorkers ─────────────────────────────────────────────────────────
 // Single choke-point for all background-task teardown.
 // Safe to call multiple times (all branches are null-guarded).
@@ -358,6 +393,28 @@ void MainWindow::cancelAllWorkers()
         m_imageLoader->shutdown();
     }
 
+    // Odložené spuštění videa a obnovení náhledů nesmí proběhnout po tomhle
+    // bodu — timery jsou sice potomci okna, ale mezi closeEvent() a destrukcí
+    // ještě běží event loop a stihly by sáhnout na rozebírané objekty.
+    if (m_videoSwitchTimer != nullptr) {
+        m_videoSwitchTimer->stop();
+    }
+    if (m_videoThumbResumeTimer != nullptr) {
+        m_videoThumbResumeTimer->stop();
+    }
+
+    // Generátor video náhledů drží vlastní QMediaPlayer s asynchronními
+    // AVFoundation callbacky — zastavit ho, dokud je okno ještě celé.
+    if (m_videoThumbnailWorker != nullptr) {
+        m_videoThumbnailWorker->cancel();
+        disconnect(m_videoThumbnailWorker, nullptr, m_thumbnailPanel, nullptr);
+    }
+
+    // Přehrávané video zastavit rovněž — jinak by AVFoundation doručovalo
+    // snímky do widgetu, který se právě rozebírá.
+    if (m_videoPlayer != nullptr) {
+        m_videoPlayer->stopQuietly();
+    }
 }
 
 // ── closeEvent ────────────────────────────────────────────────────────────────

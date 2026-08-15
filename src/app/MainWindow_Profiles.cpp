@@ -199,7 +199,13 @@ void MainWindow::switchProfile(const QString &profileName)
                                    m_settingsManager->effectiveThumbnailCacheDir());
     if (m_videoThumbnailWorker) {
         m_videoThumbnailWorker->cancel();
-        delete m_videoThumbnailWorker;
+        // Náhledy starého profilu se už nesmí dostat do panelu nového.
+        disconnect(m_videoThumbnailWorker, nullptr, m_thumbnailPanel, nullptr);
+        // deleteLater(), ne delete — cancel() právě odeslal starý QMediaPlayer
+        // do deleteLater() a AVFoundation k němu může mít rozpracované
+        // asynchronní callbacky. Okamžitá destrukce rodiče by je strhla s sebou
+        // uprostřed teardownu.
+        m_videoThumbnailWorker->deleteLater();
         m_videoThumbnailWorker = new VideoThumbnailWorker(
             m_settingsManager->thumbnailCacheEnabled(),
             m_settingsManager->effectiveThumbnailCacheDir(),

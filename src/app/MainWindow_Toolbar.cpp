@@ -817,6 +817,7 @@ void MainWindow::onVideoStopped()
     m_centralStack->setCurrentWidget(m_imageView);
     enableImageBrowsing();
     m_statusLabel->setText(tr("Přehrávání ukončeno."));
+    scheduleVideoThumbnailResume();
 }
 
 void MainWindow::disableImageBrowsing()

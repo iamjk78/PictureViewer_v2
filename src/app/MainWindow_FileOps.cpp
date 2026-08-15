@@ -353,6 +353,9 @@ void MainWindow::showImage(int index)
     m_videoSwitchTimer->stop();
 
     if (isVideo) {
+        // Generátor náhledů musí umlknout DŘÍV, než začne hrát VideoPlayer —
+        // viz suspendVideoThumbnails().
+        suspendVideoThumbnails();
         m_currentIndex = index;
         m_thumbnailPanel->setCurrentIndex(index);
         // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
@@ -372,6 +375,10 @@ void MainWindow::showImage(int index)
         m_videoPlayer->stopQuietly();
         m_centralStack->setCurrentWidget(m_imageView);
     }
+    // Žádné video už nehraje — náhledy se můžou dogenerovat, jakmile se
+    // navigace ustálí (odloženo, aby rychlé střídání obrázek/video worker
+    // zbytečně nerozjíždělo a zase nezahazovalo).
+    scheduleVideoThumbnailResume();
 
     if (isPdf) {
         m_pendingDisplayPath.clear();
@@ -724,7 +731,11 @@ void MainWindow::renameCurrentImage()
     const QString currentPath = m_imagePaths.at(m_currentIndex);
     QFileInfo fileInfo(currentPath);
 
-    const QString baseName = fileInfo.baseName();
+    // completeBaseName(), ne baseName() — baseName() vrací text po PRVNÍ tečku,
+    // zatímco suffix() po POSLEDNÍ. U "dovolena.2024.01.jpg" by dvojice
+    // ("dovolena", "jpg") při složení zahodila prostřední část názvu. Stejnou
+    // konvenci používá i CompanionFinder pro párování souborů.
+    const QString baseName = fileInfo.completeBaseName();
     const QString suffix = fileInfo.suffix();
 
     bool ok = false;
@@ -742,7 +753,8 @@ void MainWindow::renameCurrentImage()
     }
 
     const QString folderPath = fileInfo.absolutePath();
-    const QString newFileName = newBaseName + "." + suffix;
+    const QString newFileName =
+        suffix.isEmpty() ? newBaseName : newBaseName + "." + suffix;
     const QString newPath = folderPath + "/" + newFileName;
 
     if (QFile::exists(newPath)) {

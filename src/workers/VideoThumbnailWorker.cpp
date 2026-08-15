@@ -55,31 +55,74 @@ void VideoThumbnailWorker::cancel()
     m_cancelled = true;
     m_timeoutTimer->stop();
     m_queue.clear();
+    m_currentPath.clear();
     if (m_state != State::Idle) {
         m_state = State::Idle;
+        discardPlayer();
+    }
+}
 
-        // Zahodit CELÝ přehrávač a video sink, ne jen stop()/setSource(prázdné url).
-        // AVFoundation backend doručuje videoFrameChanged asynchronně přes
-        // CVDisplayLink na hlavní vlákno i PO stop()/setSource() — starý frame
-        // tak může dorazit AŽ PO startu dalšího videa (enqueue() zavolané hned
-        // po cancel()) a mylně se přiřadit k m_currentPath/m_generation už
-        // NOVÉHO videa (stejné m_state hodnoty se cyklicky opakují pro každé
-        // video, takže je nelze rozlišit jinak).
-        // disconnect() je NUTNÝ a musí být PŘED deleteLater() — deleteLater()
-        // samo o sobě odpojení odloží až do skutečné destrukce objektu (příští
-        // běh event loopy), takže by mezitím starý přehrávač mohl ještě stihnout
-        // emitovat signál do našich slotů.
-        disconnect(m_player, nullptr, this, nullptr);
-        disconnect(m_sink, nullptr, this, nullptr);
-        m_player->deleteLater();
-        m_sink->deleteLater();
-        setupPlayer();
+void VideoThumbnailWorker::discardPlayer()
+{
+    // Zahodit CELÝ přehrávač a video sink, ne jen stop()/setSource(prázdné url).
+    // AVFoundation backend doručuje videoFrameChanged asynchronně přes
+    // CVDisplayLink na hlavní vlákno i PO stop()/setSource() — starý frame
+    // tak může dorazit AŽ PO startu dalšího videa (enqueue() zavolané hned
+    // po cancel()) a mylně se přiřadit k m_currentPath/m_generation už
+    // NOVÉHO videa (stejné m_state hodnoty se cyklicky opakují pro každé
+    // video, takže je nelze rozlišit jinak).
+    // disconnect() je NUTNÝ a musí být PŘED deleteLater() — deleteLater()
+    // samo o sobě odpojení odloží až do skutečné destrukce objektu (příští
+    // běh event loopy), takže by mezitím starý přehrávač mohl ještě stihnout
+    // emitovat signál do našich slotů.
+    disconnect(m_player, nullptr, this, nullptr);
+    disconnect(m_sink, nullptr, this, nullptr);
+    m_player->deleteLater();
+    m_sink->deleteLater();
+    setupPlayer();
+}
+
+void VideoThumbnailWorker::suspend()
+{
+    if (m_suspended) {
+        return;
+    }
+    m_suspended = true;
+
+    if (m_state == State::Idle) {
+        return;
+    }
+
+    // Rozpracované video vrátit na začátek fronty — po resume() se dogeneruje.
+    if (!m_currentPath.isEmpty()) {
+        m_queue.prepend(m_currentPath);
+        m_currentPath.clear();
+    }
+    m_timeoutTimer->stop();
+    m_state = State::Idle;
+    // Přehrávač musí zmizet celý, ne jen stop(): smyslem suspendu je, aby
+    // souběžně s VideoPlayerem nežila ŽÁDNÁ naše AVFoundation položka.
+    discardPlayer();
+}
+
+void VideoThumbnailWorker::resume()
+{
+    if (!m_suspended) {
+        return;
+    }
+    m_suspended = false;
+
+    if (!m_cancelled && m_state == State::Idle && !m_queue.isEmpty()) {
+        QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
+                                  Qt::QueuedConnection);
     }
 }
 
 void VideoThumbnailWorker::processNext()
 {
-    if (m_cancelled || m_queue.isEmpty()) {
+    // m_suspended: fronta zůstává, jen se nesmí sáhnout na QMediaPlayer —
+    // resume() zpracování rozjede znovu od stejného místa.
+    if (m_cancelled || m_suspended || m_queue.isEmpty()) {
         m_state = State::Idle;
         return;
     }

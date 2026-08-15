@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -10,6 +11,7 @@
 
 #include "app/CategoryManager.hpp"
 #include "app/ImageLoader.hpp"
+#include "app/ProfileManager.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
@@ -948,6 +950,134 @@ private slots:
         // Záměrně nespustit — žádný signál nesmí přijít
         QTest::qWait(200);
         QCOMPARE(spy.count(), 0);
+    }
+
+    // ── ProfileManager ───────────────────────────────────────────────────────
+    // Název profilu jde přímo do cesty adresáře, takže validace je bezpečnostní
+    // hranice — viz nameIsValid() a isPathInsideProfilesDir().
+    void profileManager_rejectsDotNames()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        // ".." by se v profileDir() rozvinulo mimo adresář profilů a
+        // deleteProfile() by rekurzivně smazal celou konfiguraci aplikace.
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("..")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral(".")));
+    }
+
+    void profileManager_rejectsPathSeparators()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("../evil")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("a/b")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("a\\b")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("a:b")));
+    }
+
+    void profileManager_rejectsTrailingDotAndWhitespace()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        // Windows tyto názvy při vytváření adresáře tiše ořízne.
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("profil.")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral("profil ")));
+        QVERIFY(!mgr.nameIsValid(QStringLiteral(" profil")));
+    }
+
+    void profileManager_rejectsEmptyAndOverlong()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QVERIFY(!mgr.nameIsValid(QString()));
+        QVERIFY(!mgr.nameIsValid(QString(51, QLatin1Char('a'))));
+        QVERIFY(mgr.nameIsValid(QString(50, QLatin1Char('a'))));
+    }
+
+    void profileManager_acceptsNormalNames()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QVERIFY(mgr.nameIsValid(QStringLiteral("Výchozí")));
+        QVERIFY(mgr.nameIsValid(QStringLiteral("Práce 2024")));
+        QVERIFY(mgr.nameIsValid(QStringLiteral("foto.zaloha")));   // tečka uvnitř je v pořádku
+    }
+
+    void profileManager_createProfileRejectsDotName()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QVERIFY(!mgr.createProfile(QStringLiteral("..")));
+        QVERIFY(!mgr.profiles().contains(QStringLiteral("..")));
+    }
+
+    void profileManager_deleteKeepsConfigDirIntact()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QVERIFY(mgr.createProfile(QStringLiteral("Druhy")));
+        const QString firstDir = mgr.profileDir(mgr.profiles().first());
+        QVERIFY(mgr.deleteProfile(QStringLiteral("Druhy")));
+
+        // Adresář profilů i zbylý profil musí přežít.
+        QVERIFY(QDir(firstDir).exists());
+        QVERIFY(QFile::exists(dir.path() + QStringLiteral("/profiles.ini")));
+    }
+
+    // Obrana do hloubky: název ".." se do profiles.ini může dostat i jinudy než
+    // přes nameIsValid() (soubor z verze před opravou, ruční editace). Mazání
+    // takového profilu nesmí sáhnout mimo adresář profilů.
+    void profileManager_deleteRefusesEscapingPath()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // Podstrčit profiles.ini se škodlivým názvem ještě před vytvořením
+        // ProfileManageru (ten si ho v konstruktoru načte).
+        {
+            QSettings ini(dir.path() + QStringLiteral("/profiles.ini"), QSettings::IniFormat);
+            ini.setValue(QStringLiteral("General/active"), QStringLiteral("Výchozí"));
+            ini.setValue(QStringLiteral("Profiles/names"),
+                         QStringList{QStringLiteral("Výchozí"), QStringLiteral("..")});
+            ini.sync();
+        }
+
+        // Značka uvnitř adresáře profilů, kterou by removeRecursively("<profiles>/..")
+        // smazala spolu s celou konfigurací.
+        const QString profilesDir = dir.path() + QStringLiteral("/profiles");
+        QDir().mkpath(profilesDir);
+        const QString canary = profilesDir + QStringLiteral("/canary.txt");
+        QVERIFY(writeFileOfSize(canary, 1));
+
+        ProfileManager mgr(dir.path());
+        QVERIFY(!mgr.deleteProfile(QStringLiteral("..")));
+        QVERIFY(QFile::exists(canary));
+        QVERIFY(QFile::exists(dir.path() + QStringLiteral("/profiles.ini")));
+    }
+
+    void profileManager_cannotDeleteLastProfile()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        ProfileManager mgr(dir.path());
+
+        QCOMPARE(mgr.profiles().size(), 1);
+        QVERIFY(!mgr.deleteProfile(mgr.profiles().first()));
+        QCOMPARE(mgr.profiles().size(), 1);
     }
 
     // ── UpdateChecker ────────────────────────────────────────────────────────

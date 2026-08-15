@@ -208,6 +208,15 @@ void ImageView::applyInitialFit()
         return;
     }
 
+    // Volba zmenšit/zvětšit na okno platí jen pro statické obrázky. Stránka PDF
+    // se renderuje v rozlišení odvozeném z viewportu a devicePixelRatio, takže
+    // "1:1 pixmapy" neznamená 1:1 dokumentu — na HiDPI displeji by se stránka
+    // zobrazila dvojnásobně zvětšená. PDF proto vždy plné přizpůsobení oknu.
+    if (isPdfLoaded()) {
+        fitToWindow();
+        return;
+    }
+
     const QRectF pixmapRect = m_pixmapItem->boundingRect();
     const QSize viewportSize = viewport()->size();
     if (pixmapRect.isEmpty() || viewportSize.isEmpty()) {
