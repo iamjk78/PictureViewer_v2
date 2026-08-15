@@ -803,6 +803,65 @@ private slots:
         categoryManager_cleanup();
     }
 
+    // Filtrovací lišta štítků se ptá na kategorie použité ve VŠECH souborech
+    // složky. Jedním dotazem by to u velkých složek překročilo limit SQLite na
+    // počet vázaných parametrů a tiše selhalo — dotaz se proto dávkuje.
+    void categoryManager_usedCategoriesHandlesLargeFolder()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category first = mgr.addCategory(QStringLiteral("První"), QColor("#FF0000"));
+        const Category last  = mgr.addCategory(QStringLiteral("Zzz"), QColor("#00FF00"));
+        QVERIFY(first.id > 0);
+        QVERIFY(last.id > 0);
+
+        // Výrazně nad velikostí dávky (500) i nad historickým limitem 999.
+        constexpr int kPathCount = 2500;
+        QStringList paths;
+        paths.reserve(kPathCount);
+        for (int i = 0; i < kPathCount; ++i) {
+            paths.append(QStringLiteral("/tmp/slozka/img%1.jpg").arg(i));
+        }
+
+        // Štítky přiřadit až souborům z různých dávek — první a poslední.
+        mgr.assignCategory(paths.first(), first.id);
+        mgr.assignCategory(paths.last(), last.id);
+
+        const QList<Category> used = mgr.categoriesUsedInPaths(paths);
+        QCOMPARE(used.size(), 2);
+        // Výsledek musí zůstat seřazený podle názvu i po sloučení dávek.
+        QCOMPARE(used.at(0).name, QStringLiteral("První"));
+        QCOMPARE(used.at(1).name, QStringLiteral("Zzz"));
+
+        categoryManager_cleanup();
+    }
+
+    void categoryManager_usedCategoriesDeduplicatesAcrossBatches()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        CategoryManager mgr(dir.filePath("labels.db"));
+
+        const Category cat = mgr.addCategory(QStringLiteral("Sdílený"), QColor("#0000FF"));
+        QVERIFY(cat.id > 0);
+
+        QStringList paths;
+        for (int i = 0; i < 1200; ++i) {
+            paths.append(QStringLiteral("/tmp/x/img%1.jpg").arg(i));
+        }
+        // Stejný štítek na souborech ve třech různých dávkách.
+        mgr.assignCategory(paths.at(0), cat.id);
+        mgr.assignCategory(paths.at(600), cat.id);
+        mgr.assignCategory(paths.at(1100), cat.id);
+
+        const QList<Category> used = mgr.categoriesUsedInPaths(paths);
+        QCOMPARE(used.size(), 1);   // ne třikrát
+
+        categoryManager_cleanup();
+    }
+
     void categoryManager_schemaVersionIsCurrent()
     {
         QTemporaryDir dir;
@@ -1095,6 +1154,37 @@ private slots:
         QVERIFY(!UpdateChecker::isNewerVersion("", "0.15"));
         QVERIFY(!UpdateChecker::isNewerVersion("abc", "0.15"));
         QVERIFY(!UpdateChecker::isNewerVersion("0.16", ""));
+    }
+
+    void updateChecker_allowedHosts()
+    {
+        QVERIFY(UpdateChecker::isAllowedHost(QUrl("https://api.github.com/repos/x")));
+        QVERIFY(UpdateChecker::isAllowedHost(QUrl("https://github.com/x/releases")));
+        QVERIFY(UpdateChecker::isAllowedHost(QUrl("https://objects.githubusercontent.com/a")));
+        QVERIFY(UpdateChecker::isAllowedHost(QUrl("https://API.GitHub.com/x")));   // case-insensitive
+
+        // Jen HTTPS.
+        QVERIFY(!UpdateChecker::isAllowedHost(QUrl("http://github.com/x")));
+        // Cizí host ani jeho podvržené varianty.
+        QVERIFY(!UpdateChecker::isAllowedHost(QUrl("https://evil.com/x")));
+        QVERIFY(!UpdateChecker::isAllowedHost(QUrl("https://github.com.evil.com/x")));
+        QVERIFY(!UpdateChecker::isAllowedHost(QUrl("https://notgithub.com/x")));
+    }
+
+    void updateChecker_installerNameRejectsPathTraversal()
+    {
+        // Název jde z JSON odpovědi API přímo do cesty v dočasné složce.
+        QVERIFY(UpdateChecker::isSafeInstallerName("PictureViewer-0.28-setup.exe"));
+        QVERIFY(UpdateChecker::isSafeInstallerName("setup.EXE"));
+
+        QVERIFY(!UpdateChecker::isSafeInstallerName("../evil.exe"));
+        QVERIFY(!UpdateChecker::isSafeInstallerName("..\\..\\evil.exe"));
+        QVERIFY(!UpdateChecker::isSafeInstallerName("/etc/evil.exe"));
+        QVERIFY(!UpdateChecker::isSafeInstallerName("C:\\Windows\\evil.exe"));
+        QVERIFY(!UpdateChecker::isSafeInstallerName("sub/dir/setup.exe"));
+        QVERIFY(!UpdateChecker::isSafeInstallerName("setup.exe.zip"));   // jiná přípona
+        QVERIFY(!UpdateChecker::isSafeInstallerName(""));
+        QVERIFY(!UpdateChecker::isSafeInstallerName(QString(200, QLatin1Char('a')) + ".exe"));
     }
 };
 

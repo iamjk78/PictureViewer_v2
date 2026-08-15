@@ -50,6 +50,12 @@ void FolderScanWorker::run()
         if (!m_cancelled.load()) {
             emit scanError(m_generation, QString::fromUtf8(exception.what()));
         }
+    } catch (...) {
+        // Výjimka nesmí uniknout z QRunnable::run() — propadla by mimo
+        // catch handler vlákna z fondu a shodila aplikaci přes std::terminate.
+        if (!m_cancelled.load()) {
+            emit scanError(m_generation, QStringLiteral("Neznámá chyba při skenování složky."));
+        }
     }
 
     emit finished(m_generation);

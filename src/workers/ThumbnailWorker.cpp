@@ -47,7 +47,16 @@ void ThumbnailWorker::run()
             }
 
             const QString &path = m_paths.at(index);
-            emit thumbnailReady(m_generation, path, loadThumbnail(path));
+            // Jeden vadný soubor (např. std::bad_alloc u obřího rastru) nesmí
+            // shodit celé vlákno z fondu — výjimka z QRunnable::run() nemá kdo
+            // zachytit a skončila by v std::terminate. Miniatura se přeskočí.
+            QImage thumbnail;
+            try {
+                thumbnail = loadThumbnail(path);
+            } catch (...) {
+                thumbnail = QImage();
+            }
+            emit thumbnailReady(m_generation, path, thumbnail);
         }
 
         QThread::yieldCurrentThread();

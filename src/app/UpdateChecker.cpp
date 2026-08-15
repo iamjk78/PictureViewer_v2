@@ -4,6 +4,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -53,6 +54,37 @@ bool UpdateChecker::isNewerVersion(const QString &remote, const QString &current
 }
 
 // ── Bezpečné HTTP GET ─────────────────────────────────────────────────────────
+
+// ── Validace názvu instalátoru ────────────────────────────────────────────────
+// Název přichází z JSON odpovědi GitHub API a používá se jako jméno souboru
+// v dočasné složce. Bez kontroly by "..\\..\\evil.exe" zapsalo instalátor mimo
+// ni. Útok sice předpokládá kompromitovaný repozitář, ale kontrola je levná.
+bool UpdateChecker::isSafeInstallerName(const QString &name)
+{
+    if (name.isEmpty() || name.size() > 128) {
+        return false;
+    }
+    if (!name.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive)) {
+        return false;
+    }
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || name.contains(QLatin1Char(':'))) {
+        return false;
+    }
+    if (name.contains(QLatin1String(".."))) {
+        return false;
+    }
+    // Poslední pojistka: název musí být čistá poslední komponenta cesty.
+    if (QFileInfo(name).fileName() != name) {
+        return false;
+    }
+    for (const QChar &c : name) {
+        if (c.unicode() < 0x20) {
+            return false;
+        }
+    }
+    return true;
+}
 
 bool UpdateChecker::isAllowedHost(const QUrl &url)
 {
@@ -188,8 +220,8 @@ void UpdateChecker::downloadAndInstall(const QUrl &installerUrl,
         emit installFailed(tr("Adresa ke stažení není důvěryhodná."));
         return;
     }
-    if (!installerName.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive)) {
-        emit installFailed(tr("Neočekávaný typ instalačního souboru."));
+    if (!isSafeInstallerName(installerName)) {
+        emit installFailed(tr("Neočekávaný název instalačního souboru."));
         return;
     }
     m_busy = true;

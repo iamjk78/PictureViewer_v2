@@ -41,6 +41,11 @@ public:
     // true pokud je remote (např. "0.16") novější než current (např. "0.15").
     static bool isNewerVersion(const QString &remote, const QString &current);
 
+    // Bezpečnostní kontroly vstupů z GitHub API. Veřejné kvůli testům —
+    // jsou to čisté funkce bez vedlejších efektů.
+    static bool isAllowedHost(const QUrl &url);
+    static bool isSafeInstallerName(const QString &name);
+
 signals:
     // silent se propaguje z checkForUpdates() — UI podle něj volí prezentaci.
     void updateAvailable(const QString &version, const QString &notes,
@@ -65,7 +70,6 @@ private:
 
     // Nastaví bezpečnou redirect policy: povolí jen HTTPS na GitHub hosty.
     QNetworkReply *startGet(const QUrl &url, int timeoutMs);
-    static bool isAllowedHost(const QUrl &url);
 
     QNetworkAccessManager *m_nam = nullptr;
     bool m_busy = false;
