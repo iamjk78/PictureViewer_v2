@@ -17,6 +17,7 @@
 class QAction;
 class QActionGroup;
 class QDockWidget;
+class QCheckBox;
 class QDragEnterEvent;
 class QDropEvent;
 class QGraphicsColorizeEffect;
@@ -326,9 +327,18 @@ private:
     MetadataPanel *m_metadataPanel = nullptr;
     QWidget *m_overlayToolbar = nullptr;
     QTimer *m_overlayHideTimer = nullptr;
+    // Debounce spuštění videa při navigaci šipkami — rychlé střídání
+    // QMediaPlayer::setSource() na macOS/AVFoundation race-uje s asynchronním
+    // zahazováním starého AVPlayerItem na pozadí a shazuje aplikaci (viz
+    // showImage() v MainWindow_FileOps.cpp).
+    QTimer *m_videoSwitchTimer = nullptr;
+    QString m_pendingVideoPath;
     QActionGroup *m_layoutActionGroup = nullptr;
     QLabel *m_statusLabel;
     QLabel *m_zoomLabel = nullptr;    // indikátor zoomu vpravo ve status baru
+    QWidget *m_fitControlsWidget = nullptr;       // kontejner obou checkboxů, vlevo od m_zoomLabel
+    QCheckBox *m_shrinkToFitCheckBox = nullptr;
+    QCheckBox *m_zoomToFitCheckBox = nullptr;
     QLabel *m_pdfPageLabel = nullptr; // indikátor "strana X / Y" v PDF toolbaru
     QToolButton *m_sortButton = nullptr; // dropdown tlačítko řazení v toolbaru
 

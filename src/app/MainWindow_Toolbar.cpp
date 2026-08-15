@@ -14,6 +14,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCheckBox>
 #include <QColor>
 #include <QCursor>
 #include <QDir>
@@ -289,17 +290,67 @@ void MainWindow::setupStatusBar()
     statusBar()->addWidget(m_statusLabel);
     m_statusLabel->setText(tr("Vyber složku s obrázky."));
 
+    const QString shrinkTooltip = tr(
+        "Zmenšit na okno\n"
+        "Zapnuto: velké obrázky se při načtení zmenší, aby se vešly do okna.\n"
+        "Vypnuto: velké obrázky se zobrazí v původní velikosti, i když přesahují okno.");
+    const QString zoomTooltip = tr(
+        "Zvětšit na okno\n"
+        "Zapnuto: malé obrázky se při načtení zvětší na velikost okna.\n"
+        "Vypnuto: malé obrázky se zobrazí v původní velikosti, i když jsou menší než okno.");
+
+    m_fitControlsWidget = new QWidget(this);
+    auto *fitLayout = new QHBoxLayout(m_fitControlsWidget);
+    fitLayout->setContentsMargins(0, 0, 8, 0);
+    fitLayout->setSpacing(3);
+
+    auto *shrinkIcon = new QLabel(QStringLiteral("⬇"), m_fitControlsWidget);
+    shrinkIcon->setStyleSheet(QStringLiteral("font-size: 14px; font-weight: bold;"));
+    shrinkIcon->setToolTip(shrinkTooltip);
+    m_shrinkToFitCheckBox = new QCheckBox(m_fitControlsWidget);
+    m_shrinkToFitCheckBox->setToolTip(shrinkTooltip);
+    m_shrinkToFitCheckBox->setChecked(m_settingsManager->shrinkToFitEnabled());
+    connect(m_shrinkToFitCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settingsManager->setShrinkToFitEnabled(checked);
+        m_imageView->setShrinkToFitEnabled(checked);
+    });
+    fitLayout->addWidget(shrinkIcon);
+    fitLayout->addWidget(m_shrinkToFitCheckBox);
+
+    fitLayout->addSpacing(10);
+
+    auto *zoomIcon = new QLabel(QStringLiteral("⬆"), m_fitControlsWidget);
+    zoomIcon->setStyleSheet(QStringLiteral("font-size: 14px; font-weight: bold;"));
+    zoomIcon->setToolTip(zoomTooltip);
+    m_zoomToFitCheckBox = new QCheckBox(m_fitControlsWidget);
+    m_zoomToFitCheckBox->setToolTip(zoomTooltip);
+    m_zoomToFitCheckBox->setChecked(m_settingsManager->zoomToFitEnabled());
+    connect(m_zoomToFitCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_settingsManager->setZoomToFitEnabled(checked);
+        m_imageView->setZoomToFitEnabled(checked);
+    });
+    fitLayout->addWidget(zoomIcon);
+    fitLayout->addWidget(m_zoomToFitCheckBox);
+
+    statusBar()->addPermanentWidget(m_fitControlsWidget);
+
+    m_imageView->setShrinkToFitEnabled(m_shrinkToFitCheckBox->isChecked());
+    m_imageView->setZoomToFitEnabled(m_zoomToFitCheckBox->isChecked());
+
     m_zoomLabel = new QLabel(this);
     m_zoomLabel->hide();
     statusBar()->addPermanentWidget(m_zoomLabel);
     connect(m_imageView, &ImageView::zoomChanged, this, [this](double percent) {
-        if (percent <= 0.0) {
+        const bool meaningful = percent > 0.0;
+        m_fitControlsWidget->setVisible(meaningful);
+        if (!meaningful) {
             m_zoomLabel->hide();
         } else {
             m_zoomLabel->setText(tr("Zoom: %1 %").arg(qRound(percent)));
             m_zoomLabel->show();
         }
     });
+    m_fitControlsWidget->hide();
 }
 
 QString MainWindow::pickRandomUnusedFavoriteColor() const

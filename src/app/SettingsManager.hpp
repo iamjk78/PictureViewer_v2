@@ -82,6 +82,13 @@ public:
     QString uiLayout() const;
     void setUiLayout(const QString &layout);
 
+    // Výchozí přizpůsobení statického obrázku oknu při jeho načtení (ruční zoom/
+    // mezerník to dočasně přebijí, dokud se nenačte další soubor).
+    bool shrinkToFitEnabled() const;
+    void setShrinkToFitEnabled(bool enabled);
+    bool zoomToFitEnabled() const;
+    void setZoomToFitEnabled(bool enabled);
+
     // ── Řazení souborů ───────────────────────────────────────────────────────
     // sortKey: 0 = název, 1 = datum, 2 = velikost (odpovídá ImageCatalog::SortKey)
     int sortKey() const;

@@ -146,7 +146,7 @@ bool ImageView::loadAnimation(const QString &path)
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
     setTransform(QTransform());
-    fitToWindow();
+    applyInitialFit();
 
     m_movie->start();
     return true;
@@ -171,7 +171,7 @@ void ImageView::showImageReset(const QImage &image)
     m_manuallyZoomed = false;
     m_hasContent = true;
     setTransform(QTransform());
-    fitToWindow();
+    applyInitialFit();
 }
 
 void ImageView::fitToWindow()
@@ -182,6 +182,54 @@ void ImageView::fitToWindow()
 
     fitInView(m_pixmapItem, Qt::KeepAspectRatio);
     m_zoomLevel = transform().m11();
+    m_manuallyZoomed = false;
+    emitZoomChanged();
+}
+
+void ImageView::setShrinkToFitEnabled(bool enabled)
+{
+    m_shrinkToFitEnabled = enabled;
+    if (m_hasContent && !isPdfLoaded() && !m_manuallyZoomed) {
+        applyInitialFit();
+    }
+}
+
+void ImageView::setZoomToFitEnabled(bool enabled)
+{
+    m_zoomToFitEnabled = enabled;
+    if (m_hasContent && !isPdfLoaded() && !m_manuallyZoomed) {
+        applyInitialFit();
+    }
+}
+
+void ImageView::applyInitialFit()
+{
+    if (m_pixmapItem->pixmap().isNull()) {
+        return;
+    }
+
+    const QRectF pixmapRect = m_pixmapItem->boundingRect();
+    const QSize viewportSize = viewport()->size();
+    if (pixmapRect.isEmpty() || viewportSize.isEmpty()) {
+        fitToWindow();
+        return;
+    }
+
+    const double fitScale = qMin(viewportSize.width() / pixmapRect.width(),
+                                  viewportSize.height() / pixmapRect.height());
+
+    double scale = 1.0;
+    if (fitScale < 1.0) {
+        scale = m_shrinkToFitEnabled ? fitScale : 1.0;
+    } else if (fitScale > 1.0) {
+        scale = m_zoomToFitEnabled ? fitScale : 1.0;
+    }
+
+    QTransform transform;
+    transform.scale(scale, scale);
+    setTransform(transform);
+    centerOn(m_pixmapItem);
+    m_zoomLevel = scale;
     m_manuallyZoomed = false;
     emitZoomChanged();
 }
@@ -221,7 +269,7 @@ void ImageView::rotateBy(int degrees)
     m_pixmapItem->setPixmap(current.transformed(rotation, Qt::SmoothTransformation));
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     setTransform(QTransform());
-    fitToWindow();
+    applyInitialFit();
     emit imageModified();
 }
 
@@ -357,9 +405,11 @@ void ImageView::resizeEvent(QResizeEvent *event)
     QGraphicsView::resizeEvent(event);
 
     if (!m_pixmapItem->pixmap().isNull() && !m_manuallyZoomed) {
-        fitToWindow();
         if (isPdfLoaded()) {
+            fitToWindow();
             m_pdfRerenderTimer->start();   // přizpůsobit rozlišení nové velikosti okna
+        } else {
+            applyInitialFit();
         }
     }
 }

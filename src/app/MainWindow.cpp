@@ -226,6 +226,15 @@ MainWindow::MainWindow(QWidget *parent)
                 m_statusLabel->setText(text);
             });
 
+    // Debounce spuštění videa — viz komentář u m_videoSwitchTimer v MainWindow.hpp.
+    m_videoSwitchTimer = new QTimer(this);
+    m_videoSwitchTimer->setSingleShot(true);
+    m_videoSwitchTimer->setInterval(200);
+    connect(m_videoSwitchTimer, &QTimer::timeout, this, [this] {
+        m_videoPlayer->stopQuietly();
+        m_videoPlayer->playFile(m_pendingVideoPath);
+    });
+
     // VideoThumbnailWorker žije na hlavním vlákně — QMediaPlayer potřebuje event loop.
     m_videoThumbnailWorker = new VideoThumbnailWorker(
         m_settingsManager->thumbnailCacheEnabled(),

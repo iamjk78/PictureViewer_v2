@@ -235,6 +235,11 @@ void VideoPlayer::playFile(const QString &path)
     m_rotationDeg  = 0;
     m_videoItem->setRotation(0);
     resetZoom();
+    // Znovu navázat video výstup — při rychlém střídání souborů (viz
+    // stopQuietly()) tím předejdeme tomu, aby displej-link doručil snímkový
+    // callback vázaný na už zahozenou položku předchozího videa (macOS/
+    // AVFoundation backend na to bez tohoto uměl spadnout na addOutput:).
+    m_player->setVideoOutput(m_videoItem);
     m_player->setSource(QUrl::fromLocalFile(path));
     m_player->setLoops(QMediaPlayer::Infinite);
     m_player->play();
@@ -249,6 +254,7 @@ void VideoPlayer::stopPlayback()
     m_loadTimeoutTimer->stop();
     m_player->stop();
     m_player->setSource(QUrl());
+    m_player->setVideoOutput(nullptr);
     emit stopped();
 }
 
@@ -259,6 +265,7 @@ void VideoPlayer::stopQuietly()
     m_stoppingQuietly = true;
     m_player->stop();
     m_player->setSource(QUrl());
+    m_player->setVideoOutput(nullptr);
     m_stoppingQuietly = false;
 }
 

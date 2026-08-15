@@ -45,6 +45,9 @@ constexpr auto kEnablePdfProcessingKey   = "PDF/enable_pdf_processing";
 
 constexpr auto kUiLayoutKey              = "UI/layout";
 
+constexpr auto kShrinkToFitEnabledKey    = "View/shrink_to_fit_enabled";
+constexpr auto kZoomToFitEnabledKey      = "View/zoom_to_fit_enabled";
+
 constexpr auto kSortKeyKey               = "Sort/key";
 constexpr auto kSortAscendingKey         = "Sort/ascending";
 
@@ -310,6 +313,28 @@ QString SettingsManager::uiLayout() const
 void SettingsManager::setUiLayout(const QString &layout)
 {
     m_settings->setValue(kUiLayoutKey, layout);
+    syncToDisk();
+}
+
+bool SettingsManager::shrinkToFitEnabled() const
+{
+    return m_settings->value(kShrinkToFitEnabledKey, true).toBool();
+}
+
+void SettingsManager::setShrinkToFitEnabled(bool enabled)
+{
+    m_settings->setValue(kShrinkToFitEnabledKey, enabled);
+    syncToDisk();
+}
+
+bool SettingsManager::zoomToFitEnabled() const
+{
+    return m_settings->value(kZoomToFitEnabledKey, true).toBool();
+}
+
+void SettingsManager::setZoomToFitEnabled(bool enabled)
+{
+    m_settings->setValue(kZoomToFitEnabledKey, enabled);
     syncToDisk();
 }
 

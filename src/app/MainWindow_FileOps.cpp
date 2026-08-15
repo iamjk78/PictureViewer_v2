@@ -348,18 +348,21 @@ void MainWindow::showImage(int index)
     const bool isVideo = isVideoFile(suffix);
     const bool isGif   = QFileInfo(path).suffix().compare("gif", Qt::CaseInsensitive) == 0;
 
+    // Zrušit případné odložené spuštění videa z předchozí navigace — pokud
+    // mezitím cílem přestalo být video, nesmí se přehrát se zpožděním.
+    m_videoSwitchTimer->stop();
+
     if (isVideo) {
-        // Pokud již přehráváme jiné video v auto-play režimu, zastavíme ho tiše.
-        if (m_centralStack->currentWidget() == m_videoPlayer
-            && m_previousImageAction->isEnabled()) {
-            m_videoPlayer->stopQuietly();
-        }
         m_currentIndex = index;
         m_thumbnailPanel->setCurrentIndex(index);
         // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
         m_centralStack->setCurrentWidget(m_videoPlayer);
-        m_videoPlayer->playFile(path);
         updateStatus(path);
+        // Debounce — viz komentář u m_videoSwitchTimer v MainWindow.hpp. Rychlé
+        // prolétnutí šipkami přes více videí tak skutečně přehraje jen to, na
+        // kterém se navigace ustálí.
+        m_pendingVideoPath = path;
+        m_videoSwitchTimer->start();
         return;
     }
 

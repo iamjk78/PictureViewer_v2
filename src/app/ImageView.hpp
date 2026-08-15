@@ -38,6 +38,13 @@ public:
     void resetZoom();
     void zoomIn();
     void zoomOut();
+
+    // Výchozí chování při automatickém přizpůsobení statického obrázku oknu
+    // (při načtení souboru nebo při resize okna, pokud uživatel ručně nezoomoval).
+    // Netýká se PDF. Když se aktuálně zobrazený obrázek nezoomoval ručně, změna
+    // se na něj ihned promítne.
+    void setShrinkToFitEnabled(bool enabled);
+    void setZoomToFitEnabled(bool enabled);
     void rotateLeft();    // otočit zobrazený obrázek o 90° proti směru hodin
     void rotateRight();   // otočit zobrazený obrázek o 90° po směru hodin
 
@@ -82,6 +89,9 @@ private:
     void rotateBy(int degrees);
     void stopAnimation();     // zastaví a uvolní případný běžící QMovie
     void emitZoomChanged();   // odešle aktuální zoom % (nebo -1 pro skrytí)
+    // Automatické počáteční přizpůsobení podle m_shrinkToFitEnabled/m_zoomToFitEnabled
+    // (na rozdíl od fitToWindow(), které vždy vynutí plné přizpůsobení oběma směry).
+    void applyInitialFit();
     void renderPdfPage(int pageIndex);
     void rerenderPdfForZoom();   // re-render po ustálení zoomu/resize (debounce)
 
@@ -103,6 +113,8 @@ private:
     bool m_hasContent = false;   // je zobrazen skutečný obrázek (ne placeholder)?
     bool m_cropMode = false;
     bool m_hasCrop = false;
+    bool m_shrinkToFitEnabled = true;
+    bool m_zoomToFitEnabled = true;
     QRubberBand *m_rubberBand = nullptr;
     QPoint m_cropOrigin;
     std::unique_ptr<PdfHandler> m_pdfHandler;
