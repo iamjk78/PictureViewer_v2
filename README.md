@@ -183,13 +183,6 @@ Menu Nastavení přistupuje k:
 
 ---
 
-## Dokumentace
-
-Detailní dokumentace: [docs/dokumentace.md](docs/dokumentace.md)  
-Náměty na vylepšení: [docs/TODO.md](docs/TODO.md)
-
----
-
 ## Vývoj
 
 Projekt je napsaný v C++20 s Qt6 frameworkem. Architektura:

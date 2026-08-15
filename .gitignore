@@ -17,3 +17,10 @@ build_test/
 
 # Dočasné podkladové soubory pro testování — nikdy neposílat na GitHub
 Temp/
+
+# Interní poznámky, plány úprav a dokumentace — jen pro vývoj, neposílat na GitHub
+docs/interni/
+
+# Pokyny pro Claude Code. MUSÍ zůstat v kořeni projektu (odtud si je nástroj
+# načítá), proto se jen nesleduje gitem místo přesunu do docs/interni/.
+CLAUDE.md
