@@ -11,6 +11,7 @@
 #include <QColorDialog>
 #include <QCursor>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -81,8 +82,16 @@ void MainWindow::setupCategoriesToolbar()
     }
 
     m_mainToolbar->addSeparator();
-    QAction *toggleCategoriesAction = m_mainToolbar->addAction(QStringLiteral("🏷️"));
+    QAction *toggleCategoriesAction = m_mainToolbar->addAction(
+        QIcon(QStringLiteral(":/icons/icon_tags.png")), QString());
     toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel štítků"));
+    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
+    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
+    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
+    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleCategoriesAction))) {
+        btn->setFixedSize(35, 35);
+        btn->setIconSize(QSize(33, 33));
+    }
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         bool willBeVisible = !m_categoriesToolbar->isVisible();
         m_categoriesToolbar->setVisible(willBeVisible);

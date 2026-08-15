@@ -50,7 +50,7 @@ void MainWindow::setupToolbar()
     // poměru stran zdrojového .ico (delete_folder_icon.ico má jiný poměr stran
     // než delete_picture_icon.ico/rename.ico), takže bitmapové ikony vypadaly
     // v toolbaru různě velké. Pevná velikost sjednotí všechny QIcon-akce.
-    constexpr int ICON_SIZE = 44;
+    constexpr int ICON_SIZE = 35;
     toolbar->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
 
     const QString iconButtonStyle = QStringLiteral(
@@ -78,17 +78,34 @@ void MainWindow::setupToolbar()
     m_toggleSlideshowAction->setIcon(QIcon(QStringLiteral(":/icons/icon_play_slideshow.png")));
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 
-    m_intervalSpinBox->setRange(1, 60);
-    m_intervalSpinBox->setValue(m_slideshowController->intervalMs() / 1000);
-    m_intervalSpinBox->setSuffix(tr(" s"));
-    m_intervalSpinBox->setMaximumWidth(50);
+    m_slideshowIntervalButton = new QToolButton(toolbar);
+    m_slideshowIntervalButton->setPopupMode(QToolButton::InstantPopup);
+    m_slideshowIntervalButton->setIcon(QIcon(QStringLiteral(":/icons/icon_slideshow_interval.png")));
+    m_slideshowIntervalButton->setStyleSheet(iconButtonStyle);
+
+    auto *intervalMenu = new QMenu(m_slideshowIntervalButton);
+    intervalMenu->setStyleSheet(QStringLiteral("QMenu { font-size: 16px; font-weight: bold; }"));
+
+    auto *intervalGroup = new QActionGroup(intervalMenu);
+    intervalGroup->setExclusive(true);
+    const int intervalChoicesSeconds[] = { 1, 2, 3, 5, 10, 20, 30 };
+    const int currentSeconds = m_slideshowController->intervalMs() / 1000;
+    for (const int seconds : intervalChoicesSeconds) {
+        auto *action = intervalMenu->addAction(tr("%1 s").arg(seconds));
+        action->setCheckable(true);
+        action->setChecked(seconds == currentSeconds);
+        intervalGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, seconds] {
+            m_slideshowController->setInterval(seconds * 1000);
+            updateSlideshowIntervalButtonText();
+        });
+    }
+    m_slideshowIntervalButton->setMenu(intervalMenu);
+    updateSlideshowIntervalButtonText();
 
     connect(m_previousImageAction, &QAction::triggered, this, &MainWindow::showPreviousImage);
     connect(m_nextImageAction, &QAction::triggered, this, &MainWindow::showNextImage);
     connect(m_toggleSlideshowAction, &QAction::triggered, this, &MainWindow::toggleSlideshow);
-    connect(m_intervalSpinBox, &QSpinBox::valueChanged, this, [this](int seconds) {
-        m_slideshowController->setInterval(seconds * 1000);
-    });
 
     m_openFolderAction->setIcon(QIcon(QStringLiteral(":/icons/icon_open_folder.png")));
     m_openFolderAction->setText(QString());
@@ -112,17 +129,18 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_nextImageAction);
     toolbar->addSeparator();
     toolbar->addAction(m_toggleSlideshowAction);
-    toolbar->addWidget(m_intervalSpinBox);
+    toolbar->addWidget(m_slideshowIntervalButton);
     toolbar->addSeparator();
 
     // Sort button
     m_sortButton = new QToolButton(toolbar);
     m_sortButton->setPopupMode(QToolButton::InstantPopup);
-    m_sortButton->setText(QStringLiteral("↕️"));
+    m_sortButton->setIcon(QIcon(QStringLiteral(":/icons/icon_sort.png")));
     m_sortButton->setToolTip(tr("Řazení souborů"));
     m_sortButton->setStyleSheet(iconButtonStyle);
 
     auto *sortMenu = new QMenu(m_sortButton);
+    sortMenu->setStyleSheet(QStringLiteral("QMenu { font-size: 16px; font-weight: bold; }"));
 
     auto *sortKeyGroup = new QActionGroup(sortMenu);
     sortKeyGroup->setExclusive(true);
@@ -202,12 +220,12 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_cropAction);
     toolbar->addSeparator();
 
-    m_saveAction = new QAction(QStringLiteral("💾"), this);
+    m_saveAction = new QAction(QIcon(QStringLiteral(":/icons/icon_save_overwrite.png")), QString(), this);
     m_saveAction->setToolTip(tr("Uložit upravenou kopii (přepsat originál)"));
     m_saveAction->setEnabled(false);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveImage);
 
-    m_saveAsAction = new QAction(QStringLiteral("➕"), this);
+    m_saveAsAction = new QAction(QIcon(QStringLiteral(":/icons/icon_save_as.png")), QString(), this);
     m_saveAsAction->setToolTip(tr("Uložit jako nový soubor JPEG"));
     m_saveAsAction->setEnabled(false);
     connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAsImage);
@@ -221,17 +239,19 @@ void MainWindow::setupToolbar()
         updateSaveButtonStates();
     });
 
-    m_deletePictureAction->setText(QStringLiteral("🗑"));
+    m_deletePictureAction->setIcon(QIcon(QStringLiteral(":/icons/icon_delete_current.png")));
+    m_deletePictureAction->setText(QString());
     m_deletePictureAction->setToolTip(tr("Smazat obrázek (D)"));
     toolbar->addAction(m_deletePictureAction);
 
-    m_deleteFolderAction->setText(QStringLiteral("❌"));
+    m_deleteFolderAction->setIcon(QIcon(QStringLiteral(":/icons/icon_move_to_trash.png")));
+    m_deleteFolderAction->setText(QString());
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     toolbar->addAction(m_deleteFolderAction);
 
     toolbar->addAction(m_deleteCurrentFolderAction);
 
-    m_recycleAction = new QAction(QStringLiteral("♻"), this);
+    m_recycleAction = new QAction(QIcon(QStringLiteral(":/icons/icon_remove_from_trash.png")), QString(), this);
     m_recycleAction->setToolTip(tr("Vrátit poslední soubor"));
     m_recycleAction->setEnabled(false);
     connect(m_recycleAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
@@ -315,8 +335,16 @@ void MainWindow::setupFavoritesToolbar()
     refreshFavoriteButtons();
 
     m_mainToolbar->addSeparator();
-    QAction *toggleFavoritesAction = m_mainToolbar->addAction(QStringLiteral("⭐"));
+    QAction *toggleFavoritesAction = m_mainToolbar->addAction(
+        QIcon(QStringLiteral(":/icons/icon_favorites_folders.png")), QString());
     toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
+    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
+    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
+    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
+    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleFavoritesAction))) {
+        btn->setFixedSize(35, 35);
+        btn->setIconSize(QSize(33, 33));
+    }
     connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
         m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
         m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
@@ -580,9 +608,17 @@ void MainWindow::updateSortButtonText()
         return;
     }
     const bool asc = m_settingsManager->sortAscending();
-    // ⬆/⬇ (ne ↑/↓) — mají výchozí emoji (tučnou) reprezentaci, konzistentní
-    // s ostatními ikonami toolbaru.
-    m_sortButton->setText(asc ? QStringLiteral("⬆") : QStringLiteral("⬇"));
+    m_sortButton->setToolTip(asc ? tr("Řazení souborů (vzestupně ↑)")
+                                  : tr("Řazení souborů (sestupně ↓)"));
+}
+
+void MainWindow::updateSlideshowIntervalButtonText()
+{
+    if (!m_slideshowIntervalButton) {
+        return;
+    }
+    const int seconds = m_slideshowController->intervalMs() / 1000;
+    m_slideshowIntervalButton->setToolTip(tr("Interval slideshow: %1 s").arg(seconds));
 }
 
 void MainWindow::setupPdfToolbar()

@@ -109,7 +109,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_thumbnailPanel(new ThumbnailPanel(this))
     , m_thumbnailDock(nullptr)
     , m_statusLabel(new QLabel(this))
-    , m_intervalSpinBox(new QSpinBox(this))
     , m_slideshowController(new SlideshowController(this))
     , m_openFolderAction(new QAction(tr("Otevřít složku…"), this))
     , m_openFileAction(new QAction(tr("Otevřít soubor…"), this))
@@ -134,18 +133,15 @@ MainWindow::MainWindow(QWidget *parent)
     m_categoryManager = std::make_unique<CategoryManager>(
         m_profileManager->dbPath(m_profileManager->activeProfile()));
 
-    m_deleteFolderAction->setIcon(QIcon(":/icons/delete_folder_icon.ico"));
     m_deleteFolderAction->setToolTip(tr("Smazání složky Delete"));
     connect(m_deleteFolderAction, &QAction::triggered, this, &MainWindow::onDeleteFolder);
 
-    // Odlišné od m_deleteFolderAction výše (❌ maže jen interní podsložku "Delete") —
-    // tohle maže CELOU aktuálně otevřenou složku i s obsahem. Jednoznaková emoji —
-    // dvouznaková sekvence (📁🗑) se v pevné šířce tlačítka elidovala na "...".
-    m_deleteCurrentFolderAction = new QAction(QStringLiteral("🚮"), this);
+    // Odlišné od m_deleteFolderAction výše (maže jen interní podsložku "Delete") —
+    // tohle maže CELOU aktuálně otevřenou složku i s obsahem.
+    m_deleteCurrentFolderAction = new QAction(QIcon(QStringLiteral(":/icons/icon_delete_permanently.png")), QString(), this);
     m_deleteCurrentFolderAction->setToolTip(tr("Smazat celou aktuální složku (do koše)"));
     connect(m_deleteCurrentFolderAction, &QAction::triggered, this, &MainWindow::onDeleteCurrentFolder);
 
-    m_deletePictureAction->setIcon(QIcon(":/icons/delete_picture_icon.ico"));
     m_deletePictureAction->setToolTip(tr("Smazání obrázku"));
     connect(m_deletePictureAction, &QAction::triggered, this, &MainWindow::deleteOrMoveCurrentImage);
 
@@ -261,8 +257,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Až PO všech setup*Toolbar() voláních výše — ty do m_mainToolbar ještě
     // přidávají své přepínací akce (⭐ 🏷️ ➡️ 🧭), špendlík musí být poslední.
-    // 44 musí odpovídat ICON_SIZE v setupToolbar().
-    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"), 44);
+    // 35 musí odpovídat ICON_SIZE v setupToolbar().
+    addFullscreenPinAction(m_mainToolbar, QStringLiteral("main"), 35);
     setupStatusBar();
     setupOverlayToolbar();
 

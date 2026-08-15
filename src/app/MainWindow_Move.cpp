@@ -20,6 +20,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -78,8 +79,16 @@ void MainWindow::setupMoveToolbar()
     }
 
     m_mainToolbar->addSeparator();
-    QAction *toggleMoveAction = m_mainToolbar->addAction(QStringLiteral("➡️"));
+    QAction *toggleMoveAction = m_mainToolbar->addAction(
+        QIcon(QStringLiteral(":/icons/icon_move_folder.png")), QString());
     toggleMoveAction->setToolTip(tr("Zobrazit/skrýt panel přesunů"));
+    // Přidáno až PO setupToolbar() (které nastavuje pevnou velikost 35×35 pro
+    // své vlastní akce) — bez tohoto by tlačítko mělo jen výchozí malou
+    // velikost, viz stejný důvod u setFixedSize() v setupToolbar().
+    if (auto *btn = qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleMoveAction))) {
+        btn->setFixedSize(35, 35);
+        btn->setIconSize(QSize(33, 33));
+    }
     connect(toggleMoveAction, &QAction::triggered, this, [this] {
         m_moveToolbar->setVisible(!m_moveToolbar->isVisible());
         m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());

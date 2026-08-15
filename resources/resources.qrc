@@ -17,5 +17,17 @@
         <file alias="icons/icon_reload.png">icons/icon_reload.png</file>
         <file alias="icons/icon_rotate_left.png">icons/icon_rotate_left.png</file>
         <file alias="icons/icon_rotate_right.png">icons/icon_rotate_right.png</file>
+        <file alias="icons/icon_tags.png">icons/icon_tags.png</file>
+        <file alias="icons/icon_recyclation.png">icons/icon_recyclation.png</file>
+        <file alias="icons/icon_sort.png">icons/icon_sort.png</file>
+        <file alias="icons/icon_save_overwrite.png">icons/icon_save_overwrite.png</file>
+        <file alias="icons/icon_slideshow_interval.png">icons/icon_slideshow_interval.png</file>
+        <file alias="icons/icon_save_as.png">icons/icon_save_as.png</file>
+        <file alias="icons/icon_favorites_folders.png">icons/icon_favorites_folders.png</file>
+        <file alias="icons/icon_move_folder.png">icons/icon_move_folder.png</file>
+        <file alias="icons/icon_delete_current.png">icons/icon_delete_current.png</file>
+        <file alias="icons/icon_move_to_trash.png">icons/icon_move_to_trash.png</file>
+        <file alias="icons/icon_delete_permanently.png">icons/icon_delete_permanently.png</file>
+        <file alias="icons/icon_remove_from_trash.png">icons/icon_remove_from_trash.png</file>
     </qresource>
 </RCC>

@@ -138,7 +138,7 @@ private:
     // Volat jako VŮBEC POSLEDNÍ akci přidanou do daného toolbaru (u m_mainToolbar
     // až po všech setup*Toolbar() voláních, protože ty do něj ještě přidávají
     // své přepínací akce).
-    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId, int buttonSize = 28);
+    void addFullscreenPinAction(QToolBar *toolbar, const QString &toolbarId, int buttonSize = 35);
     // Přidá widget do toolbaru tak, aby skončil PŘED špendlíkem (ten musí
     // zůstat úplně vpravo). Používat pro veškerý dynamicky přestavovaný obsah
     // toolbarů — přímé addWidget() by ho přilepilo až za špendlík.
@@ -333,7 +333,8 @@ private:
     QToolButton *m_sortButton = nullptr; // dropdown tlačítko řazení v toolbaru
 
     void updateSortButtonText(); // aktualizuje popisek m_sortButton podle nastavení
-    QSpinBox *m_intervalSpinBox;
+    QToolButton *m_slideshowIntervalButton = nullptr; // dropdown tlačítko intervalu slideshow
+    void updateSlideshowIntervalButtonText(); // aktualizuje popisek podle aktuálního intervalu
     SlideshowController *m_slideshowController;
     QAction *m_openFolderAction;
     QAction *m_openFileAction;

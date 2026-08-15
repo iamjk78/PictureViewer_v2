@@ -502,6 +502,7 @@ void MainWindow::onImageDecoded(const QString &path, const QImage &image)
         return;
     }
     m_imageView->setImage(image);
+    updateSaveButtonStates();
 }
 
 void MainWindow::updateStatus(const QString &path)
