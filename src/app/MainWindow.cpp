@@ -1247,7 +1247,10 @@ void MainWindow::setupUpdateChecker()
 
 void MainWindow::scheduleStartupUpdateCheck()
 {
-    // Tichý check po startu: až uplyne interval od poslední kontroly.
+    // Automatická kontrola po startu (výchozí odklad 1 minuta), ale jen když
+    // od poslední uplynul interval — GitHub se tedy neptá při každém spuštění.
+    // Najde-li novou verzi, zobrazí se dialog s nabídkou aktualizace;
+    // „nalezeno nic" ani chyba sítě uživatele neruší (viz setupUpdateChecker).
     const QDateTime last = m_settingsManager->lastUpdateCheck();
     const int intervalDays = m_settingsManager->updateCheckIntervalDays();
     if (last.isValid() && last.daysTo(QDateTime::currentDateTime()) < intervalDays) {
@@ -1269,17 +1272,15 @@ void MainWindow::onUpdateAvailable(const QString &version, const QString &notes,
 {
     m_settingsManager->setLastUpdateCheck(QDateTime::currentDateTime());
 
-    // Tichý check: verzi označenou „přeskočit" nepřipomínat.
+    // Verzi označenou „přeskočit" automatická kontrola nepřipomíná; ruční
+    // (Nápověda → Zkontrolovat aktualizace…) ji ukáže vždy.
     if (silent && version == m_settingsManager->skippedUpdateVersion()) {
         return;
     }
-    if (silent) {
-        m_statusLabel->setText(
-            tr("Je dostupná nová verze %1 — Nápověda → Zkontrolovat aktualizace…")
-                .arg(version));
-        return;
-    }
 
+    // Automatická kontrola po startu zobrazuje STEJNÝ dialog jako ruční —
+    // dřív jen napsala hlášku do status baru, kterou první navigace mezi
+    // soubory přepsala, takže se o nové verzi uživatel prakticky nedozvěděl.
     QMessageBox box(this);
     box.setWindowTitle(tr("Dostupná aktualizace"));
     box.setIcon(QMessageBox::Information);

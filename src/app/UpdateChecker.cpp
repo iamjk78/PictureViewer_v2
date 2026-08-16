@@ -377,9 +377,13 @@ void UpdateChecker::launchInstaller()
     m_installerFile.reset();
 
     // /VERYSILENT = bez průvodce, /NORESTART = nikdy nerestartovat systém.
+    // /AUTOSTART=1 = po dokončení instalace znovu spustit aplikaci; bez toho
+    // zůstane po tiché aktualizaci zavřená, protože standardní položka
+    // „spustit po instalaci" má v setup.iss příznak skipifsilent.
     // Instalátor přepíše soubory programu; uživatelská data v AppData zůstávají.
     const bool started = QProcess::startDetached(
-        exePath, {QStringLiteral("/VERYSILENT"), QStringLiteral("/NORESTART")});
+        exePath, {QStringLiteral("/VERYSILENT"), QStringLiteral("/NORESTART"),
+                  QStringLiteral("/AUTOSTART=1")});
     if (!started) {
         emit installFailed(tr("Instalátor se nepodařilo spustit."));
         return;

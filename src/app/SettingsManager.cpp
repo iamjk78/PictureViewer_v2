@@ -74,7 +74,7 @@ constexpr auto kSavedScreenSizeKey       = "UI/saved_screen_size";
 constexpr auto kThumbCacheEnabledKey     = "Cache/thumbnail_cache_enabled";
 constexpr auto kThumbCacheRootKey        = "Cache/thumbnail_cache_root";
 
-constexpr int kDefaultUpdateDelayMinutes = 5;
+constexpr int kDefaultUpdateDelayMinutes = 1;
 constexpr int kDefaultUpdateIntervalDays = 1;
 
 } // namespace

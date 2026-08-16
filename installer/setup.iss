@@ -52,7 +52,25 @@ Name: "{autodesktop}\PictureViewer"; Filename: "{app}\PictureViewer.exe"; \
     Tasks: desktopicon
 
 [Run]
-; Po ruční instalaci nabídnout spuštění; při tiché aktualizaci se přeskočí.
+; Ruční instalace: nabídnout spuštění zaškrtávátkem na závěrečné stránce.
 Filename: "{app}\PictureViewer.exe"; \
     Description: "{cm:LaunchProgram,PictureViewer}"; \
     Flags: nowait postinstall skipifsilent
+
+; Tichá aktualizace spuštěná z aplikace (UpdateChecker předává /AUTOSTART=1):
+; aplikaci po instalaci spustit znovu. Položka výše to nezajistí — má
+; skipifsilent, takže se při /VERYSILENT přeskočí a uživateli po aktualizaci
+; zůstala aplikace zavřená.
+; runasoriginaluser: pokud instalace běží se zvýšenými právy (uživatel dřív
+; zvolil instalaci pro všechny uživatele), aplikace se NESMÍ spustit jako
+; správce — zapisovala by nastavení a profily do profilu správce.
+Filename: "{app}\PictureViewer.exe"; \
+    Flags: nowait runasoriginaluser; \
+    Check: WantsAutoStart
+
+[Code]
+// true, když byl instalátor spuštěn s /AUTOSTART=1 (viz UpdateChecker).
+function WantsAutoStart: Boolean;
+begin
+  Result := ExpandConstant('{param:AUTOSTART|0}') = '1';
+end;
