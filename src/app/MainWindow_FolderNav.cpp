@@ -61,10 +61,9 @@ void MainWindow::setupFolderNavToolbar()
         QIcon(QStringLiteral(":/icons/icon_navigation.png")), QString());
     toggleNavAction->setToolTip(tr("Zobrazit/skrýt panel navigace mezi složkami"));
     connect(toggleNavAction, &QAction::triggered, this, &MainWindow::onToggleFolderNavToolbar);
-    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
-    applyToolbarButtonSize(
-        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleNavAction)),
-        kMainToolbarIconSize);
+    // Přidáno až PO setupToolbar(), viz applyMainToolbarButtonSize().
+    applyMainToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleNavAction)));
 
     addFullscreenPinAction(m_folderNavToolbar, QStringLiteral("folderNav"));
 

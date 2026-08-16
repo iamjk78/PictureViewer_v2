@@ -76,10 +76,9 @@ void MainWindow::setupMoveToolbar()
     QAction *toggleMoveAction = m_mainToolbar->addAction(
         QIcon(QStringLiteral(":/icons/icon_move_folder.png")), QString());
     toggleMoveAction->setToolTip(tr("Zobrazit/skrýt panel přesunů"));
-    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
-    applyToolbarButtonSize(
-        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleMoveAction)),
-        kMainToolbarIconSize);
+    // Přidáno až PO setupToolbar(), viz applyMainToolbarButtonSize().
+    applyMainToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleMoveAction)));
     connect(toggleMoveAction, &QAction::triggered, this, [this] {
         m_moveToolbar->setVisible(!m_moveToolbar->isVisible());
         m_settingsManager->setMoveToolbarVisible(m_moveToolbar->isVisible());

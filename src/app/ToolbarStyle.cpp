@@ -26,4 +26,13 @@ void applyToolbarButtonSize(QToolButton *button, int size)
     button->setIconSize(QSize(size - 2, size - 2));
 }
 
+void applyMainToolbarButtonSize(QToolButton *button)
+{
+    if (button == nullptr) {
+        return;
+    }
+    button->setFixedSize(kMainToolbarButtonWidth, kMainToolbarIconSize);
+    button->setIconSize(QSize(kMainToolbarIconSize - 2, kMainToolbarIconSize - 2));
+}
+
 } // namespace pictureviewer

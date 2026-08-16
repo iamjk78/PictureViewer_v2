@@ -29,5 +29,6 @@
         <file alias="icons/icon_move_to_trash.png">icons/icon_move_to_trash.png</file>
         <file alias="icons/icon_delete_permanently.png">icons/icon_delete_permanently.png</file>
         <file alias="icons/icon_remove_from_trash.png">icons/icon_remove_from_trash.png</file>
+        <file alias="icons/icon_rename.png">icons/icon_rename.png</file>
     </qresource>
 </RCC>

@@ -57,10 +57,10 @@ void MainWindow::setupToolbar()
 
     const QString iconButtonStyle = QStringLiteral(
         "QToolButton { border: none; border-radius: 3px; "
-        "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  padding: 0px; min-width: %1px; width: %1px; min-height: %2px; height: %2px; "
         "  background: transparent; } "
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); }")
-        .arg(ICON_SIZE);
+        .arg(kMainToolbarButtonWidth).arg(ICON_SIZE);
 
     // Poznámka k Unicode znakům v toolbaru: ◀ ▶ ✂ ↕ mají oficiální emoji
     // (barevnou/tučnou) variantu přes variation selector U+FE0F ("◀️" "▶️" …),
@@ -201,7 +201,7 @@ void MainWindow::setupToolbar()
     m_rotateRightAction->setShortcut(QKeySequence(Qt::Key_BracketRight));
     connect(m_rotateRightAction, &QAction::triggered, this, &MainWindow::onRotateRight);
 
-    m_renameImageAction->setText(QStringLiteral("✏️"));
+    m_renameImageAction->setIcon(QIcon(QStringLiteral(":/icons/icon_rename.png")));
     m_renameImageAction->setToolTip(tr("Přejmenovat obrázek (R)"));
     toolbar->addAction(m_renameImageAction);
     toolbar->addSeparator();
@@ -264,22 +264,22 @@ void MainWindow::setupToolbar()
     // odpovídaly velikosti bitmapových ikon (setIconSize výše).
     const QString toolButtonStyle = QStringLiteral(
         "QToolButton { border: none; border-radius: 3px; "
-        "  padding: 0px; min-width: %1px; width: %1px; min-height: %1px; height: %1px; "
+        "  padding: 0px; min-width: %1px; width: %1px; min-height: %2px; height: %2px; "
         "  background: transparent; font-size: 26px; } "
         "QToolButton:hover { background-color: rgba(0, 0, 0, 0.05); } "
         "QToolBar::separator { background: transparent; width: 0px; }")
-        .arg(ICON_SIZE);
+        .arg(kMainToolbarButtonWidth).arg(ICON_SIZE);
     toolbar->setStyleSheet(toolButtonStyle);
 
-    // Viz applyToolbarButtonSize() — CSS rozměry samy o sobě na macOS nestačí.
-    // Textovým/emoji tlačítkům se nastaví jen velikost boxu (jejich glyf řídí
-    // font-size ve stylu výše), ikonovým i velikost ikony.
+    // Viz applyMainToolbarButtonSize() — CSS rozměry samy o sobě na macOS
+    // nestačí. Textovým/emoji tlačítkům se nastaví jen velikost boxu (jejich
+    // glyf řídí font-size ve stylu výše), ikonovým i velikost ikony.
     for (QAction *action : toolbar->actions()) {
         if (auto *btn = qobject_cast<QToolButton *>(toolbar->widgetForAction(action))) {
             if (btn->icon().isNull()) {
-                btn->setFixedSize(ICON_SIZE, ICON_SIZE);
+                btn->setFixedSize(kMainToolbarButtonWidth, ICON_SIZE);
             } else {
-                applyToolbarButtonSize(btn, ICON_SIZE);
+                applyMainToolbarButtonSize(btn);
             }
         }
     }
@@ -382,10 +382,9 @@ void MainWindow::setupFavoritesToolbar()
     QAction *toggleFavoritesAction = m_mainToolbar->addAction(
         QIcon(QStringLiteral(":/icons/icon_favorites_folders.png")), QString());
     toggleFavoritesAction->setToolTip(tr("Zobrazit/skrýt panel oblíbených složek"));
-    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
-    applyToolbarButtonSize(
-        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleFavoritesAction)),
-        kMainToolbarIconSize);
+    // Přidáno až PO setupToolbar(), viz applyMainToolbarButtonSize().
+    applyMainToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleFavoritesAction)));
     connect(toggleFavoritesAction, &QAction::triggered, this, [this] {
         m_favoritesToolbar->setVisible(!m_favoritesToolbar->isVisible());
         m_settingsManager->setFavoritesToolbarVisible(m_favoritesToolbar->isVisible());
@@ -441,8 +440,12 @@ void MainWindow::addFullscreenPinAction(QToolBar *toolbar, const QString &toolba
     });
     toolbar->addAction(pinAction);
 
-    applyToolbarButtonSize(
-        qobject_cast<QToolButton *>(toolbar->widgetForAction(pinAction)), buttonSize);
+    QToolButton *pinButton = qobject_cast<QToolButton *>(toolbar->widgetForAction(pinAction));
+    if (toolbar == m_mainToolbar) {
+        applyMainToolbarButtonSize(pinButton);
+    } else {
+        applyToolbarButtonSize(pinButton, buttonSize);
+    }
 }
 
 QAction *MainWindow::addToolbarContent(QToolBar *toolbar, QWidget *widget)

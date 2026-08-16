@@ -192,7 +192,7 @@ void HelpDialog::showToolbarGuide(QWidget *parent)
         "<tr><td><img src=':/icons/icon_sort.png' width='28' height='28'></td>"
         "    <td>Řazení souborů</td><td>Rozbalí nabídku pro volbu klíče řazení (název / datum"
         " změny / velikost) a směru (vzestupně / sestupně)</td></tr>"
-        "<tr><td style='font-size:22px'>✏️</td>"
+        "<tr><td><img src=':/icons/icon_rename.png' width='28' height='28'></td>"
         "    <td>Přejmenovat obrázek</td><td>Otevře dialog pro zadání nového názvu"
         " aktuálního souboru (R)</td></tr>"
         "<tr><td><img src=':/icons/icon_rotate_left.png' width='28' height='28'></td>"

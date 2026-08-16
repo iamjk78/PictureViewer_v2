@@ -79,10 +79,9 @@ void MainWindow::setupCategoriesToolbar()
     QAction *toggleCategoriesAction = m_mainToolbar->addAction(
         QIcon(QStringLiteral(":/icons/icon_tags.png")), QString());
     toggleCategoriesAction->setToolTip(tr("Zobrazit/skrýt panel štítků"));
-    // Přidáno až PO setupToolbar(), viz applyToolbarButtonSize().
-    applyToolbarButtonSize(
-        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleCategoriesAction)),
-        kMainToolbarIconSize);
+    // Přidáno až PO setupToolbar(), viz applyMainToolbarButtonSize().
+    applyMainToolbarButtonSize(
+        qobject_cast<QToolButton *>(m_mainToolbar->widgetForAction(toggleCategoriesAction)));
     connect(toggleCategoriesAction, &QAction::triggered, this, [this] {
         bool willBeVisible = !m_categoriesToolbar->isVisible();
         m_categoriesToolbar->setVisible(willBeVisible);
