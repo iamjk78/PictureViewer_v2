@@ -302,23 +302,32 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
-    // PDF toolbar musí být VŽDY úplně dole, pod všemi ostatními. Pořadí z
-    // konstrukce (přidán jako poslední) na to nestačí — restoreState() výše
-    // obnoví uložené rozložení, které pořadí přebíjí a umí ho posunout klidně
-    // nad hlavní toolbar. insertToolBarBreak() to neřeší, ten jen zalamuje
-    // řádek, nikoli pořadí. Opětovné addToolBar() na už přidaný toolbar ho
-    // přesune na konec oblasti; viditelnost přitom nemění (skrytý zůstane
-    // skrytý, dokud se neotevře PDF).
-    addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
-
     // Každý toolbar musí být na vlastním řádku. Vynutit až ZDE, po
-    // restoreState() (viz výše) a po přesunu PDF toolbaru na konec.
-    // insertToolBarBreak(t) váže zlom přímo na daný toolbar, na rozdíl od
-    // addToolBarBreak(), který ho jen připne na konec tehdejšího seznamu.
+    // restoreState() — ten obnoví uložené rozdělení do řádků a přepsal by
+    // jakékoli zlomy nastavené dřív. insertToolBarBreak(t) váže zlom přímo na
+    // daný toolbar, na rozdíl od addToolBarBreak(), který ho jen připne na
+    // konec tehdejšího seznamu.
     for (QToolBar *toolbar : {m_favoritesToolbar, m_categoriesToolbar, m_moveToolbar,
                               m_folderNavToolbar, m_pdfToolbar}) {
         insertToolBarBreak(toolbar);
     }
+
+    // PDF toolbar musí být VŽDY úplně dole, pod všemi ostatními. Pořadí z
+    // konstrukce (přidán jako poslední) na to nestačí — restoreState() výše
+    // obnoví uložené rozložení, které pořadí přebíjí a umí PDF toolbar posunout
+    // klidně nad hlavní. Opětovné addToolBar() ho přesune na konec oblasti.
+    //
+    // MUSÍ být odloženo přes singleShot — voláno rovnou tady (tj. ještě před
+    // show()) sestřelí aplikaci hned při startu uvnitř Qt: přesun toolbaru
+    // v layoutu právě obnoveném z restoreState() nechá v QToolBarAreaLayout
+    // viset neplatnou položku a první výpočet rozměrů okna spadne na
+    // QToolBarAreaLayoutInfo::sizeHint() (SIGSEGV). Navíc se to samo
+    // zacyklovalo — aplikace si při zavření uložila stav, který ji při dalším
+    // startu znovu shodil. Reprodukováno a ověřeno 2026-08-16.
+    QTimer::singleShot(0, this, [this] {
+        addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
+        insertToolBarBreak(m_pdfToolbar);
+    });
 
     // restoreState() by mohlo (podle staré uložené geometrie okna) přepsat
     // viditelnost sekundárních toolbarů jinak, než odpovídá aktuálně
