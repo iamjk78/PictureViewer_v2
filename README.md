@@ -5,7 +5,7 @@
 [![CI](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/iamjk78/PictureViewer_v2/actions/workflows/ci.yml)
 
 A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** and
-**Windows**. Current version **0.29**.
+**Windows**. Current version **0.30**.
 
 > **Note on language:** the application's user interface and built-in help are in
 > **Czech** — it is primarily a tool for Czech users. This README, commit messages
