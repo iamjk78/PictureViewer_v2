@@ -13,6 +13,7 @@
 #include "app/ThumbnailPanel.hpp"
 #include "app/ToolbarStyle.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/FileNaming.hpp"
 
 #include <QColorDialog>
 #include <QCursor>
@@ -286,16 +287,9 @@ QStringList MainWindow::resolveGroupTargetPaths(const QStringList &filesInAction
         return {};
     }
 
-    QStringList targets;
-    bool anyConflict = false;
-    for (const QString &f : filesInAction) {
-        const QString t = targetFolder + QStringLiteral("/") + QFileInfo(f).fileName();
-        targets.append(t);
-        if (QFile::exists(t)) {
-            anyConflict = true;
-        }
-    }
-    if (!anyConflict) {
+    // Beze změny názvů — projde, pokud v cíli nic nekoliduje.
+    const QStringList targets = filenaming::groupTargetPaths(filesInAction, targetFolder);
+    if (filenaming::firstExistingTarget(targets).isEmpty()) {
         return targets;
     }
 
@@ -310,20 +304,12 @@ QStringList MainWindow::resolveGroupTargetPaths(const QStringList &filesInAction
             return {};
         }
 
+        // Nový základ názvu se použije na celou skupinu; každý soubor si
+        // ponechá vlastní příponu, aby se dvojice dál párovala.
         const QString newBase = QFileInfo(conflictDialog.newFileName()).completeBaseName();
-        QStringList candidateTargets;
-        bool stillConflicts = false;
-        for (const QString &f : filesInAction) {
-            const QFileInfo fi(f);
-            const QString ext = fi.suffix();
-            const QString name = ext.isEmpty() ? newBase : newBase + QStringLiteral(".") + ext;
-            const QString t = targetFolder + QStringLiteral("/") + name;
-            candidateTargets.append(t);
-            if (QFile::exists(t)) {
-                stillConflicts = true;
-            }
-        }
-        if (!stillConflicts) {
+        const QStringList candidateTargets =
+            filenaming::groupTargetPaths(filesInAction, targetFolder, newBase);
+        if (filenaming::firstExistingTarget(candidateTargets).isEmpty()) {
             return candidateTargets;
         }
         QMessageBox::warning(this, tr("Název stále koliduje"),

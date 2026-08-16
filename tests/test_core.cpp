@@ -18,6 +18,7 @@
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/UpdateChecker.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
@@ -520,6 +521,88 @@ private slots:
 
         const QStringList found = CompanionFinder::findCompanions(dir.filePath("Photo.jpg"));
         QCOMPARE(companionNames(found), (QStringList{QStringLiteral("photo.mp4")}));
+    }
+
+    // ── FileNaming ───────────────────────────────────────────────────────────
+    // Sestavování cílových cest pro skupinu (aktivní soubor + jeho páry).
+    // Sdílí ho přejmenování i přesun; historicky tu byly obě chyby s párováním.
+    void fileNaming_groupKeepsOwnExtensions()
+    {
+        const QStringList files = {"/src/dovolena.jpg", "/src/dovolena.mp4"};
+        const QStringList targets =
+            filenaming::groupTargetPaths(files, "/cil", "leto");
+
+        QCOMPARE(targets.size(), 2);
+        QCOMPARE(targets.at(0), QStringLiteral("/cil/leto.jpg"));
+        QCOMPARE(targets.at(1), QStringLiteral("/cil/leto.mp4"));
+    }
+
+    void fileNaming_multipleDotsKeepOnlyLastAsSuffix()
+    {
+        // "dovolena.2024.01.jpg" — příponou je jen "jpg", zbytek patří k názvu.
+        // Kdyby se použilo completeSuffix(), vznikl by "leto.2024.01.jpg".
+        const QStringList targets = filenaming::groupTargetPaths(
+            {"/src/dovolena.2024.01.jpg"}, "/cil", "leto");
+
+        QCOMPARE(targets.size(), 1);
+        QCOMPARE(targets.at(0), QStringLiteral("/cil/leto.jpg"));
+    }
+
+    void fileNaming_fileWithoutExtension()
+    {
+        const QStringList targets =
+            filenaming::groupTargetPaths({"/src/README"}, "/cil", "poznamky");
+
+        QCOMPARE(targets.size(), 1);
+        QCOMPARE(targets.at(0), QStringLiteral("/cil/poznamky"));
+    }
+
+    void fileNaming_preservesOrderForIndexPairing()
+    {
+        // Volající páruje zdroj → cíl podle indexu, pořadí musí sedět.
+        const QStringList files = {"/src/a.mp4", "/src/a.jpg", "/src/a.png"};
+        const QStringList targets = filenaming::groupTargetPaths(files, "/cil", "b");
+
+        QCOMPARE(targets.size(), files.size());
+        QCOMPARE(targets.at(0), QStringLiteral("/cil/b.mp4"));
+        QCOMPARE(targets.at(1), QStringLiteral("/cil/b.jpg"));
+        QCOMPARE(targets.at(2), QStringLiteral("/cil/b.png"));
+    }
+
+    void fileNaming_emptyInputGivesEmptyOutput()
+    {
+        QVERIFY(filenaming::groupTargetPaths({}, "/cil", "x").isEmpty());
+        QVERIFY(filenaming::groupTargetPaths({}, "/cil").isEmpty());
+    }
+
+    void fileNaming_keepNamesVariantPreservesFileNames()
+    {
+        const QStringList files = {"/src/a.JPG", "/src/slozka/b.mp4"};
+        const QStringList targets = filenaming::groupTargetPaths(files, "/cil");
+
+        QCOMPARE(targets.at(0), QStringLiteral("/cil/a.JPG"));   // velikost písmen beze změny
+        QCOMPARE(targets.at(1), QStringLiteral("/cil/b.mp4"));   // jen jméno, ne podsložka
+    }
+
+    void fileNaming_firstExistingTargetDetectsCollision()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString taken = dir.filePath("obsazeno.mp4");
+        QVERIFY(writeFileOfSize(taken, 1));
+
+        // Kolize až u DRUHÉHO souboru skupiny (typicky párové video) —
+        // kontrola musí projít celou skupinu, ne jen aktivní soubor.
+        const QStringList targets = {dir.filePath("volno.jpg"), taken};
+        QCOMPARE(filenaming::firstExistingTarget(targets), taken);
+    }
+
+    void fileNaming_firstExistingTargetEmptyWhenNoCollision()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QStringList targets = {dir.filePath("a.jpg"), dir.filePath("a.mp4")};
+        QVERIFY(filenaming::firstExistingTarget(targets).isEmpty());
     }
 
     // ── CategoryManager ──────────────────────────────────────────────────────

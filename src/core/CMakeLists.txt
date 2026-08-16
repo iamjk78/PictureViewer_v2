@@ -10,6 +10,8 @@ set(CORE_SOURCES
     FolderNavigator.cpp
     CompanionFinder.hpp
     CompanionFinder.cpp
+    FileNaming.hpp
+    FileNaming.cpp
     PdfHandler.hpp
     PdfHandler.cpp
 )

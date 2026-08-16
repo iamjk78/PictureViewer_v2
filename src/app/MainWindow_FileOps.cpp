@@ -14,6 +14,7 @@
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
@@ -758,28 +759,25 @@ void MainWindow::renameCurrentImage()
 
     const QString folderPath = fileInfo.absolutePath();
 
-    // Cílové cesty pro CELOU skupinu spočítat a zkontrolovat na kolize
-    // PŘEDEM — nový základ jména je pro všechny stejný, přípona zůstává
-    // souboru vlastní. Kolize kteréhokoli z nich přeruší operaci ještě před
-    // prvním přejmenováním, aby skupina nezůstala rozpůlená.
-    QStringList targetPaths;
-    for (const QString &f : filesToRename) {
-        const QString suffix = QFileInfo(f).suffix();
-        const QString newFileName =
-            suffix.isEmpty() ? newBaseName : newBaseName + "." + suffix;
-        const QString targetPath = folderPath + "/" + newFileName;
-        if (QFile::exists(targetPath)) {
-            // U aktivního souboru je to prostá kolize jména; u companion
-            // souboru (video k obrázku apod.) by bez upřesnění hláška
-            // zmínila jinou příponu, než jakou uživatel psal do dialogu —
-            // matoucí bez vysvětlení, že jde o párový soubor.
-            const QString message = (f == currentPath)
-                ? tr("Soubor '%1' již existuje.").arg(newFileName)
-                : tr("Nelze přejmenovat: párový soubor '%1' už existuje.").arg(newFileName);
-            QMessageBox::warning(this, tr("Chyba"), message);
-            return;
-        }
-        targetPaths.append(targetPath);
+    // Cílové cesty pro CELOU skupinu a kontrola kolizí PŘEDEM — kolize
+    // kteréhokoli souboru přeruší operaci ještě před prvním přejmenováním,
+    // aby skupina nezůstala rozpůlená.
+    const QStringList targetPaths =
+        filenaming::groupTargetPaths(filesToRename, folderPath, newBaseName);
+    const QString collision = filenaming::firstExistingTarget(targetPaths);
+    if (!collision.isEmpty()) {
+        // U aktivního souboru je to prostá kolize jména; u párového souboru
+        // (video k obrázku apod.) by bez upřesnění hláška zmínila jinou
+        // příponu, než jakou uživatel psal do dialogu — matoucí bez
+        // vysvětlení, že jde o párový soubor.
+        const QString collisionName = QFileInfo(collision).fileName();
+        const bool isActiveFile =
+            targetPaths.indexOf(collision) == filesToRename.indexOf(currentPath);
+        QMessageBox::warning(this, tr("Chyba"),
+            isActiveFile
+                ? tr("Soubor '%1' již existuje.").arg(collisionName)
+                : tr("Nelze přejmenovat: párový soubor '%1' už existuje.").arg(collisionName));
+        return;
     }
 
     // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
