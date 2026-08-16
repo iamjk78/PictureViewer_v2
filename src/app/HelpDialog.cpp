@@ -424,6 +424,16 @@ void HelpDialog::showWhatsNew(QWidget *parent)
 {
     const QString html =
         "<h2>Co je nového</h2>"
+        "<h3>Verze 0.31</h3>"
+        "<ul>"
+        "<li><b>Oprava: aplikace se nemusela vůbec spustit</b> — po zavření si"
+        " za určitých okolností uložila rozložení oken, které ji při dalším"
+        " startu shodilo. Aplikace pak nešla spustit, dokud se ručně nesmazalo"
+        " uložené rozložení. Chyba se týkala verzí 0.29 a 0.30 a projevila se"
+        " podle konkrétního rozmístění panelů, takže ne u každého. Příčinou"
+        " bylo přesouvání PDF panelu do správného pořadí v nevhodný okamžik"
+        " při startu</li>"
+        "</ul>"
         "<h3>Verze 0.30</h3>"
         "<ul>"
         "<li><b>Aktualizace na sebe upozorní sama</b> — najde-li aplikace po"
