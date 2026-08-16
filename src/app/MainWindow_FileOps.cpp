@@ -724,17 +724,16 @@ void MainWindow::renameCurrentImage()
     }
 
     const QString currentPath = m_imagePaths.at(m_currentIndex);
-    QFileInfo fileInfo(currentPath);
+    const QFileInfo fileInfo(currentPath);
 
     // completeBaseName(), ne baseName() — baseName() vrací text po PRVNÍ tečku,
     // zatímco suffix() po POSLEDNÍ. U "dovolena.2024.01.jpg" by dvojice
     // ("dovolena", "jpg") při složení zahodila prostřední část názvu. Stejnou
     // konvenci používá i CompanionFinder pro párování souborů.
     const QString baseName = fileInfo.completeBaseName();
-    const QString suffix = fileInfo.suffix();
 
     bool ok = false;
-    QString newBaseName = QInputDialog::getText(
+    const QString newBaseName = QInputDialog::getText(
         this,
         tr("Přejmenování obrázku"),
         tr("Nový název:"),
@@ -747,36 +746,83 @@ void MainWindow::renameCurrentImage()
         return;
     }
 
-    const QString folderPath = fileInfo.absolutePath();
-    const QString newFileName =
-        suffix.isEmpty() ? newBaseName : newBaseName + "." + suffix;
-    const QString newPath = folderPath + "/" + newFileName;
-
-    if (QFile::exists(newPath)) {
-        QMessageBox::warning(this, tr("Chyba"), tr("Soubor '%1' již existuje.").arg(newFileName));
+    // Při zapnutém párování (Nastavení → Přesouvat/mazat i párové soubory)
+    // musí přejmenování postihnout celou skupinu (obrázek + jeho video se
+    // stejným základem jména) — jinak by po přejmenování jen aktivního
+    // souboru pár osiřel a přestal se párovat.
+    bool cancelled = false;
+    const QStringList filesToRename = resolveCompanionSet(currentPath, tr("přejmenovat"), cancelled);
+    if (cancelled) {
         return;
+    }
+
+    const QString folderPath = fileInfo.absolutePath();
+
+    // Cílové cesty pro CELOU skupinu spočítat a zkontrolovat na kolize
+    // PŘEDEM — nový základ jména je pro všechny stejný, přípona zůstává
+    // souboru vlastní. Kolize kteréhokoli z nich přeruší operaci ještě před
+    // prvním přejmenováním, aby skupina nezůstala rozpůlená.
+    QStringList targetPaths;
+    for (const QString &f : filesToRename) {
+        const QString suffix = QFileInfo(f).suffix();
+        const QString newFileName =
+            suffix.isEmpty() ? newBaseName : newBaseName + "." + suffix;
+        const QString targetPath = folderPath + "/" + newFileName;
+        if (QFile::exists(targetPath)) {
+            // U aktivního souboru je to prostá kolize jména; u companion
+            // souboru (video k obrázku apod.) by bez upřesnění hláška
+            // zmínila jinou příponu, než jakou uživatel psal do dialogu —
+            // matoucí bez vysvětlení, že jde o párový soubor.
+            const QString message = (f == currentPath)
+                ? tr("Soubor '%1' již existuje.").arg(newFileName)
+                : tr("Nelze přejmenovat: párový soubor '%1' už existuje.").arg(newFileName);
+            QMessageBox::warning(this, tr("Chyba"), message);
+            return;
+        }
+        targetPaths.append(targetPath);
     }
 
     // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
     // znovu z nové cesty.
     const bool videoWasPlaying = stopVideoIfPlaying();
 
-    if (tryWithRetry([&] { return QFile::rename(currentPath, newPath); })) {
-        if (m_categoryManager) {
-            m_categoryManager->renameImagePath(currentPath, newPath);
+    bool activeRenamed = false;
+    QString activeNewPath;
+    QStringList failed;
+
+    for (int i = 0; i < filesToRename.size(); ++i) {
+        const QString &oldPath = filesToRename.at(i);
+        const QString &newPath = targetPaths.at(i);
+
+        if (tryWithRetry([&] { return QFile::rename(oldPath, newPath); })) {
+            if (m_categoryManager) {
+                m_categoryManager->renameImagePath(oldPath, newPath);
+            }
+            const int idx = m_imagePaths.indexOf(oldPath);
+            if (idx >= 0) {
+                m_imagePaths[idx] = newPath;
+            }
+            m_thumbnailPanel->updateImagePath(oldPath, newPath);
+            if (oldPath == currentPath) {
+                activeRenamed = true;
+                activeNewPath = newPath;
+                updateStatus(newPath);
+            }
+        } else {
+            failed.append(QFileInfo(oldPath).fileName());
         }
-        m_imagePaths[m_currentIndex] = newPath;
-        m_thumbnailPanel->updateImagePath(currentPath, newPath);
-        updateStatus(newPath);
-        m_statusLabel->setText(tr("Obrázek přejmenován na '%1'.").arg(newFileName));
-        if (videoWasPlaying) {
-            m_videoPlayer->playFile(newPath);
-        }
+    }
+
+    if (failed.isEmpty()) {
+        m_statusLabel->setText(
+            tr("Přejmenováno na '%1'.").arg(QFileInfo(targetPaths.first()).fileName()));
     } else {
-        m_statusLabel->setText(tr("Nepodařilo se přejmenovat obrázek."));
-        if (videoWasPlaying) {
-            m_videoPlayer->playFile(currentPath);
-        }
+        m_statusLabel->setText(
+            tr("Nepodařilo se přejmenovat: %1").arg(failed.join(QStringLiteral(", "))));
+    }
+
+    if (videoWasPlaying) {
+        m_videoPlayer->playFile(activeRenamed ? activeNewPath : currentPath);
     }
 }
 
