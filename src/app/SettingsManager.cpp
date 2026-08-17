@@ -121,6 +121,17 @@ SettingsManager::SettingsManager(const QString &path, const QString &profileName
         m_settings->setValue(kSettingsVersionKey, 2);
     }
 
+    // Migrace v3: verze 0.29–0.31 po restoreState() přesouvaly PDF toolbar na
+    // konec oblasti, což poškodilo interní layout a shazovalo aplikaci při
+    // startu (viz komentář v MainWindow). Uložený stav z těchto verzí může být
+    // poškozený a hlavně může mít PDF toolbar na špatné pozici. Zahodit ho —
+    // správné pořadí pak dá pořadí konstrukce toolbarů a při zavření se uloží
+    // už zdravý stav.
+    if (settingsVersion() < 3) {
+        m_settings->remove(kWindowStateKey);
+        m_settings->setValue(kSettingsVersionKey, 3);
+    }
+
     m_settings->sync();
 }
 

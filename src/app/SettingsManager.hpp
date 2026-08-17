@@ -139,7 +139,7 @@ public:
     // ── Settings version ─────────────────────────────────────────────────────
     // Zvyšte kCurrentSettingsVersion při každé změně formátu nastavení
     // a přidejte migraci do SettingsManager konstruktoru.
-    static constexpr int kCurrentSettingsVersion = 2;
+    static constexpr int kCurrentSettingsVersion = 3;
     int settingsVersion() const;
 
     // ── Window geometry ───────────────────────────────────────────────────────

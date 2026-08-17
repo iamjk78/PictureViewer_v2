@@ -312,22 +312,18 @@ MainWindow::MainWindow(QWidget *parent)
         insertToolBarBreak(toolbar);
     }
 
-    // PDF toolbar musí být VŽDY úplně dole, pod všemi ostatními. Pořadí z
-    // konstrukce (přidán jako poslední) na to nestačí — restoreState() výše
-    // obnoví uložené rozložení, které pořadí přebíjí a umí PDF toolbar posunout
-    // klidně nad hlavní. Opětovné addToolBar() ho přesune na konec oblasti.
+    // POZOR: po restoreState() se s toolbary NESMÍ hýbat — žádné addToolBar()
+    // ani removeToolBar() pro změnu pořadí. Přesun toolbaru v layoutu právě
+    // obnoveném z uloženého stavu nechá v QToolBarAreaLayout viset neplatnou
+    // položku a aplikace spadne při výpočtu rozměrů okna
+    // (QToolBarAreaLayoutInfo::sizeHint()). Odložení přes QTimer::singleShot()
+    // to NEŘEŠÍ — jen posune pád za show(), takže se okno na chvíli ukáže
+    // a teprve pak aplikace zmizí (tak se to projevilo na Windows v 0.31).
     //
-    // MUSÍ být odloženo přes singleShot — voláno rovnou tady (tj. ještě před
-    // show()) sestřelí aplikaci hned při startu uvnitř Qt: přesun toolbaru
-    // v layoutu právě obnoveném z restoreState() nechá v QToolBarAreaLayout
-    // viset neplatnou položku a první výpočet rozměrů okna spadne na
-    // QToolBarAreaLayoutInfo::sizeHint() (SIGSEGV). Navíc se to samo
-    // zacyklovalo — aplikace si při zavření uložila stav, který ji při dalším
-    // startu znovu shodil. Reprodukováno a ověřeno 2026-08-16.
-    QTimer::singleShot(0, this, [this] {
-        addToolBar(Qt::TopToolBarArea, m_pdfToolbar);
-        insertToolBarBreak(m_pdfToolbar);
-    });
+    // Správné pořadí (PDF toolbar poslední) zajišťuje pořadí konstrukce
+    // v setup*Toolbar() výše. Uložený stav ze starších verzí, který pořadí
+    // přebíjel, se jednorázově zahodí migrací nastavení na verzi 3
+    // (viz SettingsManager). Reprodukováno a ověřeno 2026-08-16.
 
     // restoreState() by mohlo (podle staré uložené geometrie okna) přepsat
     // viditelnost sekundárních toolbarů jinak, než odpovídá aktuálně
