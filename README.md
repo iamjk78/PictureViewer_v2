@@ -27,13 +27,16 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
 - **Rotate image** by 90° (visual only; `[`/`L` left, `]` right)
 - **Crop** — select an area with the mouse and the view is cropped to it
 - **Screen region capture** — works outside the application and across all
-  monitors; select an area and the capture opens in the app (stored temporarily).
-  macOS uses the system `screencapture`, other platforms a custom overlay
+  monitors; select an area and the capture opens in the app (stored temporarily);
+  stops any playing video, slideshow or displayed PDF so the capture is visible
+  right away. macOS uses the system `screencapture`, other platforms a custom
+  overlay
 - **Resizable thumbnail panel** — drag its right edge; thumbnails scale
   automatically and the width is remembered between runs
 - **Save / Save as** — store an edited image (crop, rotation) as JPEG; Save
   offers overwriting the original or renaming, Save as opens a dialog for the
-  name and target folder
+  name and target folder; a screen capture gets a suggested name based on
+  capture time, and a name clash offers overwrite or rename in place
 - **Restore last file** — moves files sent to the Delete folder back where they
   came from (LIFO — most recent first)
 - **Reload folder** (F5) — rescans the folder and picks up added/removed files
@@ -81,6 +84,9 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
   the default size when the screen resolution differs
 - **Consistent toolbar look** — custom colour icons, uniform button size, no
   borders or separator lines; the PDF toolbar always sits below the others
+- **Dock menu (macOS)** — right-click or long-press the Dock icon for
+  "Spustit další" (Launch another), which starts a new instance even while
+  one is already running
 - Unit tests for the core (Qt Test)
 
 ## Building

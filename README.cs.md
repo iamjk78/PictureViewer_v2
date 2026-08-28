@@ -21,13 +21,16 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
 - **Ořez obrázku** — výběr oblasti myší, zobrazení se ořízne na vybranou část
 - **Snímek výřezu obrazovky** — funguje i mimo aplikaci a napříč všemi monitory;
-  označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky).
+  označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky);
+  ukončí přitom přehrávané video, slideshow i zobrazené PDF, aby byl vidět hned.
   macOS používá systémový `screencapture`, ostatní platformy vlastní overlay
 - **Přizpůsobitelná šířka panelu náhledů** — táhněte pravý okraj panelu doleva/doprava;
   miniatury se automaticky přizpůsobí šířce; nastavení se pamatuje mezi spuštěními
 - **Uložit / Uložit jako** — uložení upraveného obrázku (ořez, otočení) jako JPEG;
   Uložit nabídne přepsání originálu nebo přejmenování; Uložit jako otevře dialog
-  pro výběr názvu a cílové složky (originál nebo oblíbená)
+  pro výběr názvu a cílové složky (originál nebo oblíbená); snímek obrazovky
+  dostane navržený název podle času pořízení a při kolizi jména nabídne
+  přepsání nebo přejmenování na místě
 - **Vrátit poslední soubor** — vrácení souborů přesunutých do Delete zpět do
   původní složky (LIFO — nejnovější jako první)
 - **Obnovit složku** (F5) — znovu naskenuje složku a zobrazí přidané/odebrané soubory
@@ -74,6 +77,8 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   obrazovky se spustí v předvolené velikosti
 - **Jednotný vzhled toolbarů** — vlastní barevné ikony, jednotná velikost tlačítek,
   bez orámování a oddělovacích čar; PDF toolbar je vždy pod ostatními
+- **Dokovací nabídka (macOS)** — pravý klik nebo dlouhý stisk ikony v Docku
+  nabídne „Spustit další“, které otevře novou instanci i přes to, že už jedna běží
 - Jednotkové testy jádra (Qt Test)
 
 ## Buildování
