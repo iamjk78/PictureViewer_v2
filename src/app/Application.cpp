@@ -1,4 +1,5 @@
 #include "app/Application.hpp"
+#include "app/DockMenu.hpp"
 #include "app/MainWindow.hpp"
 
 #include <QEvent>
@@ -110,6 +111,10 @@ Application::Application(int &argc, char **argv)
     // Workaround for macOS 26 crash: NSImageSymbolRepProvider crashes when
     // QStyleSheetStyle requests the SF Symbol for the toolbar extension button.
     m_qtApplication->setStyle(new ToolbarExtensionStyle(m_qtApplication->style()));
+
+    // Dokovací nabídka „Spustit další" — na ostatních platformách no-op.
+    // QApplication (a tedy NSApp na macOS) už v tuto chvíli existuje.
+    setupDockMenu();
 
     m_mainWindow = std::make_unique<MainWindow>();
     m_qtApplication->setMainWindow(m_mainWindow.get());
