@@ -109,6 +109,9 @@ private slots:
     // Tiše zastaví video, pokud právě běží. Vrací true, když běželo —
     // jediné místo pro „uvolni soubor před manipulací" logiku.
     bool stopVideoIfPlaying();
+    // Zastaví slideshow, pokud právě běží, a vrátí tlačítko/ikonu do klidového
+    // stavu — samotné SlideshowController::stop() ikonu nepřepíná.
+    void stopSlideshowIfRunning();
     void showImageContextMenu(const QPoint &globalPos);
     void onScreenshotCapture();   // zachytit výřez obrazovky a zobrazit ho v aplikaci
 
@@ -404,9 +407,15 @@ private:
     void onSaveAsImage();
     void updateSaveButtonStates();
     void saveImageToPath(const QString &targetPath);
-    // Zobrazí dialog pro zadání názvu a výběr cílové složky.
-    // Vrací absolutní cestu k cílovému souboru, nebo prázdný řetězec při zrušení.
-    QString runSaveAsDialog(const QString &originalPath, const QString &targetExtension);
+    // Zobrazí dialog pro zadání názvu a výběr cílové složky. Kolizi jména
+    // v cílové složce řeší smyčkou (Přepsat / Přejmenovat / Zrušit), takže
+    // funkce vrátí buď volnou cestu, nebo prázdný řetězec při zrušení —
+    // volající se už o kolizi starat nemusí.
+    // defaultBaseName: přebije název odvozený z originalPath (prázdné =
+    // původní chování). Používá se pro snímek obrazovky, který žádný
+    // "originál" nemá — viz onSaveAsImage().
+    QString runSaveAsDialog(const QString &originalPath, const QString &targetExtension,
+                            const QString &defaultBaseName = QString());
 };
 
 } // namespace pictureviewer

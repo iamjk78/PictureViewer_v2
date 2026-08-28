@@ -775,6 +775,23 @@ void MainWindow::onScreenshotCapture()
         return;
     }
 
+    // Nový snímek se má zobrazit VŽDY, bez ohledu na to, co bylo v aplikaci
+    // právě aktivní — jinak zůstal captured obrázek tiše napsaný do skrytého
+    // ImageView (video/PDF toolbar/Galerie zůstaly na svém) a screenshot
+    // nebyl vidět, dokud uživatel danou funkci sám neukončil.
+    stopSlideshowIfRunning();
+    if (stopVideoIfPlaying()) {
+        m_centralStack->setCurrentWidget(m_imageView);
+        if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(true);
+        if (m_rotateRightAction) m_rotateRightAction->setEnabled(true);
+        if (m_cropAction)        m_cropAction->setEnabled(true);
+        scheduleVideoThumbnailResume();
+    }
+    if (m_galleryGridActive) {
+        leaveGalleryGrid();
+    }
+    updatePdfToolbarVisibility(false);
+
     m_imageView->setImage(result.image);
     m_isScreenshot  = true;
     m_imageModified = true;

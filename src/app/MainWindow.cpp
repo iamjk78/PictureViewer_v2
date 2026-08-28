@@ -869,6 +869,16 @@ void MainWindow::toggleSlideshow()
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 }
 
+void MainWindow::stopSlideshowIfRunning()
+{
+    if (!m_slideshowController->isRunning()) {
+        return;
+    }
+    m_slideshowController->stop();
+    m_toggleSlideshowAction->setIcon(QIcon(QStringLiteral(":/icons/icon_play_slideshow.png")));
+    m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
+}
+
 bool MainWindow::showDeleteConfirmationDialog()
 {
     QString title;
@@ -895,10 +905,13 @@ bool MainWindow::showDeleteConfirmationDialog()
     return result == QMessageBox::Yes;
 }
 
-QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &targetExtension)
+QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &targetExtension,
+                                    const QString &defaultBaseName)
 {
     const QString origDir  = QFileInfo(originalPath).absolutePath();
-    const QString origBase = QFileInfo(originalPath).completeBaseName();
+    const QString origBase = defaultBaseName.isEmpty()
+        ? QFileInfo(originalPath).completeBaseName()
+        : defaultBaseName;
 
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Uložit jako"));
@@ -956,26 +969,51 @@ QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &
     if (baseName.isEmpty()) {
         baseName = origBase;
     }
-    const QFileInfo typed(baseName);
-    if (typed.suffix().compare(targetExtension, Qt::CaseInsensitive) == 0) {
-        baseName = typed.completeBaseName();
-    }
 
-    const QString targetName = baseName + QStringLiteral(".") + targetExtension;
-    QString targetPath = QDir(selectedDir).filePath(targetName);
-
-    // Pokud cílový soubor existuje, zeptat se
-    if (QFile::exists(targetPath)) {
-        const int ret = QMessageBox::question(
-            this, tr("Soubor existuje"),
-            tr("Soubor '%1' již existuje.\nChcete ho přepsat?").arg(targetName),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        if (ret != QMessageBox::Yes) {
-            return {};
+    // Kolize jména v cílové složce: nabídnout přepsání, nebo přejmenování na
+    // místě (bez nutnosti projít celý dialog znovu) — dokud nevznikne volná
+    // cesta, nebo uživatel nezruší.
+    while (true) {
+        const QFileInfo typed(baseName);
+        if (typed.suffix().compare(targetExtension, Qt::CaseInsensitive) == 0) {
+            baseName = typed.completeBaseName();
         }
-    }
 
-    return targetPath;
+        const QString targetName = baseName + QStringLiteral(".") + targetExtension;
+        const QString targetPath = QDir(selectedDir).filePath(targetName);
+
+        if (!QFile::exists(targetPath)) {
+            return targetPath;
+        }
+
+        QMessageBox box(this);
+        box.setWindowTitle(tr("Soubor existuje"));
+        box.setText(tr("Soubor '%1' již existuje.").arg(targetName));
+        box.setIcon(QMessageBox::Question);
+        QPushButton *btnOverwrite = box.addButton(tr("Přepsat"), QMessageBox::AcceptRole);
+        QPushButton *btnRename    = box.addButton(tr("Přejmenovat"), QMessageBox::ActionRole);
+        box.addButton(tr("Zrušit"), QMessageBox::RejectRole);
+        box.setDefaultButton(btnRename);
+        box.exec();
+
+        if (box.clickedButton() == btnOverwrite) {
+            return targetPath;
+        }
+        if (box.clickedButton() != btnRename) {
+            return {};   // Zrušit
+        }
+
+        bool ok = false;
+        const QString newName = QInputDialog::getText(
+            this, tr("Přejmenovat"), tr("Nový název:"),
+            QLineEdit::Normal, baseName, &ok);
+        if (!ok || newName.trimmed().isEmpty()) {
+            return {};   // Zrušeno i z dialogu přejmenování
+        }
+        baseName = newName.trimmed();
+        // Smyčka pokračuje — s novým baseName se cílová cesta přepočítá
+        // a ověří znovu na začátku.
+    }
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)

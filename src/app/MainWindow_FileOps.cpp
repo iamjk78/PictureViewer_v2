@@ -23,6 +23,7 @@
 #include <QApplication>
 #include <QAbstractButton>
 #include <QBuffer>
+#include <QDateTime>
 #include <QDebug>
 #include <QDialog>
 #include <QDir>
@@ -1039,7 +1040,12 @@ void MainWindow::updateSaveButtonStates()
     const bool hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
     // Podle přípony aktuální cesty, ne podle obsahu ImageView — ten se při
     // přechodu na video nemaže a dál by vracel poslední zobrazený obrázek.
-    const bool isVideo = hasCurrentFile && isVideoFile(
+    // m_isScreenshot ale musí mít přednost: snímek obrazovky se dá pořídit
+    // I NAD přehrávaným videem (viz onScreenshotCapture()) — m_currentIndex
+    // pak dál ukazuje na cestu videa, i když ImageView zobrazuje něco úplně
+    // jiného. Bez téhle výjimky by "isVideo" vyšlo true a Uložit/Uložit jako
+    // by pracovaly s cestou videa, ne se snímkem.
+    const bool isVideo = !m_isScreenshot && hasCurrentFile && isVideoFile(
         QStringLiteral(".") + QFileInfo(m_imagePaths.at(m_currentIndex)).suffix());
 
     const bool hasStaticImage =
@@ -1048,9 +1054,11 @@ void MainWindow::updateSaveButtonStates()
         !m_imageView->displayedImage().isNull() &&
         !m_imageView->isPdfLoaded();
 
-    // Uložit (přepsat originál) nedává u videa smysl — žádné úpravy se
-    // neprovádí. Uložit jako naopak ano: uloží kopii videa pod novým názvem.
-    if (m_saveAction)   m_saveAction->setEnabled(hasStaticImage && m_imageModified);
+    // Uložit (přepsat originál) nedává smysl u videa (žádné úpravy se
+    // neprovádí) ANI u snímku obrazovky — ten nemá žádný "originál" v
+    // m_imagePaths, který by šlo přepsat; přepsal by se jím omylem soubor,
+    // který byl zrovna otevřený (viz komentář výše). Jen Uložit jako.
+    if (m_saveAction)   m_saveAction->setEnabled(hasStaticImage && m_imageModified && !m_isScreenshot);
     if (m_saveAsAction) m_saveAsAction->setEnabled(hasStaticImage || isVideo);
 }
 
@@ -1069,6 +1077,12 @@ void MainWindow::saveImageToPath(const QString &targetPath)
 void MainWindow::onSaveImage()
 {
     if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+        return;
+    }
+    // Obranná pojistka — tlačítko je pro snímek obrazovky vždy neaktivní
+    // (viz updateSaveButtonStates()), ale "přepsat" cestu z m_imagePaths by
+    // u screenshotu přepsalo cizí, náhodně otevřený soubor. Radši nikdy.
+    if (m_isScreenshot) {
         return;
     }
     const QString currentPath = m_imagePaths.at(m_currentIndex);
@@ -1111,7 +1125,12 @@ void MainWindow::onSaveAsImage()
     const QFileInfo currentInfo(currentPath);
     const QString suffix = QStringLiteral(".") + currentInfo.suffix();
 
-    if (isVideoFile(suffix)) {
+    // !m_isScreenshot — snímek obrazovky se dá pořídit i nad přehrávaným
+    // videem (viz onScreenshotCapture()); m_currentIndex pak dál ukazuje na
+    // cestu videa, i když ImageView zobrazuje snímek. Bez téhle výjimky by se
+    // tu znovu zkopíroval PŮVODNÍ VIDEOSOUBOR pod novým jménem místo uložení
+    // toho, co je doopravdy zobrazené.
+    if (!m_isScreenshot && isVideoFile(suffix)) {
         // Video se neupravuje — Uložit jako je tu čistá duplikace souboru pod
         // novým názvem, ne re-enkódování přes ImageView (to u videa nic
         // nezobrazuje, viz updateSaveButtonStates()).
@@ -1129,7 +1148,16 @@ void MainWindow::onSaveAsImage()
         return;
     }
 
-    const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"));
+    // Snímek obrazovky nemá žádný smysluplný "původní název" — currentPath je
+    // jen cesta naposledy navigovaného souboru (viz komentář výše), ne soubor
+    // snímku. Navrhnout místo toho název podle typu a času pořízení. ':' se
+    // v názvu vynechává — na Windows je v souborech zakázaný znak.
+    const QString defaultBaseName = m_isScreenshot
+        ? tr("Screenshot %1").arg(
+              QDateTime::currentDateTime().toString(QStringLiteral("HH-mm dd.MM.yyyy")))
+        : QString();
+
+    const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"), defaultBaseName);
     if (!targetPath.isEmpty()) {
         saveImageToPath(targetPath);
         const QString targetDir = QFileInfo(targetPath).absolutePath();
