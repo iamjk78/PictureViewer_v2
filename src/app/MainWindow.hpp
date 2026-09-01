@@ -2,6 +2,7 @@
 
 #include "app/ProfileManager.hpp"
 #include "app/ToolbarStyle.hpp"
+#include "core/ContentState.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageMetadataReader.hpp"
@@ -400,12 +401,33 @@ private:
     QAction *m_saveAction = nullptr;
     QAction *m_saveAsAction = nullptr;
     bool m_imageModified = false;
-    bool m_isScreenshot  = false;  // setImage() bez souboru — kopírovat jako JPEG
+
+    // ── Stav zobrazeného obsahu → stav akcí ──────────────────────────────────
+    // Druh obsahu, který je právě vidět. Jediný zdroj pravdy pro stav VŠECH
+    // akcí; dřív se odvozoval zvlášť na pěti místech z přípony souboru na
+    // m_currentIndex, což se rozcházelo se skutečně zobrazeným obsahem
+    // (snímek obrazovky nad videem, prázdná složka, snímek stránky PDF).
+    contentstate::ContentKind m_contentKind = contentstate::ContentKind::None;
+    // Procházení zamčené spuštěním videa klávesou G (viz disableImageBrowsing).
+    bool m_browsingLocked = false;
+
+    // Zobrazený obsah nemá vlastní soubor na disku (snímek obrazovky nebo
+    // stránky PDF) — akce nad souborem by sáhly na cizí, neviditelný soubor.
+    bool isCapture() const { return m_contentKind == contentstate::ContentKind::Capture; }
+
+    // Přepne druh obsahu a hned promítne důsledky do celého UI.
+    void setContentKind(contentstate::ContentKind kind);
+    // Uvede aplikaci do prázdného stavu (žádný zobrazitelný obsah) — zastaví
+    // video i slideshow, vrátí centrální plochu na ImageView, uklidí PDF
+    // toolbar a přepočítá stav akcí. Jediné místo pro „nemám co zobrazit".
+    void showEmptyContent(const QString &message);
+    // Odvodí stav všech akcí z m_contentKind a aplikuje ho. Volá se z KAŽDÉHO
+    // přechodu mezi obsahy — jiné místo stav akcí měnit nemá.
+    void applyActionStates();
 
     // ── Ukládání obrázku ─────────────────────────────────────────────────────
     void onSaveImage();
     void onSaveAsImage();
-    void updateSaveButtonStates();
     void saveImageToPath(const QString &targetPath);
     // Zobrazí dialog pro zadání názvu a výběr cílové složky. Kolizi jména
     // v cílové složce řeší smyčkou (Přepsat / Přejmenovat / Zrušit), takže

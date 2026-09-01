@@ -18,6 +18,7 @@
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/UpdateChecker.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/ContentState.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
@@ -1299,6 +1300,194 @@ private slots:
         QVERIFY(!UpdateChecker::isSafeInstallerName("setup.exe.zip"));   // jiná přípona
         QVERIFY(!UpdateChecker::isSafeInstallerName(""));
         QVERIFY(!UpdateChecker::isSafeInstallerName(QString(200, QLatin1Char('a')) + ".exe"));
+    }
+
+    // ── Matice „druh obsahu × stav akcí" ────────────────────────────────────
+    //
+    // Pokrývá celou tabulku, kvůli které modul vznikl. Každý případ tu je
+    // proto, že v aplikaci reálně nastával a choval se špatně — komentáře
+    // říkají který.
+
+    void actionStates_noContent_everythingOff()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;   // None, žádný soubor, prázdný seznam
+        const ActionStates s = deriveActionStates(st);
+
+        QVERIFY(!s.previous); QVERIFY(!s.next); QVERIFY(!s.slideshow);
+        QVERIFY(!s.rotate);   QVERIFY(!s.crop);
+        QVERIFY(!s.save);     QVERIFY(!s.saveAs);
+        QVERIFY(!s.deleteFile); QVERIFY(!s.rename);
+        QVERIFY(!s.moveToFolder); QVERIFY(!s.labels);
+        QVERIFY(!s.pdfToolbar);  QVERIFY(!s.fitControls);
+    }
+
+    void actionStates_image_allowsEditAndFileOps()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Image;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        const ActionStates s = deriveActionStates(st);
+
+        QVERIFY(s.rotate); QVERIFY(s.crop); QVERIFY(s.saveAs);
+        QVERIFY(!s.save);                       // zatím neupravený
+        QVERIFY(s.deleteFile); QVERIFY(s.rename);
+        QVERIFY(s.moveToFolder); QVERIFY(s.labels);
+        QVERIFY(s.previous); QVERIFY(s.next); QVERIFY(s.slideshow);
+        QVERIFY(!s.pdfToolbar); QVERIFY(s.fitControls);
+
+        st.modified = true;
+        QVERIFY(deriveActionStates(st).save);   // po úpravě jde přepsat originál
+    }
+
+    void actionStates_animatedGif_noEditing()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::AnimatedGif;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        st.modified = true;   // i kdyby se příznak omylem nastavil
+        const ActionStates s = deriveActionStates(st);
+
+        // Otočení ani ořez u animace neprojdou (QMovie přemaluje další snímek),
+        // takže tlačítka nesmí být aktivní — a hlavně NESMÍ jít uložit:
+        // Uložit zapisuje JPEG pod původní příponou, takže by animaci zničilo.
+        QVERIFY(!s.rotate); QVERIFY(!s.crop);
+        QVERIFY(!s.save);   QVERIFY(!s.saveAs);
+        // Soubor jako takový se ale normálně smaže/přejmenuje/oštítkuje.
+        QVERIFY(s.deleteFile); QVERIFY(s.rename);
+        QVERIFY(s.moveToFolder); QVERIFY(s.labels);
+        QVERIFY(s.fitControls);
+    }
+
+    void actionStates_pdf_noEditingNoSave()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Pdf;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        st.modified = true;
+        const ActionStates s = deriveActionStates(st);
+
+        // Ořez PDF stránky dřív šel provést, ale Uložit i Uložit jako zůstaly
+        // neaktivní — uživatel viděl oříznutou stránku, kterou nešlo uložit.
+        QVERIFY(!s.rotate); QVERIFY(!s.crop);
+        QVERIFY(!s.save);   QVERIFY(!s.saveAs);
+        QVERIFY(s.pdfToolbar);
+        QVERIFY(!s.fitControls);   // zoom v % u PDF nic neznamená
+        QVERIFY(s.deleteFile); QVERIFY(s.rename);
+    }
+
+    void actionStates_video_copyOnlyNoEditing()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Video;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        const ActionStates s = deriveActionStates(st);
+
+        QVERIFY(!s.rotate); QVERIFY(!s.crop);
+        QVERIFY(!s.save);            // není co přepisovat
+        QVERIFY(s.saveAs);           // kopie souboru pod novým názvem
+        QVERIFY(!s.pdfToolbar); QVERIFY(!s.fitControls);
+        QVERIFY(s.deleteFile); QVERIFY(s.rename);   // fungují i za přehrávání
+    }
+
+    void actionStates_capture_neverTouchesTheFileUnderneath()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Capture;
+        st.hasCurrentFile = true;   // index dál ukazuje na soubor pod snímkem
+        st.hasFiles = true;
+        st.modified = true;
+        const ActionStates s = deriveActionStates(st);
+
+        // Jádro chyby, kvůli které modul vznikl: snímek obrazovky pořízený nad
+        // videem/obrázkem nechává m_currentIndex na PŮVODNÍM souboru. Mazání,
+        // přejmenování, přesun ani štítky se ho nesmí dotknout — uživatel ten
+        // soubor nevidí a u mazání je zásah nevratný.
+        QVERIFY(!s.deleteFile); QVERIFY(!s.rename);
+        QVERIFY(!s.moveToFolder); QVERIFY(!s.labels);
+        // Uložit (přepsat originál) taky ne — přepsalo by cizí soubor.
+        QVERIFY(!s.save);
+        // Uložit jako naopak ANO, to je jediná cesta, jak snímek zachovat.
+        QVERIFY(s.saveAs);
+        QVERIFY(s.rotate); QVERIFY(s.crop);   // snímek je statický rastr
+        QVERIFY(!s.pdfToolbar); QVERIFY(s.fitControls);
+    }
+
+    void actionStates_captureWithoutFolder_stillSaveable()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Capture;
+        st.hasCurrentFile = false;   // hned po startu, žádná složka
+        st.hasFiles = false;
+        const ActionStates s = deriveActionStates(st);
+
+        // Dřív se Uložit jako řídilo platností indexu, takže snímek pořízený
+        // bez otevřené složky nešel uložit vůbec.
+        QVERIFY(s.saveAs);
+        QVERIFY(!s.deleteFile); QVERIFY(!s.rename);
+        QVERIFY(!s.previous); QVERIFY(!s.next);
+    }
+
+    void actionStates_browsingLocked_disablesNavigationAndFileOps()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Video;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        st.browsingLocked = true;   // video spuštěné klávesou G
+        const ActionStates s = deriveActionStates(st);
+
+        QVERIFY(!s.previous); QVERIFY(!s.next); QVERIFY(!s.slideshow);
+        QVERIFY(!s.deleteFile); QVERIFY(!s.rename); QVERIFY(!s.moveToFolder);
+        QVERIFY(s.saveAs);   // uložení kopie zamčení procházení nevadí
+    }
+
+    void actionStates_emptyFolder_noStaleButtons()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::None;
+        st.hasCurrentFile = false;
+        st.hasFiles = false;
+        st.modified = true;   // zbytek po předchozím obsahu
+        const ActionStates s = deriveActionStates(st);
+
+        // Přechod do prázdné složky dřív stav tlačítek vůbec nepřepočítal —
+        // Uložit jako zůstalo aktivní jako mrtvé tlačítko a PDF toolbar visel.
+        QVERIFY(!s.save); QVERIFY(!s.saveAs);
+        QVERIFY(!s.pdfToolbar); QVERIFY(!s.fitControls);
+        QVERIFY(!s.deleteFile); QVERIFY(!s.rename);
+    }
+
+    // Uložit (přepsat originál) smí být aktivní JEN u upraveného obrázku ze
+    // složky — pro každý jiný druh obsahu je to buď nemožné, nebo destruktivní.
+    void actionStates_saveOverwriteOnlyForModifiedImage()
+    {
+        using namespace pictureviewer::contentstate;
+        const ContentKind kinds[] = {
+            ContentKind::None, ContentKind::Image, ContentKind::AnimatedGif,
+            ContentKind::Pdf,  ContentKind::Video, ContentKind::Capture,
+        };
+        for (ContentKind kind : kinds) {
+            ContentStatus st;
+            st.kind = kind;
+            st.hasCurrentFile = true;
+            st.hasFiles = true;
+            st.modified = true;
+            const bool expected = (kind == ContentKind::Image);
+            QCOMPARE(deriveActionStates(st).save, expected);
+        }
     }
 };
 

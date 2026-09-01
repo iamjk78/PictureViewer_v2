@@ -8,6 +8,7 @@
 #include "app/PredefinedColors.hpp"
 #include "app/ScreenCapture.hpp"
 #include "app/SettingsManager.hpp"
+#include "core/ImageFormats.hpp"
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/ToolbarStyle.hpp"
@@ -238,7 +239,7 @@ void MainWindow::setupToolbar()
 
     connect(m_imageView, &ImageView::imageModified, this, [this]() {
         m_imageModified = true;
-        updateSaveButtonStates();
+        applyActionStates();
     });
 
     m_deletePictureAction->setIcon(QIcon(QStringLiteral(":/icons/icon_delete_current.png")));
@@ -753,10 +754,8 @@ void MainWindow::onPdfScreenshot()
         return;
     }
     m_imageView->setImage(img);
-    m_isScreenshot  = true;
     m_imageModified = true;
-    updateSaveButtonStates();
-    updatePdfToolbarVisibility(false);
+    setContentKind(contentstate::ContentKind::Capture);
     m_statusLabel->setText(tr("Stránka PDF zachycena jako obrázek — použijte Uložit jako pro uložení."));
 }
 
@@ -781,21 +780,17 @@ void MainWindow::onScreenshotCapture()
     // nebyl vidět, dokud uživatel danou funkci sám neukončil.
     stopSlideshowIfRunning();
     if (stopVideoIfPlaying()) {
-        m_centralStack->setCurrentWidget(m_imageView);
-        if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(true);
-        if (m_rotateRightAction) m_rotateRightAction->setEnabled(true);
-        if (m_cropAction)        m_cropAction->setEnabled(true);
         scheduleVideoThumbnailResume();
     }
-    if (m_galleryGridActive) {
-        leaveGalleryGrid();
-    }
-    updatePdfToolbarVisibility(false);
+    // V režimu Galerie jen přepnout centrální plochu na obrázek — NE
+    // leaveGalleryGrid(), ten panel náhledů vrátí do skrytého docku a režim
+    // Galerie tím nenávratně shodí (Esc už se do mřížky nevrátí). Stejně to
+    // dělá showImage() při otevření obrázku z mřížky.
+    m_centralStack->setCurrentWidget(m_imageView);
 
     m_imageView->setImage(result.image);
-    m_isScreenshot  = true;
     m_imageModified = true;
-    updateSaveButtonStates();
+    setContentKind(contentstate::ContentKind::Capture);
     m_statusLabel->setText(
         tr("Výřez obrazovky zachycen (%1×%2) — použijte Uložit jako pro trvalé uložení.")
             .arg(result.image.width())
@@ -826,28 +821,40 @@ void MainWindow::onVideoStopped()
 {
     m_centralStack->setCurrentWidget(m_imageView);
     enableImageBrowsing();
+
+    // Po zastavení se vrací ImageView — druh obsahu se musí přepočítat podle
+    // toho, co v něm doopravdy je. Video spuštěné klávesou G běželo NAD
+    // obrázkem (m_currentIndex ukazuje na obrázek), zatímco u auto-play je
+    // aktuálním souborem samo video a v ImageView nic platného není.
+    const bool currentIsVideo =
+        m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()
+        && isVideoFile(QStringLiteral(".") + QFileInfo(m_imagePaths.at(m_currentIndex)).suffix());
+    setContentKind(currentIsVideo ? contentstate::ContentKind::Video
+                                  : contentstate::ContentKind::Image);
+
     m_statusLabel->setText(tr("Přehrávání ukončeno."));
     scheduleVideoThumbnailResume();
 }
 
 void MainWindow::disableImageBrowsing()
 {
+    // Akce závislé na zobrazeném obsahu (listování, slideshow, mazání,
+    // přejmenování, přesun, štítky) řídí applyActionStates() přes příznak
+    // m_browsingLocked — tady zůstávají jen akce, které na obsahu nezávisí.
+    m_browsingLocked = true;
     m_openFolderAction->setEnabled(false);
     m_openFileAction->setEnabled(false);
-    m_previousImageAction->setEnabled(false);
-    m_nextImageAction->setEnabled(false);
-    m_toggleSlideshowAction->setEnabled(false);
     m_fitToWindowAction->setEnabled(false);
     m_resetZoomAction->setEnabled(false);
     m_fullscreenAction->setEnabled(false);
     m_enableDeleteImageAction->setEnabled(false);
     m_enableMoveToDeleteAction->setEnabled(false);
-    m_deletePictureAction->setEnabled(false);
     m_deleteFolderAction->setEnabled(false);
     if (m_deleteCurrentFolderAction) m_deleteCurrentFolderAction->setEnabled(false);
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(false);
+    applyActionStates();
 
-    m_slideshowController->stop();
+    stopSlideshowIfRunning();
 
     if (m_thumbnailDock) {
         m_thumbnailDock->setEnabled(false);
@@ -856,17 +863,15 @@ void MainWindow::disableImageBrowsing()
 
 void MainWindow::enableImageBrowsing()
 {
+    m_browsingLocked = false;
     m_openFolderAction->setEnabled(true);
     m_openFileAction->setEnabled(true);
-    m_previousImageAction->setEnabled(!m_imagePaths.isEmpty());
-    m_nextImageAction->setEnabled(!m_imagePaths.isEmpty());
-    m_toggleSlideshowAction->setEnabled(!m_imagePaths.isEmpty());
     m_fitToWindowAction->setEnabled(!m_imagePaths.isEmpty());
     m_resetZoomAction->setEnabled(!m_imagePaths.isEmpty());
     m_fullscreenAction->setEnabled(!m_imagePaths.isEmpty());
     m_enableDeleteImageAction->setEnabled(true);
     m_enableMoveToDeleteAction->setEnabled(true);
-    m_deletePictureAction->setEnabled(!m_imagePaths.isEmpty());
+    applyActionStates();
     // Tlačítko Delete je dostupné, když Delete složka existuje, nezávisle na tom,
     // jsou-li v aktuální složce nějaké soubory.
     m_deleteFolderAction->setEnabled(deleteFolderExists());

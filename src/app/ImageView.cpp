@@ -335,6 +335,14 @@ void ImageView::exitCropMode()
 
 void ImageView::applyCropFromViewport(const QRect &viewportRect)
 {
+    // Stejná pojistka jako u rotateBy(): u GIFu by ořez hned přemaloval další
+    // snímek animace, u PDF by ho zahodil re-render při zoomu — v obou
+    // případech by ale zůstal příznak "upraveno" a Uložit by originál přepsalo
+    // jednosnímkovým JPEGem pod jeho původní příponou.
+    if (isPdfLoaded() || m_movie != nullptr) {
+        return;
+    }
+
     // Viewport souřadnice → scene souřadnice → souřadnice pixmapy
     QPointF sceneTopLeft     = mapToScene(viewportRect.topLeft());
     QPointF sceneBottomRight = mapToScene(viewportRect.bottomRight());

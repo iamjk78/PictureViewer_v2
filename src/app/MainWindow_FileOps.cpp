@@ -181,8 +181,7 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_currentIndex = -1;
         m_requestedFile.clear();
         m_thumbnailPanel->clear();
-        m_imageView->clearImage();
-        m_statusLabel->setText(tr("Ve složce nebyly nalezeny žádné obrázky."));
+        showEmptyContent(tr("Ve složce nebyly nalezeny žádné obrázky."));
         return;
     }
 
@@ -319,7 +318,6 @@ void MainWindow::showImage(int index)
     if (index < 0 || index >= imagePaths.size()) {
         return;
     }
-    m_isScreenshot = false;
 
     const QString path = imagePaths.at(index);
 #ifdef Q_OS_MACOS
@@ -344,17 +342,8 @@ void MainWindow::showImage(int index)
         // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
         m_centralStack->setCurrentWidget(m_videoPlayer);
         updateStatus(path);
-        // Otočení a ořez pracují jen nad ImageView (skrytým, dokud hraje video)
-        // a nad videem nedávají smysl — deaktivovat, ať tlačítka nepůsobí, že
-        // něco udělají, když ve skutečnosti nic nezmění.
-        if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(false);
-        if (m_rotateRightAction) m_rotateRightAction->setEnabled(false);
-        if (m_cropAction)        m_cropAction->setEnabled(false);
-        // Stav Uložit/Uložit jako se dřív při přechodu na video vůbec
-        // nepřepočítal a zůstával "zaseknutý" podle naposledy zobrazeného
-        // obrázku — updateSaveButtonStates() teď pozná video podle přípony
-        // aktuální cesty, ne podle (nezměněného) obsahu ImageView.
-        updateSaveButtonStates();
+        m_imageModified = false;
+        setContentKind(contentstate::ContentKind::Video);
         // Debounce — viz komentář u m_videoSwitchTimer v MainWindow.hpp. Rychlé
         // prolétnutí šipkami přes více videí tak skutečně přehraje jen to, na
         // kterém se navigace ustálí.
@@ -363,30 +352,38 @@ void MainWindow::showImage(int index)
         return;
     }
 
-    // Přechod z videa (auto-play) zpět na obrázek/PDF.
-    if (m_centralStack->currentWidget() == m_videoPlayer
-        && m_previousImageAction->isEnabled()) {
+    // Přechod z videa (auto-play) zpět na obrázek/PDF. Bezpodmínečně —
+    // dřív to bylo podmíněné stavem tlačítka „předchozí", takže při zamčeném
+    // procházení (video spuštěné klávesou G) zůstal v centrální ploše
+    // zastavený přehrávač a nově načtený obrázek nebyl vidět.
+    if (m_centralStack->currentWidget() == m_videoPlayer) {
         m_videoPlayer->stopQuietly();
         m_centralStack->setCurrentWidget(m_imageView);
     }
-    if (m_rotateLeftAction)  m_rotateLeftAction->setEnabled(true);
-    if (m_rotateRightAction) m_rotateRightAction->setEnabled(true);
-    if (m_cropAction)        m_cropAction->setEnabled(true);
     // Žádné video už nehraje — náhledy se můžou dogenerovat, jakmile se
     // navigace ustálí (odloženo, aby rychlé střídání obrázek/video worker
     // zbytečně nerozjíždělo a zase nezahazovalo).
     scheduleVideoThumbnailResume();
+
+    contentstate::ContentKind kind = contentstate::ContentKind::Image;
 
     if (isPdf) {
         m_pendingDisplayPath.clear();
         if (!m_imageView->loadPdf(path)) {
             m_currentIndex = -1;
             m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
+            setContentKind(contentstate::ContentKind::None);
             return;
         }
+        kind = contentstate::ContentKind::Pdf;
     } else if (isGif) {
         m_pendingDisplayPath.clear();
-        if (!m_imageView->loadAnimation(path)) {
+        if (m_imageView->loadAnimation(path)) {
+            // Jen skutečně běžící animace je AnimatedGif — statický GIF, který
+            // se načte přes ImageLoader níž, se chová jako obyčejný obrázek
+            // (jde ho otočit i oříznout).
+            kind = contentstate::ContentKind::AnimatedGif;
+        } else {
             const QImage cached = m_imageLoader->cachedImage(path);
             if (!cached.isNull()) {
                 m_imageView->setImage(cached);
@@ -413,10 +410,8 @@ void MainWindow::showImage(int index)
     m_currentIndex = index;
     m_thumbnailPanel->setCurrentIndex(index);
     updateStatus(path);
-    updateCategoryButtonStates();
     m_imageModified = false;
-    updateSaveButtonStates();
-    updatePdfToolbarVisibility(isPdf);
+    setContentKind(kind);
 
     disconnect(m_imageView, &ImageView::pdfPageChanged, this, nullptr);
     if (isPdf) {
@@ -509,7 +504,7 @@ void MainWindow::onImageDecoded(const QString &path, const QImage &image)
         return;
     }
     m_imageView->setImage(image);
-    updateSaveButtonStates();
+    applyActionStates();
 }
 
 void MainWindow::updateStatus(const QString &path)
@@ -556,6 +551,13 @@ void MainWindow::updateStatus(const QString &path)
 void MainWindow::deleteOrMoveCurrentImage()
 {
     if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+    // Klávesy D / Delete míří sem přes keyPressEvent PŘÍMO, mimo QAction —
+    // zakázané tlačítko je tedy nechrání a pojistka musí být tady. Nad snímkem
+    // obrazovky ukazuje index na soubor, který uživatel nevidí; smazat ho by
+    // bylo nevratné.
+    if (isCapture()) {
         return;
     }
 
@@ -722,6 +724,10 @@ void MainWindow::moveImageToDeleteFolder()
 void MainWindow::renameCurrentImage()
 {
     if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+        return;
+    }
+    // Stejná pojistka jako u mazání — klávesa R jde sem mimo QAction.
+    if (isCapture()) {
         return;
     }
 
@@ -998,8 +1004,7 @@ void MainWindow::removeImageFromList(int index, bool showNext)
 
     if (m_imagePaths.isEmpty()) {
         m_currentIndex = -1;
-        m_imageView->clearImage();
-        m_statusLabel->setText(tr("Ve složce nebyly nalezeny žádné obrázky."));
+        showEmptyContent(tr("Ve složce nebyly nalezeny žádné obrázky."));
         return;
     }
 
@@ -1035,31 +1040,65 @@ void MainWindow::updateRecycleButtonState()
     }
 }
 
-void MainWindow::updateSaveButtonStates()
+void MainWindow::showEmptyContent(const QString &message)
 {
-    const bool hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
-    // Podle přípony aktuální cesty, ne podle obsahu ImageView — ten se při
-    // přechodu na video nemaže a dál by vracel poslední zobrazený obrázek.
-    // m_isScreenshot ale musí mít přednost: snímek obrazovky se dá pořídit
-    // I NAD přehrávaným videem (viz onScreenshotCapture()) — m_currentIndex
-    // pak dál ukazuje na cestu videa, i když ImageView zobrazuje něco úplně
-    // jiného. Bez téhle výjimky by "isVideo" vyšlo true a Uložit/Uložit jako
-    // by pracovaly s cestou videa, ne se snímkem.
-    const bool isVideo = !m_isScreenshot && hasCurrentFile && isVideoFile(
-        QStringLiteral(".") + QFileInfo(m_imagePaths.at(m_currentIndex)).suffix());
+    // Prázdný stav musí zrušit VŠECHNO, co po předchozím obsahu zůstalo —
+    // dřív se volalo jen clearImage(), takže při přechodu do prázdné složky
+    // hrálo video dál, PDF toolbar zůstal viset se starými čísly stránek a
+    // Uložit jako zůstalo aktivní jako mrtvé tlačítko.
+    stopSlideshowIfRunning();
+    if (stopVideoIfPlaying()) {
+        scheduleVideoThumbnailResume();
+    }
+    m_centralStack->setCurrentWidget(m_imageView);
+    m_imageView->clearImage();
+    m_imageModified = false;
+    m_statusLabel->setText(message);
+    setContentKind(contentstate::ContentKind::None);
+}
 
-    const bool hasStaticImage =
-        !isVideo &&
-        m_currentIndex >= 0 &&
-        !m_imageView->displayedImage().isNull() &&
-        !m_imageView->isPdfLoaded();
+void MainWindow::setContentKind(contentstate::ContentKind kind)
+{
+    m_contentKind = kind;
+    applyActionStates();
+}
 
-    // Uložit (přepsat originál) nedává smysl u videa (žádné úpravy se
-    // neprovádí) ANI u snímku obrazovky — ten nemá žádný "originál" v
-    // m_imagePaths, který by šlo přepsat; přepsal by se jím omylem soubor,
-    // který byl zrovna otevřený (viz komentář výše). Jen Uložit jako.
-    if (m_saveAction)   m_saveAction->setEnabled(hasStaticImage && m_imageModified && !m_isScreenshot);
-    if (m_saveAsAction) m_saveAsAction->setEnabled(hasStaticImage || isVideo);
+void MainWindow::applyActionStates()
+{
+    contentstate::ContentStatus status;
+    status.kind           = m_contentKind;
+    status.modified       = m_imageModified;
+    status.hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
+    status.hasFiles       = !m_imagePaths.isEmpty();
+    status.browsingLocked = m_browsingLocked;
+
+    const contentstate::ActionStates s = contentstate::deriveActionStates(status);
+
+    if (m_previousImageAction)  m_previousImageAction->setEnabled(s.previous);
+    if (m_nextImageAction)      m_nextImageAction->setEnabled(s.next);
+    if (m_toggleSlideshowAction) m_toggleSlideshowAction->setEnabled(s.slideshow);
+    if (m_rotateLeftAction)     m_rotateLeftAction->setEnabled(s.rotate);
+    if (m_rotateRightAction)    m_rotateRightAction->setEnabled(s.rotate);
+    if (m_cropAction)           m_cropAction->setEnabled(s.crop);
+    if (m_saveAction)           m_saveAction->setEnabled(s.save);
+    if (m_saveAsAction)         m_saveAsAction->setEnabled(s.saveAs);
+    if (m_deletePictureAction)  m_deletePictureAction->setEnabled(s.deleteFile);
+    if (m_renameImageAction)    m_renameImageAction->setEnabled(s.rename);
+
+    // Tlačítka přesunu a štítků žijí v sekundárních toolbarech a jsou to
+    // widgety, ne akce — stav se jim ale odvozuje ze stejné pravdy.
+    for (QPushButton *btn : m_moveButtons) {
+        btn->setEnabled(s.moveToFolder);
+    }
+    updateCategoryButtonStates();
+
+    updatePdfToolbarVisibility(s.pdfToolbar);
+    if (m_fitControlsWidget) {
+        m_fitControlsWidget->setVisible(s.fitControls);
+    }
+    if (!s.fitControls && m_zoomLabel) {
+        m_zoomLabel->hide();
+    }
 }
 
 void MainWindow::saveImageToPath(const QString &targetPath)
@@ -1079,10 +1118,10 @@ void MainWindow::onSaveImage()
     if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
         return;
     }
-    // Obranná pojistka — tlačítko je pro snímek obrazovky vždy neaktivní
-    // (viz updateSaveButtonStates()), ale "přepsat" cestu z m_imagePaths by
-    // u screenshotu přepsalo cizí, náhodně otevřený soubor. Radši nikdy.
-    if (m_isScreenshot) {
+    // Obranná pojistka — tlačítko je pro snímek vždy neaktivní (viz
+    // deriveActionStates), ale "přepsat" cestu z m_imagePaths by u snímku
+    // přepsalo cizí, náhodně otevřený soubor. Radši nikdy.
+    if (isCapture()) {
         return;
     }
     const QString currentPath = m_imagePaths.at(m_currentIndex);
@@ -1102,7 +1141,7 @@ void MainWindow::onSaveImage()
     if (msgBox.clickedButton() == btnYes) {
         saveImageToPath(currentPath);
         m_imageModified = false;
-        updateSaveButtonStates();
+        applyActionStates();
     } else if (msgBox.clickedButton() == btnRename) {
         // Sem se lze dostat jen pro statický obrázek (tlačítko Uložit je pro
         // video vždy neaktivní), výstup je tedy vždy JPEG.
@@ -1118,24 +1157,38 @@ void MainWindow::onSaveImage()
 
 void MainWindow::onSaveAsImage()
 {
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+    const bool hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
+    // Snímek jde uložit i BEZ otevřené složky (hned po startu aplikace) —
+    // dřív se tu skončilo na chybějícím indexu a snímek nešel uložit vůbec.
+    if (!hasCurrentFile && !isCapture()) {
         return;
     }
-    const QString currentPath = m_imagePaths.at(m_currentIndex);
+    const QString currentPath = hasCurrentFile ? m_imagePaths.at(m_currentIndex) : QString();
     const QFileInfo currentInfo(currentPath);
     const QString suffix = QStringLiteral(".") + currentInfo.suffix();
 
-    // !m_isScreenshot — snímek obrazovky se dá pořídit i nad přehrávaným
-    // videem (viz onScreenshotCapture()); m_currentIndex pak dál ukazuje na
-    // cestu videa, i když ImageView zobrazuje snímek. Bez téhle výjimky by se
-    // tu znovu zkopíroval PŮVODNÍ VIDEOSOUBOR pod novým jménem místo uložení
-    // toho, co je doopravdy zobrazené.
-    if (!m_isScreenshot && isVideoFile(suffix)) {
+    // !isCapture() — snímek se dá pořídit i nad přehrávaným videem (viz
+    // onScreenshotCapture()); m_currentIndex pak dál ukazuje na cestu videa,
+    // i když ImageView zobrazuje snímek. Bez téhle výjimky by se tu znovu
+    // zkopíroval PŮVODNÍ VIDEOSOUBOR pod novým jménem místo uložení toho,
+    // co je doopravdy zobrazené.
+    if (!isCapture() && isVideoFile(suffix)) {
         // Video se neupravuje — Uložit jako je tu čistá duplikace souboru pod
         // novým názvem, ne re-enkódování přes ImageView (to u videa nic
-        // nezobrazuje, viz updateSaveButtonStates()).
+        // nezobrazuje, viz deriveActionStates).
         const QString targetPath = runSaveAsDialog(currentPath, currentInfo.suffix());
         if (targetPath.isEmpty()) {
+            return;
+        }
+        // QFile::copy() přes existující soubor odmítne zapsat, takže volba
+        // „Přepsat" v dialogu vždy skončila chybou. Cíl už uživatel odsouhlasil
+        // (jinak by ho runSaveAsDialog nevrátil), takže ho smažeme předem.
+        if (QFileInfo(targetPath) == currentInfo) {
+            return;   // uložit sám do sebe = nic k dělání
+        }
+        if (QFile::exists(targetPath) && !QFile::remove(targetPath)) {
+            QMessageBox::critical(this, tr("Chyba ukládání"),
+                tr("Původní soubor se nepodařilo nahradit:\n%1").arg(targetPath));
             return;
         }
         if (!QFile::copy(currentPath, targetPath)) {
@@ -1148,11 +1201,11 @@ void MainWindow::onSaveAsImage()
         return;
     }
 
-    // Snímek obrazovky nemá žádný smysluplný "původní název" — currentPath je
-    // jen cesta naposledy navigovaného souboru (viz komentář výše), ne soubor
-    // snímku. Navrhnout místo toho název podle typu a času pořízení. ':' se
-    // v názvu vynechává — na Windows je v souborech zakázaný znak.
-    const QString defaultBaseName = m_isScreenshot
+    // Snímek nemá žádný smysluplný "původní název" — currentPath je jen cesta
+    // naposledy navigovaného souboru (viz komentář výše), ne soubor snímku.
+    // Navrhnout místo toho název podle typu a času pořízení. ':' se v názvu
+    // vynechává — na Windows je v souborech zakázaný znak.
+    const QString defaultBaseName = isCapture()
         ? tr("Screenshot %1").arg(
               QDateTime::currentDateTime().toString(QStringLiteral("HH-mm dd.MM.yyyy")))
         : QString();

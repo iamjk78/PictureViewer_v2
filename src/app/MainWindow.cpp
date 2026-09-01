@@ -280,6 +280,10 @@ MainWindow::MainWindow(QWidget *parent)
     setupStatusBar();
     setupOverlayToolbar();
 
+    // Výchozí stav — dokud se nenačte složka, není co zobrazit ani upravovat.
+    // Bez tohohle zůstaly akce v implicitním (aktivním) stavu QAction.
+    applyActionStates();
+
     // Sledování myši pro imerzivní režim (zobrazení plovoucího ovládání)
     m_imageView->viewport()->setMouseTracking(true);
     m_imageView->viewport()->installEventFilter(this);
@@ -651,7 +655,7 @@ void MainWindow::showImageContextMenu(const QPoint &globalPos)
             return;
         }
         // Screenshot nebo výřez: uložit jako JPEG soubor a vložit URL do schránky
-        if (m_isScreenshot || m_imageView->hasCrop()) {
+        if (isCapture() || m_imageView->hasCrop()) {
             QString configDir = QFileInfo(SettingsManager::configFilePath()).absolutePath();
             QString tempPath  = configDir + "/picture.jpg";
             if (image.save(tempPath, "JPEG", 90)) {
@@ -908,7 +912,11 @@ bool MainWindow::showDeleteConfirmationDialog()
 QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &targetExtension,
                                     const QString &defaultBaseName)
 {
-    const QString origDir  = QFileInfo(originalPath).absolutePath();
+    // Snímek pořízený bez otevřené složky žádný originál nemá — nabídnout
+    // systémovou složku Obrázky, ne pracovní adresář procesu.
+    const QString origDir = originalPath.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+        : QFileInfo(originalPath).absolutePath();
     const QString origBase = defaultBaseName.isEmpty()
         ? QFileInfo(originalPath).completeBaseName()
         : defaultBaseName;
@@ -943,7 +951,9 @@ QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &
         layout->addWidget(btn);
     };
 
-    makeDestButton(tr("Stejné umístění jako originál"), origDir);
+    makeDestButton(originalPath.isEmpty() ? tr("Složka Obrázky")
+                                          : tr("Stejné umístění jako originál"),
+                   origDir);
 
     // Oblíbené složky
     const QStringList favorites = m_settingsManager->favoriteFolders();

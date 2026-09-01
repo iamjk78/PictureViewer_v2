@@ -386,6 +386,10 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
         return;
     }
+    // Nad snímkem obrazovky ukazuje index na jiný soubor, než uživatel vidí.
+    if (isCapture()) {
+        return;
+    }
 
     const QList<MoveButtonInfo> buttons = m_settingsManager->moveButtons();
     MoveButtonInfo button;

@@ -12,6 +12,8 @@ set(CORE_SOURCES
     CompanionFinder.cpp
     FileNaming.hpp
     FileNaming.cpp
+    ContentState.hpp
+    ContentState.cpp
     PdfHandler.hpp
     PdfHandler.cpp
 )

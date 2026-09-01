@@ -100,7 +100,7 @@ void MainWindow::setupCategoriesToolbar()
 
 void MainWindow::onCategoryRemoveAll()
 {
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size() || isCapture()) {
         return;
     }
 
@@ -199,7 +199,7 @@ void MainWindow::refreshCategoryButtons()
 
 void MainWindow::onCategoryButtonToggled(int categoryId)
 {
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size() || isCapture()) {
         return;
     }
 
@@ -239,7 +239,10 @@ void MainWindow::onCategoryButtonToggled(int categoryId)
 
 void MainWindow::updateCategoryButtonStates()
 {
-    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()) {
+    // isCapture(): index sice na platný soubor ukazuje, ale zobrazený snímek
+    // obrazovky k němu nepatří — štítek by se přiřadil souboru, který uživatel
+    // vůbec nevidí.
+    if (m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size() || isCapture()) {
         for (QPushButton *btn : m_categoryButtons) {
             btn->setChecked(false);
             btn->setEnabled(false);
