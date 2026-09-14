@@ -334,6 +334,8 @@ bool VideoPlayer::findVideoFile(const QString &imagePath, QString &outVideoPath)
 
 void VideoPlayer::keyPressEvent(QKeyEvent *event)
 {
+    const bool shift = event->modifiers() & Qt::ShiftModifier;
+
     switch (event->key()) {
     case Qt::Key_Space:
         onPlayPauseClicked();
@@ -342,9 +344,21 @@ void VideoPlayer::keyPressEvent(QKeyEvent *event)
         stopPlayback();
         return;
     case Qt::Key_Left:
+        // Shift+← = přepnout na předchozí soubor, ne posun v čase — o to se
+        // stará MainWindow::keyPressEvent(), ale jen když se k němu klávesa
+        // vůbec dostane. Mimo fullscreen ji dřív zachytí zkratka akce
+        // m_previousImageAction, takže sem nedorazí vůbec; ve fullscreenu je
+        // ale toolbar s tou akcí skrytý a Qt zkratku skrytého widgetu
+        // neaktivuje — klávesa dorazí až sem a nesmí se spotřebovat na seek.
+        if (shift) {
+            break;
+        }
         m_player->setPosition(qMax(0LL, m_player->position() - m_player->duration() / 10));
         return;
     case Qt::Key_Right:
+        if (shift) {   // viz komentář u Key_Left
+            break;
+        }
         m_player->setPosition(qMin(m_player->duration(), m_player->position() + m_player->duration() / 10));
         return;
     case Qt::Key_Up:
