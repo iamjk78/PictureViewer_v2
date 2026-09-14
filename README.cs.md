@@ -19,7 +19,9 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   obrázek zobrazí při načtení; vypnuté obojí zobrazí vše v originální velikosti
   (1:1). Ruční zoom volbu dočasně přebije. Per-profil, netýká se PDF ani videa
 - **Otočení obrázku** o 90° (vizuální, klávesy `[`/`L` doleva, `]` doprava)
-- **Ořez obrázku** — výběr oblasti myší, zobrazení se ořízne na vybranou část
+- **Ořez obrázku** — výběr oblasti myší, zobrazení se ořízne na vybranou část;
+  oříznout jde i stránku PDF — z výřezu se stane samostatný obrázek, který lze
+  otočit a uložit přes Uložit jako, původní dokument zůstane nedotčený
 - **Snímek výřezu obrazovky** — funguje i mimo aplikaci a napříč všemi monitory;
   označte oblast myší a výřez se otevře v aplikaci (dočasně uložen do temp složky);
   ukončí přitom přehrávané video, slideshow i zobrazené PDF, aby byl vidět hned.

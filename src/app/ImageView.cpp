@@ -335,13 +335,15 @@ void ImageView::exitCropMode()
 
 void ImageView::applyCropFromViewport(const QRect &viewportRect)
 {
-    // Stejná pojistka jako u rotateBy(): u GIFu by ořez hned přemaloval další
-    // snímek animace, u PDF by ho zahodil re-render při zoomu — v obou
-    // případech by ale zůstal příznak "upraveno" a Uložit by originál přepsalo
-    // jednosnímkovým JPEGem pod jeho původní příponou.
-    if (isPdfLoaded() || m_movie != nullptr) {
+    // U GIFu by ořez hned přemaloval další snímek animace, přitom by zůstal
+    // příznak "upraveno" a Uložit by originál přepsalo jednosnímkovým JPEGem
+    // pod příponou .gif. Ořez animace proto neumožňujeme (stejně jako otočení,
+    // viz rotateBy()). PDF naopak ořezat jde — viz konec funkce.
+    if (m_movie != nullptr) {
         return;
     }
+
+    const bool wasPdf = isPdfLoaded();
 
     // Viewport souřadnice → scene souřadnice → souřadnice pixmapy
     QPointF sceneTopLeft     = mapToScene(viewportRect.topLeft());
@@ -366,11 +368,23 @@ void ImageView::applyCropFromViewport(const QRect &viewportRect)
     m_scene->setSceneRect(m_pixmapItem->boundingRect());
     m_hasCrop = true;
 
+    // Výřez stránky PDF přestává být dokumentem — dokument uvolníme, jinak by
+    // re-render při zoomu výřez zahodil a otočení by se kvůli pojistce
+    // v rotateBy() tiše neprovedlo. Dál se s ním pracuje jako se snímkem
+    // obrazovky: jde ho otočit a uložit jako obrázek.
+    if (wasPdf) {
+        m_pdfHandler->unload();
+        m_pdfRerenderTimer->stop();
+    }
+
     // Přizpůsobit výřez oknu
     fitInView(m_pixmapItem, Qt::KeepAspectRatio);
     m_zoomLevel = 1.0;
     m_manuallyZoomed = false;
     emitZoomChanged();
+    if (wasPdf) {
+        emit detachedFromSourceFile();
+    }
     emit imageModified();
 }
 

@@ -242,6 +242,14 @@ void MainWindow::setupToolbar()
         applyActionStates();
     });
 
+    // Ořez stránky PDF udělá z dokumentu samostatný obrázek — od té chvíle se
+    // chová jako snímek obrazovky (Uložit jako, otočení, žádný PDF toolbar).
+    connect(m_imageView, &ImageView::detachedFromSourceFile, this, [this]() {
+        setContentKind(contentstate::ContentKind::Capture);
+        m_statusLabel->setText(
+            tr("Výřez stránky PDF — použijte Uložit jako pro trvalé uložení."));
+    });
+
     m_deletePictureAction->setIcon(QIcon(QStringLiteral(":/icons/icon_delete_current.png")));
     m_deletePictureAction->setText(QString());
     m_deletePictureAction->setToolTip(tr("Smazat obrázek (D)"));

@@ -74,6 +74,11 @@ signals:
     void zoomChanged(double percent);
     void cropModeChanged(bool active);   // emitováno při aktivaci/deaktivaci crop módu
     void imageModified();               // emitováno po otočení nebo ořezu obrázku
+    // Zobrazený obsah přestal odpovídat načtenému souboru a stal se
+    // samostatným rastrem — ořez stránky PDF. Dokument je v tu chvíli už
+    // uvolněný, takže se s výřezem dá pracovat jako se snímkem obrazovky
+    // (otočit ho, uložit jako obrázek), a ne jako s dokumentem.
+    void detachedFromSourceFile();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

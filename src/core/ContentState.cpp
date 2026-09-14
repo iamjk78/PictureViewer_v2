@@ -6,11 +6,11 @@ ActionStates deriveActionStates(const ContentStatus &status)
 {
     const ContentKind kind = status.kind;
 
-    // Statický rastr, se kterým jde manipulovat (otočit, oříznout) a uložit ho
-    // jako JPEG. GIF ne — QMovie přemaluje pixmapu dalším snímkem, takže by se
-    // úprava jen zdánlivě provedla a Uložit by animaci přepsalo jedním snímkem.
-    // PDF ne — re-render při zoomu úpravu zahodí. Video ne — ImageView je pod
-    // ním skrytý a úprava by se týkala naposledy zobrazeného obrázku.
+    // Statický rastr, se kterým jde manipulovat a uložit ho jako JPEG. GIF ne —
+    // QMovie přemaluje pixmapu dalším snímkem, takže by se úprava jen zdánlivě
+    // provedla a Uložit by animaci přepsalo jedním snímkem. Video ne —
+    // ImageView je pod ním skrytý a úprava by se týkala naposledy zobrazeného
+    // obrázku.
     const bool isStaticRaster = kind == ContentKind::Image || kind == ContentKind::Capture;
 
     // Akce nad SOUBOREM ve složce (smazat, přejmenovat, přesunout, oštítkovat).
@@ -26,8 +26,14 @@ ActionStates deriveActionStates(const ContentStatus &status)
     s.next      = s.previous;
     s.slideshow = s.previous;
 
-    s.rotate = kind == ContentKind::Image || kind == ContentKind::Capture;
-    s.crop   = isStaticRaster;
+    // Otočení mění pixmapu napřímo — u PDF by ho zahodil re-render při zoomu,
+    // takže dokument otočit nejde. Jeho VÝŘEZ ale ano: ořezem se dokument
+    // uvolní a obsah se stane snímkem (Capture), kde otočení funguje.
+    s.rotate = isStaticRaster;
+    // Ořez je povolený i pro PDF — výsledkem je samostatný obrázek (Capture),
+    // který jde otočit a uložit přes Uložit jako. Viz
+    // ImageView::applyCropFromViewport().
+    s.crop = isStaticRaster || kind == ContentKind::Pdf;
 
     // Uložit = přepsat originál. Snímek žádný originál nemá (index ukazuje na
     // cizí soubor), takže jen Uložit jako.

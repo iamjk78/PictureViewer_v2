@@ -1373,13 +1373,42 @@ private slots:
         st.modified = true;
         const ActionStates s = deriveActionStates(st);
 
-        // Ořez PDF stránky dřív šel provést, ale Uložit i Uložit jako zůstaly
-        // neaktivní — uživatel viděl oříznutou stránku, kterou nešlo uložit.
-        QVERIFY(!s.rotate); QVERIFY(!s.crop);
+        // Otočení dokumentu nejde — re-render při zoomu by ho zahodil.
+        QVERIFY(!s.rotate);
+        // Ořez ANO: výsledkem je samostatný obrázek (Capture), ne upravené PDF
+        // — viz ImageView::applyCropFromViewport() a případ pro Capture níž.
+        QVERIFY(s.crop);
+        // Samotný dokument se ale uložit jako obrázek nedá.
         QVERIFY(!s.save);   QVERIFY(!s.saveAs);
         QVERIFY(s.pdfToolbar);
         QVERIFY(!s.fitControls);   // zoom v % u PDF nic neznamená
         QVERIFY(s.deleteFile); QVERIFY(s.rename);
+    }
+
+    // Ořez stránky PDF přejde na Capture — teprve tam se z něj stane plnohodnotný
+    // obrázek, který jde otočit i uložit. Sled stavů, ne jeden stav.
+    void actionStates_pdfCropBecomesEditableCapture()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus pdf;
+        pdf.kind = ContentKind::Pdf;
+        pdf.hasCurrentFile = true;
+        pdf.hasFiles = true;
+        QVERIFY(deriveActionStates(pdf).crop);        // ořez je dostupný…
+        QVERIFY(!deriveActionStates(pdf).saveAs);     // …ale dokument sám ne
+
+        ContentStatus cropped = pdf;
+        cropped.kind = ContentKind::Capture;          // po ořezu
+        cropped.modified = true;
+        const ActionStates s = deriveActionStates(cropped);
+
+        QVERIFY(s.rotate);          // výřez už jde otočit
+        QVERIFY(s.crop);            // i znovu oříznout
+        QVERIFY(s.saveAs);          // a uložit jako nový obrázek
+        QVERIFY(!s.pdfToolbar);     // dokument je uvolněný
+        QVERIFY(s.fitControls);
+        QVERIFY(!s.save);           // originální PDF se přepsat nesmí
+        QVERIFY(!s.deleteFile);     // ani smazat/přejmenovat pod výřezem
     }
 
     void actionStates_video_copyOnlyNoEditing()

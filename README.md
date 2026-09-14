@@ -25,7 +25,9 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
   original size (1:1). Manual zoom temporarily overrides the choice. The setting
   is per-profile and does not apply to PDFs or video
 - **Rotate image** by 90° (visual only; `[`/`L` left, `]` right)
-- **Crop** — select an area with the mouse and the view is cropped to it
+- **Crop** — select an area with the mouse and the view is cropped to it; PDF
+  pages can be cropped too, turning the selection into a standalone image that
+  can be rotated and stored via Save as, leaving the document untouched
 - **Screen region capture** — works outside the application and across all
   monitors; select an area and the capture opens in the app (stored temporarily);
   stops any playing video, slideshow or displayed PDF so the capture is visible
