@@ -19,22 +19,31 @@ QStringList CompanionFinder::findCompanions(const QString &filePath)
     }
 
     const QString base = sourceInfo.completeBaseName();
-    const QString sourceCanonical = sourceInfo.absoluteFilePath();
     const QDir dir = sourceInfo.absoluteDir();
 
+    // Množina možných přípon párů (obrázek/video) je předem známá — místo
+    // výpisu CELÉ složky (QDir::entryInfoList, O(počet souborů ve složce))
+    // stačí ověřit existenci pár desítek konkrétních kandidátních cest
+    // (O(počet přípon), konstantní). Výpis celé složky se volal při KAŽDÉM
+    // mazání/přejmenování/přesunu se zapnutým párováním — ve velké nebo
+    // síťové složce byl citelně pomalý.
+    const QStringList candidateExtensions = supportedImageExtensions() + supportedVideoExtensions();
+
     QStringList companions;
-    const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-    for (const QFileInfo &entry : entries) {
-        if (entry.absoluteFilePath() == sourceCanonical) {
-            continue;   // sebe sama nezahrnovat
+    for (const QString &ext : candidateExtensions) {
+        // Stejná přípona jako zdroj by dala IDENTICKÝ název souboru (stejný
+        // základ + stejná přípona = stejný soubor) — nemůže jít o pár, jen
+        // o zdroj sám; přeskočit bez zbytečného stat().
+        if (ext.compare(sourceSuffix, Qt::CaseInsensitive) == 0) {
+            continue;
         }
-        if (entry.completeBaseName().compare(base, Qt::CaseInsensitive) != 0) {
-            continue;   // jiný základ názvu
-        }
-        const QString suffix = QStringLiteral(".") + entry.suffix();
-        // Pár je jen obrázek nebo video; PDF a ostatní se ignoruje.
-        if (isSupportedImageExtension(suffix) || isVideoFile(suffix)) {
-            companions.append(entry.absoluteFilePath());
+        const QFileInfo candidate(dir.filePath(base + ext));
+        if (candidate.exists() && candidate.isFile()) {
+            // canonicalFilePath(), ne absoluteFilePath() — na case-insensitive
+            // systému souborů (macOS/Windows) najde exists() soubor i přes
+            // kandidátní cestu s "vymyšleným" velikostí písmen (základ zdroje +
+            // přípona ze seznamu); vrátit se musí skutečný název na disku.
+            companions.append(candidate.canonicalFilePath());
         }
     }
 
