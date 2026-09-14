@@ -32,46 +32,43 @@ QStringList sortedSubfolders(const QDir &dir)
 
 namespace pictureviewer {
 
-FolderNavResult FolderNavigator::siblingBefore(const QString &currentFolder)
+FolderNavSiblings FolderNavigator::siblings(const QString &currentFolder)
 {
     const QFileInfo info(currentFolder);
     QDir parentDir = info.dir();
 
-    const QStringList siblings = sortedSubfolders(parentDir);
-    const int idx = siblings.indexOf(info.fileName());
+    const QStringList names = sortedSubfolders(parentDir);
+    const int idx = names.indexOf(info.fileName());
+
+    FolderNavSiblings result;
     if (idx < 0) {
-        return {};
+        return result;
     }
 
-    FolderNavResult result;
-    result.count = idx;   // počet sourozenců před aktuální složkou
+    result.before.count = idx;   // počet sourozenců před aktuální složkou
     if (idx > 0) {
-        result.name = siblings.at(idx - 1);
-        result.path = parentDir.absoluteFilePath(result.name);
-        result.available = true;
+        result.before.name = names.at(idx - 1);
+        result.before.path = parentDir.absoluteFilePath(result.before.name);
+        result.before.available = true;
+    }
+
+    result.after.count = names.size() - idx - 1;   // počet sourozenců za aktuální složkou
+    if (idx + 1 < names.size()) {
+        result.after.name = names.at(idx + 1);
+        result.after.path = parentDir.absoluteFilePath(result.after.name);
+        result.after.available = true;
     }
     return result;
 }
 
+FolderNavResult FolderNavigator::siblingBefore(const QString &currentFolder)
+{
+    return siblings(currentFolder).before;
+}
+
 FolderNavResult FolderNavigator::siblingAfter(const QString &currentFolder)
 {
-    const QFileInfo info(currentFolder);
-    QDir parentDir = info.dir();
-
-    const QStringList siblings = sortedSubfolders(parentDir);
-    const int idx = siblings.indexOf(info.fileName());
-    if (idx < 0) {
-        return {};
-    }
-
-    FolderNavResult result;
-    result.count = siblings.size() - idx - 1;   // počet sourozenců za aktuální složkou
-    if (idx + 1 < siblings.size()) {
-        result.name = siblings.at(idx + 1);
-        result.path = parentDir.absoluteFilePath(result.name);
-        result.available = true;
-    }
-    return result;
+    return siblings(currentFolder).after;
 }
 
 FolderNavResult FolderNavigator::firstSubfolder(const QString &currentFolder)

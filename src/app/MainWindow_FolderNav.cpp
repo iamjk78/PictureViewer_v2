@@ -115,13 +115,14 @@ void MainWindow::refreshFolderNavData()
     // některých síťových discích (SMB/AFP) čtení obsahu složky z vedlejšího
     // vlákna vracelo prázdný výsledek (tlačítka natrvalo zůstala zakázaná,
     // fungovalo jen "nahoru", které obsah nečte). Počítá se proto synchronně
-    // na hlavním vlákně stejně jako "nahoru" — čtení jen jmen podsložek je
-    // levné i po síti, na rozdíl od generování náhledů.
-    const FolderNavResult left  = FolderNavigator::siblingBefore(m_currentFolder);
-    const FolderNavResult right = FolderNavigator::siblingAfter(m_currentFolder);
+    // na hlavním vlákně stejně jako "nahoru". Na síťovém disku to ale
+    // znatelně trvá (naměřeno přes 20 s) — siblings() čte rodičovskou složku
+    // jen JEDNOU pro oba směry (doleva i doprava), místo dvou samostatných
+    // výpisů stejné složky.
+    const FolderNavSiblings sib = FolderNavigator::siblings(m_currentFolder);
     const FolderNavResult down  = FolderNavigator::firstSubfolder(m_currentFolder);
-    updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), left, false);
-    updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), right, false);
+    updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), sib.before, false);
+    updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), sib.after, false);
     updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), down, false);
 }
 

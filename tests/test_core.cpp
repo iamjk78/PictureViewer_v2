@@ -341,6 +341,32 @@ private slots:
         QCOMPARE(after.count, 1);
     }
 
+    // siblings() musí vracet přesně to, co dřív siblingBefore()+siblingAfter()
+    // volané zvlášť — je to jen sdílený jeden výpis rodičovské složky pro oba
+    // směry místo dvou (viz refreshFolderNavData(), kde na síťovém disku
+    // duplicitní výpis znatelně prodlužoval čekání).
+    void folderNavigator_siblingsMatchesSeparateCalls()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Alfa"));
+        QVERIFY(QDir(dir.path()).mkdir("Beta"));
+        QVERIFY(QDir(dir.path()).mkdir("Gama"));
+
+        const QString current = dir.filePath("Beta");
+        const FolderNavSiblings sib = FolderNavigator::siblings(current);
+
+        QCOMPARE(sib.before.available, FolderNavigator::siblingBefore(current).available);
+        QCOMPARE(sib.before.name, FolderNavigator::siblingBefore(current).name);
+        QCOMPARE(sib.before.count, FolderNavigator::siblingBefore(current).count);
+        QCOMPARE(sib.after.available, FolderNavigator::siblingAfter(current).available);
+        QCOMPARE(sib.after.name, FolderNavigator::siblingAfter(current).name);
+        QCOMPARE(sib.after.count, FolderNavigator::siblingAfter(current).count);
+
+        QCOMPARE(sib.before.name, QStringLiteral("Alfa"));
+        QCOMPARE(sib.after.name, QStringLiteral("Gama"));
+    }
+
     void folderNavigator_edgesHaveNoSibling()
     {
         QTemporaryDir dir;

@@ -21,6 +21,12 @@ struct FolderNavResult {
 // (stejný QCollator vzor jako ImageCatalog — numericMode, case-insensitive).
 // Složka jménem "Delete" (case-insensitive) je vždy vyloučena jako kandidát —
 // slouží jen jako interní koš aplikace, ne jako cílová složka pro procházení.
+// Oba směry sourozenecké navigace najednou — viz FolderNavigator::siblings().
+struct FolderNavSiblings {
+    FolderNavResult before;
+    FolderNavResult after;
+};
+
 class FolderNavigator
 {
 public:
@@ -28,6 +34,10 @@ public:
     static FolderNavResult siblingBefore(const QString &currentFolder);
     // Abecedně nejbližší následující sourozenec; count = kolik jich je za.
     static FolderNavResult siblingAfter(const QString &currentFolder);
+    // Oba směry z JEDNOHO výpisu rodičovské složky — siblingBefore()+siblingAfter()
+    // volané zvlášť ji čtou dvakrát; na síťovém disku to zdvojnásobí latenci.
+    // Použij, když potřebuješ oba směry současně (viz refreshFolderNavData()).
+    static FolderNavSiblings siblings(const QString &currentFolder);
     // Abecedně první podsložka; count = celkový počet podsložek (bez "Delete").
     static FolderNavResult firstSubfolder(const QString &currentFolder);
     // Rodičovská složka; count je vždy 0 (na kořeni disku) nebo 1.

@@ -823,9 +823,14 @@ void MainWindow::exitFullscreen()
     m_categoriesToolbar->setVisible(m_categoriesToolbarWasVisible);
     m_moveToolbar->setVisible(m_moveToolbarWasVisible);
     m_folderNavToolbar->setVisible(m_folderNavToolbarWasVisible);
-    if (m_folderNavToolbar->isVisible()) {
-        refreshFolderNavData();
-    }
+    // BEZ refreshFolderNavData() zde — hide() tlačítkům jejich popisky
+    // nesmaže, takže po fullscreenu ukazují přesně to, co ukazovala předtím
+    // (aktuální složka se během fullscreenu změnit nemůže, ten toolbar byl
+    // celou dobu skrytý a nedostupný). Na síťovém disku to bylo znatelně
+    // pomalé (naměřeno přes 20 s) a zbytečné — data zůstávají platná; pokud
+    // by přece jen zastarala, onFolderNavClicked() si je před navigací vždy
+    // ověří čerstvě.
+
     // PDF toolbar je řízený typem aktuálního souboru, ne uživatelem —
     // přepočítat znovu podle aktuálně zobrazeného souboru.
     updatePdfToolbarVisibility(m_imageView->isPdfLoaded());
