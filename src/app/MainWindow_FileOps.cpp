@@ -31,6 +31,7 @@
 #include <QDropEvent>
 #include <QEventLoop>
 #include <QFile>
+#include <QFutureWatcher>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -47,6 +48,7 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QtConcurrent>
 
 #ifdef Q_OS_MACOS
 #include <sys/xattr.h>
@@ -77,9 +79,28 @@ bool folderHasAnyFileRecursive(const QDir &dir)
     }
     return false;
 }
+// Test hooks pro obnovu poslední složky (viz MainWindow::setRestoreHooksForTesting).
+int g_restoreTimeoutOverrideMs = 0;
+std::function<void(const QString &)> g_restoreProbeOverride;
+
+// Sonda: provede na POZADÍ stejné čtení adresářů, které by pro navigační
+// toolbar jinak proběhlo synchronně na hlavním vlákně. Výsledek se zahodí —
+// jde jen o to zjistit, jestli úložiště odpovídá dost rychle.
+void defaultRestoreProbe(const QString &folder)
+{
+    pictureviewer::FolderNavigator::siblings(folder);
+    pictureviewer::FolderNavigator::firstSubfolder(folder);
+}
 } // namespace
 
 namespace pictureviewer {
+
+void MainWindow::setRestoreHooksForTesting(int timeoutMs,
+                                           std::function<void(const QString &)> probe)
+{
+    g_restoreTimeoutOverrideMs = timeoutMs;
+    g_restoreProbeOverride = std::move(probe);
+}
 
 void MainWindow::openFolderDialog()
 {
@@ -175,6 +196,12 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         return;
     }
 
+    // Sken obnovené poslední složky doběhl v limitu — watchdog už není třeba.
+    if (generation == m_restoreScanGeneration) {
+        m_restoreWatchdog->stop();
+        m_restoreScanGeneration = -1;
+    }
+
     if (paths.isEmpty()) {
         m_imagePaths.clear();
         m_unfilteredImagePaths.clear();
@@ -243,6 +270,10 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
 void MainWindow::onScanError(int generation, const QString &error)
 {
     if (generation == m_scanGeneration) {
+        if (generation == m_restoreScanGeneration) {
+            m_restoreWatchdog->stop();
+            m_restoreScanGeneration = -1;
+        }
         m_statusLabel->setText(tr("Chyba při skenování: %1").arg(error));
     }
 }
@@ -302,14 +333,105 @@ void MainWindow::loadFolder(const QString &folderPath)
 
 void MainWindow::restoreLastFolder()
 {
+    // Nový pokus zneplatní případný předchozí (přepnutí profilu za běhu).
+    const int token = ++m_restoreToken;
+    m_restoreProbePending = false;
+    m_restoreScanGeneration = -1;
+    m_restoreWatchdog->stop();
+
     if (!m_settingsManager->rememberLastFolder()) {
         return;
     }
 
     const QString lastFolder = m_settingsManager->lastFolder();
-    if (!lastFolder.isEmpty()) {
-        loadFolder(lastFolder);
+    if (lastFolder.isEmpty()) {
+        return;
     }
+
+    // Limit běží od teď a pokrývá sondu i sken složky dohromady.
+    const int timeoutMs = g_restoreTimeoutOverrideMs > 0 ? g_restoreTimeoutOverrideMs
+                                                         : kRestoreLastFolderTimeoutMs;
+    m_restoreWatchdog->start(timeoutMs);
+
+    // Bez viditelného navigačního toolbaru se na hlavním vlákně nic dalšího
+    // nečte (sken běží na pozadí) — sonda není potřeba.
+    if (m_folderNavToolbar == nullptr || m_folderNavToolbar->isHidden()) {
+        startRestoreLoad(lastFolder);
+        return;
+    }
+
+    // loadFolder() čte sousední složky pro navigační toolbar SYNCHRONNĚ na
+    // hlavním vlákně — na pomalém úložišti to blokuje celou aplikaci (okno se
+    // ani neukáže) a timer by ani neměl kdy vyprchat. Proto se totéž čtení
+    // nejdřív vyzkouší na pozadí: doběhne-li v limitu, je následné čtení
+    // v loadFolder() rychlé; jinak se obnova zruší, aniž by se hlavní vlákno
+    // zablokovalo.
+    m_restoreProbePending = true;
+    m_statusLabel->setText(tr("Otevírám poslední složku…"));
+    auto *watcher = new QFutureWatcher<void>(this);
+    connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher, token, lastFolder] {
+        watcher->deleteLater();
+        if (m_shuttingDown || token != m_restoreToken) {
+            return;   // limit mezitím vypršel, nebo běží novější pokus
+        }
+        m_restoreProbePending = false;
+        if (!m_currentFolder.isEmpty()) {
+            // Mezitím se otevřela jiná složka (např. soubor z Finderu) —
+            // ta má přednost, obnova už není potřeba.
+            m_restoreWatchdog->stop();
+            return;
+        }
+        startRestoreLoad(lastFolder);
+    });
+    const auto probe = g_restoreProbeOverride ? g_restoreProbeOverride : defaultRestoreProbe;
+    watcher->setFuture(QtConcurrent::run(probe, lastFolder));
+}
+
+void MainWindow::startRestoreLoad(const QString &folder)
+{
+    loadFolder(folder);
+    // Od teď hlídá limit sken téhle složky — dokončí-li se včas
+    // (onScanComplete/onScanError), watchdog se zastaví.
+    m_restoreScanGeneration = m_scanGeneration;
+}
+
+void MainWindow::onRestoreTimeout()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+
+    if (m_restoreProbePending) {
+        // Úložiště neodpovědělo v limitu. Sonda dál doběhne na pozadí, její
+        // výsledek se kvůli změněnému tokenu zahodí.
+        ++m_restoreToken;
+        m_restoreProbePending = false;
+    } else if (m_restoreScanGeneration >= 0 && m_restoreScanGeneration == m_scanGeneration) {
+        // Sken poslední složky pořád běží — zrušit ho a vrátit se do stavu
+        // "bez složky". Zvýšená generace zajistí, že pozdě doručený výsledek
+        // skenu onScanComplete() zahodí.
+        ++m_scanGeneration;
+        if (m_folderScanWorker != nullptr) {
+            m_folderScanWorker->cancel();
+            disconnect(m_folderScanWorker, nullptr, this, nullptr);
+            m_folderScanWorker = nullptr;
+        }
+        m_currentFolder.clear();
+        m_requestedFile.clear();
+        if (m_reloadFolderAction) {
+            m_reloadFolderAction->setEnabled(false);
+        }
+        refreshFolderNavData();
+    } else {
+        return;   // nic k přerušení — dokončeno, nebo mezitím otevřena jiná složka
+    }
+
+    m_restoreScanGeneration = -1;
+    m_statusLabel->setText(
+        tr("Otevření poslední složky trvalo déle než %1 s (pomalé úložiště) — "
+           "aplikace se spustila bez složky. Otevři ji ručně.")
+            .arg((g_restoreTimeoutOverrideMs > 0 ? g_restoreTimeoutOverrideMs
+                                                  : kRestoreLastFolderTimeoutMs) / 1000));
 }
 
 void MainWindow::showImage(int index)

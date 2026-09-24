@@ -190,7 +190,8 @@ Konfigurace je **per-profil** a ukládá se v:
 Menu Nastavení přistupuje k:
 - Vzhled aplikace (5 rozložení UI)
 - Řazení souborů (název / datum / velikost, vzestupně / sestupně)
-- Zapamatování poslední složky
+- Zapamatování poslední složky (trvá-li její znovuotevření déle než 5 s — pomalé
+  nebo síťové úložiště — aplikace to vzdá a spustí se bez složky)
 - Režim mazání souborů
 - Cache náhledů (povolen/zakázán, volba složky, aktuální velikost)
 - Zpracování PDF

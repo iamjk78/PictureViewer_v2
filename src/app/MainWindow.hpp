@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <functional>
 #include <memory>
 
 class QAction;
@@ -65,6 +66,12 @@ public:
 
     // Called when a file is opened from macOS Finder or command line
     void openFile(const QString &filePath);
+
+    // Jen pro testy: přebije časový limit obnovy poslední složky a umožní
+    // nahradit sondu (např. o uměle pomalou). Platí pro okna vytvořená PO
+    // volání; prázdná sonda + limit 0 vrací výchozí chování.
+    static void setRestoreHooksForTesting(int timeoutMs,
+                                          std::function<void(const QString &)> probe);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -131,7 +138,14 @@ private:
     void showOverlayToolbar();
     void enterFullscreen();
     void exitFullscreen();
+    // Obnoví poslední otevřenou složku — ale jen v časovém limitu
+    // (kRestoreLastFolderTimeoutMs). Pomalé/síťové úložiště by jinak
+    // zdrželo start aplikace o desítky sekund; po vypršení limitu se obnova
+    // zruší a aplikace zůstane bez složky (nastavení "zapamatovat složku"
+    // i uložená cesta zůstávají — uživatel ji otevře ručně).
     void restoreLastFolder();
+    void startRestoreLoad(const QString &folder);
+    void onRestoreTimeout();
     void showImage(int index);
     void updateStatus(const QString &path);
     void setupDock();
@@ -298,6 +312,16 @@ private:
     // kliknutí (viz onFolderNavClicked()).
     QString m_cachedSiblingsParent;
     QStringList m_cachedParentSubfolderNames;
+
+    // ── Časový limit obnovy poslední složky po startu ────────────────────
+    static constexpr int kRestoreLastFolderTimeoutMs = 5000;
+    QTimer *m_restoreWatchdog = nullptr;
+    // Zneplatňuje výsledek sondy, která doběhla po vypršení limitu (nebo po
+    // novém pokusu o obnovu, např. při přepnutí profilu).
+    int m_restoreToken = 0;
+    bool m_restoreProbePending = false;
+    // Generace skenu, který hlídá watchdog; -1 = žádný.
+    int m_restoreScanGeneration = -1;
 
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)

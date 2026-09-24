@@ -236,6 +236,11 @@ MainWindow::MainWindow(QWidget *parent)
         scheduleVideoThumbnailResume();
     });
 
+    // Časový limit obnovy poslední složky po startu (viz restoreLastFolder()).
+    m_restoreWatchdog = new QTimer(this);
+    m_restoreWatchdog->setSingleShot(true);
+    connect(m_restoreWatchdog, &QTimer::timeout, this, &MainWindow::onRestoreTimeout);
+
     m_videoThumbResumeTimer = new QTimer(this);
     m_videoThumbResumeTimer->setSingleShot(true);
     m_videoThumbResumeTimer->setInterval(1200);

@@ -23,6 +23,11 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QImage>
+#include <QLabel>
+#include <QListWidget>
+#include <QScopeGuard>
+#include <QThread>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -65,6 +70,32 @@ QStringList makeImages(const QString &dir, int count)
 QStringList jpgNames(const QString &dir)
 {
     return QDir(dir).entryList({QStringLiteral("*.jpg")}, QDir::Files, QDir::Name);
+}
+
+// Zapamatovaná poslední složka + zapnutý navigační toolbar (kvůli sondě).
+void writeConfigForRestore(const QString &folder, bool remember)
+{
+    const QString cfgDir =
+        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    const QString profileCfg = cfgDir + "/profiles/Výchozí/config.ini";
+    QDir().mkpath(QFileInfo(profileCfg).absolutePath());
+    QSettings s(profileCfg, QSettings::IniFormat);
+    s.setValue("General/remember_last_folder", remember);
+    s.setValue("General/last_folder", folder);
+    s.setValue("Navigation/toolbar_visible", true);
+    s.setValue("FileHandling/enable_delete_image", false);
+    s.setValue("FileHandling/enable_move_to_delete", false);
+    s.sync();
+}
+
+bool statusMentions(const QWidget &window, const QString &needle)
+{
+    for (const QLabel *label : window.findChildren<QLabel *>()) {
+        if (label->text().contains(needle)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -197,6 +228,76 @@ private slots:
         window.close();
     }
 
+    // ── Časový limit obnovy poslední složky ──────────────────────────────────
+    void restoreLastFolder_opensFolderWhenStorageIsFast()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 3);
+        writeConfigForRestore(dir.path(), true);
+        auto reset = qScopeGuard([] {
+            MainWindow::setRestoreHooksForTesting(0, {});
+            writeConfigForRestore(QString(), false);
+        });
+
+        MainWindow::setRestoreHooksForTesting(0, {});   // výchozí sonda i limit
+        MainWindow window;
+        window.show();
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 3, 5000);
+        QVERIFY(!statusMentions(window, QStringLiteral("trvalo déle než")));
+        window.close();
+    }
+
+    void restoreLastFolder_givesUpWhenStorageIsSlow()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 3);
+        writeConfigForRestore(dir.path(), true);
+        auto reset = qScopeGuard([] {
+            MainWindow::setRestoreHooksForTesting(0, {});
+            writeConfigForRestore(QString(), false);
+        });
+
+        // Pomalé úložiště: sonda spí 1,5 s, limit je 300 ms.
+        MainWindow::setRestoreHooksForTesting(300, [](const QString &) {
+            QThread::msleep(1500);
+        });
+        MainWindow window;
+        window.show();
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+
+        // Limit vypršel → aplikace je bez složky a řekla proč.
+        QTRY_VERIFY_WITH_TIMEOUT(statusMentions(window, QStringLiteral("trvalo déle než")), 3000);
+        QCOMPARE(panel->count(), 0);
+
+        // Sonda doběhne až POTOM — její pozdní výsledek nesmí složku otevřít.
+        QTest::qWait(2000);
+        QCOMPARE(panel->count(), 0);
+        window.close();
+    }
+
+    void restoreLastFolder_doesNothingWhenRememberingIsOff()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 3);
+        writeConfigForRestore(dir.path(), false);
+        auto reset = qScopeGuard([] { writeConfigForRestore(QString(), false); });
+
+        MainWindow window;
+        window.show();
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTest::qWait(500);
+        QCOMPARE(panel->count(), 0);
+        window.close();
+    }
 };
 
 QTEST_MAIN(TestGuiStartup)

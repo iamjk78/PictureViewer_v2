@@ -197,7 +197,8 @@ The configuration is **per-profile** and lives in:
 The Settings menu covers:
 - Application appearance (5 UI layouts)
 - File sorting (name / date / size, ascending / descending)
-- Remembering the last folder
+- Remembering the last folder (if reopening it takes more than 5 seconds — slow or
+  network storage — the app gives up and starts without a folder)
 - File deletion mode
 - Thumbnail cache (enable/disable, folder, current size)
 - PDF processing
