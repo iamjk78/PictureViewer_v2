@@ -873,6 +873,118 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(cachedThumbFiles(cache.path()), 80, 15000);
     }
 
+    // Ukazatel ukládání miniatur do cache: běží → viditelný s rostoucím počtem
+    // obrázků, po dokončení se schová.
+    void warmupProgress_showsImagesWhileRunningAndHidesWhenDone()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 60);
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.setWarmupTimingForTesting(100, 30);
+        panel.setProgressTimingForTesting(0, 50);
+        QList<ThumbnailPanel::WarmupProgress> seen;
+        connect(&panel, &ThumbnailPanel::warmupProgressChanged, this,
+                [&seen](const ThumbnailPanel::WarmupProgress &p) { seen.append(p); });
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages(paths);
+
+        QTRY_VERIFY_WITH_TIMEOUT(!seen.isEmpty() && seen.last().visible && seen.last().imagesDone > 0, 10000);
+        QCOMPARE(seen.last().imagesTotal, 60);
+        QVERIFY(seen.last().imagesActive);
+        QVERIFY(!seen.last().videosActive);   // žádná videa → žádné číslo pro videa
+        QVERIFY(seen.last().imagesDone < 60);
+
+        QTRY_COMPARE_WITH_TIMEOUT(cachedThumbFiles(cache.path()), 60, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!seen.last().visible, 5000);
+        int lastDone = 0;                     // počet nikdy neklesá
+        for (const auto &p : std::as_const(seen)) {
+            if (p.visible) {
+                QVERIFY(p.imagesDone >= lastDone);
+                lastDone = p.imagesDone;
+            }
+        }
+    }
+
+    void warmupProgress_isNotShownWhenEverythingIsAlreadyCached()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 30);
+        {   // první průchod naplní cache
+            ThumbnailPanel first;
+            first.setDiskCache(true, cache.path());
+            first.setWarmupTimingForTesting(50, 0);
+            first.resize(220, 480);
+            first.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&first));
+            first.loadImages(paths);
+            QTRY_COMPARE_WITH_TIMEOUT(cachedThumbFiles(cache.path()), 30, 10000);
+        }
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.setWarmupTimingForTesting(50, 0);
+        panel.setProgressTimingForTesting(1000, 50);   // výchozí prodleva: krátké zahřívání se neukáže
+        bool everVisible = false;
+        connect(&panel, &ThumbnailPanel::warmupProgressChanged, this,
+                [&everVisible](const ThumbnailPanel::WarmupProgress &p) { everVisible |= p.visible; });
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages(paths);
+        QTest::qWait(1500);
+        QVERIFY(!everVisible);
+    }
+
+    void warmupProgress_countsVideosSeparatelyAndShowsPause()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        QStringList paths = makeImagePaths(dir.path(), 5);
+        for (const char *name : {"a.mp4", "b.mp4"}) {   // obsah nevadí, videa generuje jiný worker
+            const QString path = QDir(dir.path()).filePath(QString::fromLatin1(name));
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            paths.append(path);
+        }
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.setWarmupTimingForTesting(50, 0, 150);
+        panel.setProgressTimingForTesting(0, 50);
+        ThumbnailPanel::WarmupProgress last;
+        connect(&panel, &ThumbnailPanel::warmupProgressChanged, this,
+                [&last](const ThumbnailPanel::WarmupProgress &p) { last = p; });
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages(paths);
+
+        // Videa běží po obrázcích a mají vlastní počet (vyřízená hlásí generátor videí).
+        QTRY_VERIFY_WITH_TIMEOUT(last.visible && last.videosActive, 10000);
+        QCOMPARE(last.videosTotal, 2);
+        QCOMPARE(last.videosDone, 0);
+        QVERIFY(!last.paused);
+
+        panel.noteVideoHandled(panel.generation(), paths.at(5));
+        QTRY_COMPARE_WITH_TIMEOUT(last.videosDone, 1, 3000);
+        QVERIFY(last.visible);
+
+        // Prohlížeč něco načítá → zahřívání stojí a ukazatel to říká.
+        panel.setViewerBusy(true);
+        QTRY_VERIFY_WITH_TIMEOUT(last.paused, 3000);
+        QVERIFY(last.visible);
+        panel.setViewerBusy(false);
+
+        panel.noteVideoHandled(panel.generation(), paths.at(6));
+        QTRY_VERIFY_WITH_TIMEOUT(!last.visible, 3000);   // všechno hotovo → schová se
+    }
+
     void imageLoader_prefetchWaitsWhilePaused()
     {
         QTemporaryDir dir;

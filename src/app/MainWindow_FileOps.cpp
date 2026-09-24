@@ -43,6 +43,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -202,6 +203,37 @@ void MainWindow::hideScanProgress()
     if (m_scanProgressWidget != nullptr) {
         m_scanProgressWidget->hide();
     }
+}
+
+void MainWindow::onWarmupProgress(const ThumbnailPanel::WarmupProgress &progress)
+{
+    if (!progress.visible) {
+        m_warmupWidget->hide();
+        return;
+    }
+    const QLocale locale;
+    QStringList parts;
+    int done = 0;
+    int total = 0;
+    if (progress.imagesActive) {
+        parts << tr("obrázky %1 / %2").arg(locale.toString(progress.imagesDone),
+                                          locale.toString(progress.imagesTotal));
+        done += progress.imagesDone;
+        total += progress.imagesTotal;
+    }
+    if (progress.videosActive) {
+        parts << tr("videa %1 / %2").arg(locale.toString(progress.videosDone),
+                                        locale.toString(progress.videosTotal));
+        done += progress.videosDone;
+        total += progress.videosTotal;
+    }
+    QString text = tr("Cache miniatur: %1").arg(parts.join(QStringLiteral(" · ")));
+    if (progress.paused) {
+        text += tr(" (pozastaveno)");
+    }
+    m_warmupLabel->setText(text);
+    m_warmupBar->setValue(total > 0 ? static_cast<int>(1000LL * done / total) : 0);
+    m_warmupWidget->show();
 }
 
 void MainWindow::setScanRunning(bool running)

@@ -81,6 +81,10 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
   network storage doesn't read them all at once. After a moment of idle time the
   rest are cached slowly in the background (video thumbnails only after a long
   idle), and the background work yields to whatever you're viewing
+- **Cache progress indicator** — while thumbnails are being saved to the cache
+  in the background, the status bar shows how many images and (separately) how
+  many videos are done, with a progress bar and a "paused" note when the work
+  is waiting for you to stop browsing; it disappears when finished
 - **Progressive folder loading** — with name sorting, files appear as the
   listing arrives instead of after the whole folder has been read; a progress
   counter and a Cancel button (or Esc) are shown while it runs

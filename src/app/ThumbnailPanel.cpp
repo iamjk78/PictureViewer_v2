@@ -106,6 +106,8 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
         m_idleReady = true;
         maybeStartWarmup();
     });
+    m_progressTimer = new QTimer(this);
+    connect(m_progressTimer, &QTimer::timeout, this, &ThumbnailPanel::updateWarmupProgress);
     m_videoIdleTimer = new QTimer(this);
     m_videoIdleTimer->setSingleShot(true);
     connect(m_videoIdleTimer, &QTimer::timeout, this, [this] {
@@ -227,11 +229,17 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     ++m_generation;
     clear();
     m_pathToIndex.clear();
+    m_imageItemCount = 0;
+    m_videoItemCount = 0;
+    m_warmSkipped = 0;
+    m_videosHandled.clear();
+    m_progressWasActive = false;
     diag::thumb().reset();
     m_doneCount = 0;
     m_statsTimer.start();
 
     addImageItems(paths);
+    updateWarmupProgress();   // nový seznam → ukazatel průběhu se schová
 
     // Miniatury nejsou potřeba hned pro všechny — jen pro viditelné (viz
     // updateWantedThumbnails()). Rozložení se ustálí až v event loopě, proto
@@ -254,12 +262,76 @@ void ThumbnailPanel::addImageItems(const QStringList &paths)
         const QString suffix = QStringLiteral(".") + QFileInfo(path).suffix();
         if (isVideoFile(suffix)) {
             item->setIcon(m_playIcon);   // placeholder videa
+            ++m_videoItemCount;
+        } else {
+            ++m_imageItemCount;
         }
 
         addItem(item);
         m_pathToIndex[path] = QPersistentModelIndex(indexFromItem(item));
     }
     setUpdatesEnabled(true);
+}
+
+void ThumbnailPanel::countItem(const QString &path, int delta)
+{
+    if (isVideoFile(QStringLiteral(".") + QFileInfo(path).suffix())) {
+        m_videoItemCount = qMax(0, m_videoItemCount + delta);
+    } else {
+        m_imageItemCount = qMax(0, m_imageItemCount + delta);
+    }
+}
+
+void ThumbnailPanel::setProgressTimingForTesting(int showDelayMs, int intervalMs)
+{
+    m_progressShowDelayMs = showDelayMs;
+    m_progressIntervalMs = intervalMs;
+}
+
+void ThumbnailPanel::noteVideoHandled(int generation, const QString &path)
+{
+    if (generation != m_generation || path.isEmpty()) {
+        return;
+    }
+    m_videosHandled.insert(path);
+}
+
+void ThumbnailPanel::updateWarmupProgress()
+{
+    WarmupProgress p;
+    const bool cacheOn = m_diskCacheEnabled && !m_diskCacheDir.isEmpty();
+    if (cacheOn && count() > 0 && !m_shuttingDown) {
+        p.imagesActive = m_warmWorker != nullptr;
+        p.imagesTotal = m_imageItemCount;
+        if (p.imagesActive) {
+            p.imagesDone = qMin(p.imagesTotal, m_warmSkipped + m_warmWorker->processedCount());
+        }
+        p.videosTotal = m_videoItemCount;
+        p.videosDone = qMin(p.videosTotal, static_cast<int>(m_videosHandled.size()));
+        p.videosActive = m_videoTailPrepared && p.videosDone < p.videosTotal;
+
+        const bool imagesRunning = p.imagesActive && m_idleReady && !m_viewerBusy && !m_scanRunning;
+        const bool videosRunning = p.videosActive && m_videoWarmupActive;
+        p.paused = !imagesRunning && !videosRunning;
+    }
+
+    const bool active = p.imagesActive || p.videosActive;
+    if (active && !m_progressWasActive) {
+        m_progressActiveFor.start();
+    }
+    m_progressWasActive = active;
+    // Krátké zahřívání (typicky vše už v cache) se neukazuje, ať ukazatel neblikne.
+    p.visible = active && m_progressActiveFor.elapsed() >= m_progressShowDelayMs;
+    if (!p.visible) {
+        p = WarmupProgress{};
+    }
+    if (!active) {
+        m_progressTimer->stop();
+    }
+    if (p != m_lastProgress) {
+        m_lastProgress = p;
+        emit warmupProgressChanged(p);
+    }
 }
 
 void ThumbnailPanel::appendImages(const QStringList &paths)
@@ -493,11 +565,15 @@ void ThumbnailPanel::maybeStartWarmup()
     connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
         if (worker == m_warmWorker && generation == m_generation) {
             m_warmWorker = nullptr;
+            updateWarmupProgress();
             maybeStartVideoWarmup();   // obrázky hotové — na řadě videa (pokud je klid)
         }
     });
     m_warmWorker = worker;
+    m_warmSkipped = m_imageItemCount - static_cast<int>(remaining.size());
     m_warmPool.start(worker);
+    m_progressTimer->start(m_progressIntervalMs);
+    updateWarmupProgress();
 }
 
 void ThumbnailPanel::maybeStartVideoWarmup()
@@ -535,6 +611,8 @@ void ThumbnailPanel::maybeStartVideoWarmup()
     }
     m_videoWarmupActive = true;
     emitWantedVideos();
+    m_progressTimer->start(m_progressIntervalMs);
+    updateWarmupProgress();
 }
 
 void ThumbnailPanel::emitWantedVideos()
@@ -580,6 +658,7 @@ void ThumbnailPanel::removeImage(int index)
 {
     if (index >= 0 && index < count()) {
         const QString path = item(index)->data(Qt::UserRole).toString();
+        countItem(path, -1);
         m_pathToIndex.remove(path);
         m_claims->release(path);
         delete takeItem(index);

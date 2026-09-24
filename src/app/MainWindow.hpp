@@ -9,6 +9,7 @@
 #include "core/ImageCatalog.hpp"
 
 
+#include "app/ThumbnailPanel.hpp"
 #include <QHash>
 #include <QKeyEvent>
 #include <QMainWindow>
@@ -28,6 +29,7 @@ class QDropEvent;
 class QGraphicsColorizeEffect;
 class QLabel;
 class QMenu;
+class QProgressBar;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -43,7 +45,6 @@ class FolderScanWorker;
 class MetadataPanel;
 class SettingsManager;
 class SlideshowController;
-class ThumbnailPanel;
 class UpdateChecker;
 class VideoPlayer;
 class VideoThumbnailWorker;
@@ -163,6 +164,7 @@ private:
     void onImageChangedOnDisk(const QString &path);
     // Nastaví m_scanRunning a dá vědět částem, které soupeří o síť (prefetch, zahřívání).
     void setScanRunning(bool running);
+    void onWarmupProgress(const ThumbnailPanel::WarmupProgress &progress);
     void setupDock();
     void setupMenu();
     void setupStatusBar();
@@ -365,6 +367,9 @@ private:
     int m_currentIndex = -1;
     int m_lastPrefetchIndex = -1;   // pro detekci směru listování
     int m_scanGeneration = 0;
+    QWidget *m_warmupWidget = nullptr;      // průběh ukládání miniatur do cache (status bar)
+    QLabel *m_warmupLabel = nullptr;
+    QProgressBar *m_warmupBar = nullptr;
     QSharedPointer<FileStampIndex> m_fileStamps;   // otisky souborů z posledního výpisu složky
     bool m_shutdownTimedOut = false;
     int m_statusToken = 0;   // zahazuje opožděná metadata z předchozího souboru

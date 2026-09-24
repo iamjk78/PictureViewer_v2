@@ -57,6 +57,9 @@ public:
 
 signals:
     void thumbnailReady(int generation, const QString &path, const QImage &image);
+    // Video je vyřízené (z cache, vygenerované, nebo neúspěšně) — pro ukazatel
+    // průběhu; na rozdíl od thumbnailReady chodí i při neúspěchu.
+    void videoHandled(int generation, const QString &path);
 
 private slots:
     void processNext();

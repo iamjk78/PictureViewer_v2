@@ -258,6 +258,8 @@ MainWindow::MainWindow(QWidget *parent)
         this);
     connect(m_videoThumbnailWorker, &VideoThumbnailWorker::thumbnailReady,
             m_thumbnailPanel, &ThumbnailPanel::setVideoThumbnail);
+    connect(m_videoThumbnailWorker, &VideoThumbnailWorker::videoHandled,
+            m_thumbnailPanel, &ThumbnailPanel::noteVideoHandled);
     // Miniatury videí se generují jen pro to, co panel právě potřebuje
     // (viditelná videa a okolí). Přes this->m_videoThumbnailWorker, ne přes
     // zachycený ukazatel — worker se při přepnutí profilu vyrábí znovu.

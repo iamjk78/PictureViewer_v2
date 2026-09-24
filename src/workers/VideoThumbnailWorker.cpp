@@ -195,6 +195,7 @@ void VideoThumbnailWorker::processNext()
         const QString path = m_queue.takeFirst();
         m_attempted.insert(path);
         emit thumbnailReady(m_generation, path, cached);
+        emit videoHandled(m_generation, path);
         QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
                                   Qt::QueuedConnection);
         return;
@@ -297,6 +298,7 @@ void VideoThumbnailWorker::finishCurrent(const QImage &image)
     if (!image.isNull()) {
         emit thumbnailReady(m_generation, m_currentPath, image);
     }
+    emit videoHandled(m_generation, m_currentPath);
     m_currentPath.clear();
     if (m_currentIsTail) {
         m_currentIsTail = false;

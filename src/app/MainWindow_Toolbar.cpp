@@ -26,6 +26,7 @@
 #include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
+#include <QProgressBar>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -322,6 +323,26 @@ void MainWindow::setupStatusBar()
     scanLayout->addWidget(scanCancel);
     m_scanProgressWidget->hide();
     statusBar()->addPermanentWidget(m_scanProgressWidget);
+
+    // Průběh ukládání miniatur do cache na pozadí — jen dokud zahřívání běží.
+    m_warmupWidget = new QWidget(this);
+    auto *warmupLayout = new QHBoxLayout(m_warmupWidget);
+    warmupLayout->setContentsMargins(0, 0, 8, 0);
+    warmupLayout->setSpacing(6);
+    m_warmupLabel = new QLabel(m_warmupWidget);
+    warmupLayout->addWidget(m_warmupLabel);
+    m_warmupBar = new QProgressBar(m_warmupWidget);
+    m_warmupBar->setRange(0, 1000);
+    m_warmupBar->setTextVisible(false);
+    m_warmupBar->setFixedSize(80, 8);
+    warmupLayout->addWidget(m_warmupBar);
+    m_warmupWidget->setToolTip(tr(
+        "Miniatury se na pozadí ukládají do cache, aby se příště zobrazily hned.\n"
+        "Pozastaveno = zahřívání čeká, až nebudeš nic načítat ani procházet."));
+    m_warmupWidget->hide();
+    statusBar()->addPermanentWidget(m_warmupWidget);
+    connect(m_thumbnailPanel, &ThumbnailPanel::warmupProgressChanged,
+            this, &MainWindow::onWarmupProgress);
 
     m_fitControlsWidget = new QWidget(this);
     auto *fitLayout = new QHBoxLayout(m_fitControlsWidget);

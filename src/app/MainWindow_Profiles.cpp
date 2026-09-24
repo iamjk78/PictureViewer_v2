@@ -215,6 +215,8 @@ void MainWindow::switchProfile(const QString &profileName)
             this);
         connect(m_videoThumbnailWorker, &VideoThumbnailWorker::thumbnailReady,
                 m_thumbnailPanel, &ThumbnailPanel::setVideoThumbnail);
+        connect(m_videoThumbnailWorker, &VideoThumbnailWorker::videoHandled,
+                m_thumbnailPanel, &ThumbnailPanel::noteVideoHandled);
     }
 
     restoreLastFolder();

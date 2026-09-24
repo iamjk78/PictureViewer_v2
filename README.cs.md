@@ -74,6 +74,10 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   nečte všechno najednou. Po chvíli klidu se zbytek pomalu uloží do cache na
   pozadí (miniatury videí až po dlouhém klidu) a ustupuje tomu, co právě
   prohlížíš
+- **Ukazatel ukládání do cache** — dokud se miniatury na pozadí ukládají do
+  cache, ve stavovém řádku je vidět, kolik obrázků a (zvlášť) kolik videí je
+  hotovo, s ukazatelem průběhu a poznámkou „pozastaveno“, když zahřívání čeká,
+  až přestaneš procházet; po dokončení zmizí
 - **Postupné načítání složky** — při řazení podle jména se soubory ukazují,
   jak přicházejí, ne až po přečtení celé složky; během načítání je vidět počet
   a tlačítko Zrušit (nebo Esc)

@@ -79,6 +79,9 @@ public:
     void setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int throttleMs);
     // Otisky souborů z výpisu složky — klíč cache pak nepotřebuje stat().
     void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
+    // Kolik souborů zahřívací worker už prošel (vygenerované i přeskočené) —
+    // pro ukazatel průběhu. Bezpečné volat z jiného vlákna.
+    int processedCount() const { return m_processed.load(); }
     // Pozastaví/obnoví zpracování (worker čeká mezi soubory, nezahazuje frontu).
     void setPaused(bool paused) { m_paused.store(paused); }
 
@@ -101,6 +104,7 @@ private:
     int m_generation;
     std::atomic_bool m_cancelled;
     std::atomic_bool m_paused{false};
+    std::atomic_int m_processed{0};
     bool m_cacheOnly = false;
     int m_throttleMs = 0;
     QSharedPointer<ThumbnailClaims> m_claims;

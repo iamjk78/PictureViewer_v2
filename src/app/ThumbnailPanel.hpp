@@ -90,6 +90,25 @@ public:
     // = stejné jako idleMs.
     void setWarmupTimingForTesting(int idleMs, int throttleMs, int videoIdleMs = -1);
 
+    // Průběh ukládání miniatur do cache na pozadí (zahřívání). Zobrazuje se,
+    // dokud zahřívání běží nebo je pozastavené; obrázky a videa mají každé
+    // vlastní počet.
+    struct WarmupProgress {
+        bool visible = false;
+        bool paused = false;
+        bool imagesActive = false;
+        int imagesDone = 0;
+        int imagesTotal = 0;
+        bool videosActive = false;
+        int videosDone = 0;
+        int videosTotal = 0;
+        bool operator==(const WarmupProgress &) const = default;
+    };
+    // Video vyřízené generátorem videí (i neúspěšně) — počítá se do průběhu.
+    void noteVideoHandled(int generation, const QString &path);
+    // Jen pro testy: prodleva před zobrazením ukazatele a interval obnovy.
+    void setProgressTimingForTesting(int showDelayMs, int intervalMs);
+
     // Aktuální velikost miniatury v pixelech (= šířka docku − 24).
     // V Horizontal/Grid režimu vrací výchozí hodnotu.
     int thumbSize() const { return m_thumbSize; }
@@ -101,6 +120,7 @@ protected:
     QSize sizeHint() const override;
 
 signals:
+    void warmupProgressChanged(const ThumbnailPanel::WarmupProgress &progress);
     void imageSelected(int index);
     // Videa, jejichž miniatury se mají generovat, seřazená podle priority
     // (VideoThumbnailWorker::retarget() jimi nahradí svou frontu): prvních
@@ -138,6 +158,8 @@ private:
     void maybeStartWarmup();
     void maybeStartVideoWarmup();
     void emitWantedVideos();
+    void updateWarmupProgress();
+    void countItem(const QString &path, int delta);
 
     static constexpr int kWarmupIdleMs = 5000;        // klid před zahřátím obrázků
     static constexpr int kVideoWarmupIdleMs = 30000;  // "plný klid" před zahřátím videí
@@ -150,6 +172,17 @@ private:
     bool m_videoTailPrepared = false;
     bool m_viewerBusy = false;
     bool m_scanRunning = false;
+    // Průběh zahřívání (viz WarmupProgress).
+    QTimer *m_progressTimer = nullptr;
+    int m_progressShowDelayMs = 1000;   // krátké zahřívání (vše už v cache) se neukazuje
+    int m_progressIntervalMs = 500;
+    QElapsedTimer m_progressActiveFor;
+    bool m_progressWasActive = false;
+    WarmupProgress m_lastProgress;
+    int m_imageItemCount = 0;
+    int m_videoItemCount = 0;
+    int m_warmSkipped = 0;              // obrázky, které worker nedostal (už je měl popředí)
+    QSet<QString> m_videosHandled;
     QThreadPool m_warmPool;                         // 1 vlákno, nízká priorita
     ThumbnailWorker *m_warmWorker = nullptr;
     QTimer *m_idleTimer = nullptr;

@@ -85,6 +85,7 @@ void ThumbnailWorker::run()
             if (m_cacheOnly) {
                 // Popředí už tuhle miniaturu má (nebo ji právě dělá).
                 if (m_claims && m_claims->contains(path)) {
+                    ++m_processed;
                     continue;
                 }
                 bool generated = false;
@@ -94,6 +95,7 @@ void ThumbnailWorker::run()
                     generated = false;
                 }
                 ++warmProcessed;
+                ++m_processed;
                 if (generated) {
                     ++warmGenerated;
                     sleepInterruptible(m_throttleMs);
