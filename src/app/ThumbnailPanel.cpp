@@ -91,6 +91,7 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     setDisplayMode(DisplayMode::Vertical);
     connect(this, &QListWidget::itemClicked, this, &ThumbnailPanel::onItemClicked);
 
+    m_playIcon = style()->standardIcon(QStyle::SP_MediaPlay);
     m_thumbPool.setMaxThreadCount(kThumbnailThreads);
     m_claims = QSharedPointer<ThumbnailClaims>::create();
 
@@ -226,6 +227,19 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     clear();
     m_pathToIndex.clear();
 
+    addImageItems(paths);
+
+    // Miniatury nejsou potřeba hned pro všechny — jen pro viditelné (viz
+    // updateWantedThumbnails()). Rozložení se ustálí až v event loopě, proto
+    // odloženě.
+    scheduleThumbnailUpdate();
+}
+
+void ThumbnailPanel::addImageItems(const QStringList &paths)
+{
+    // Bez překreslování po každé položce — u tisíců souborů by to trvalo sekundy.
+    setUpdatesEnabled(false);
+    m_pathToIndex.reserve(m_pathToIndex.size() + static_cast<qsizetype>(paths.size()));
     for (const QString &path : paths) {
         auto *item = new QListWidgetItem();
         item->setToolTip(path.section('/', -1));
@@ -235,17 +249,21 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
 
         const QString suffix = QStringLiteral(".") + QFileInfo(path).suffix();
         if (isVideoFile(suffix)) {
-            // Video placeholder: standardní ikona přehrávání
-            item->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+            item->setIcon(m_playIcon);   // placeholder videa
         }
 
         addItem(item);
         m_pathToIndex[path] = QPersistentModelIndex(indexFromItem(item));
     }
+    setUpdatesEnabled(true);
+}
 
-    // Miniatury nejsou potřeba hned pro všechny — jen pro viditelné (viz
-    // updateWantedThumbnails()). Rozložení se ustálí až v event loopě, proto
-    // odloženě.
+void ThumbnailPanel::appendImages(const QStringList &paths)
+{
+    if (m_shuttingDown || paths.isEmpty()) {
+        return;
+    }
+    addImageItems(paths);
     scheduleThumbnailUpdate();
 }
 

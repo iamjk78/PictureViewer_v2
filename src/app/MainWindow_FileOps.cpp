@@ -193,12 +193,125 @@ void MainWindow::dropEvent(QDropEvent *event)
     }
 }
 
+void MainWindow::hideScanProgress()
+{
+    if (m_scanProgressWidget != nullptr) {
+        m_scanProgressWidget->hide();
+    }
+}
+
+void MainWindow::onScanProgress(int generation, const QStringList &batch)
+{
+    if (m_shuttingDown || generation != m_scanGeneration || batch.isEmpty()) {
+        return;
+    }
+
+    // První dávka obnovené poslední složky = složka se otevírá, aplikace je
+    // použitelná — limit na obnovu už není potřeba.
+    if (generation == m_restoreScanGeneration) {
+        m_restoreWatchdog->stop();
+        m_restoreScanGeneration = -1;
+    }
+
+    const bool firstBatch = !m_scanStreamed;
+    m_scanStreamed = true;
+    m_scanStreamedCount += static_cast<int>(batch.size());
+    m_scanProgressLabel->setText(
+        tr("⏳ Načítám složku… %1 souborů").arg(QLocale().toString(m_scanStreamedCount)));
+
+    // S aktivním filtrem štítků se seznam ukáže až na konci (filtr se dělá
+    // nad kompletním výsledkem) — tady se jen počítá průběh.
+    if (!m_categoryFilterIds.isEmpty()) {
+        return;
+    }
+
+    if (firstBatch) {
+        // Dávka nahradí případný seznam předchozí složky.
+        m_imagePaths = batch;
+        m_unfilteredImagePaths = batch;
+        m_currentIndex = -1;
+        m_thumbnailPanel->loadImages(m_imagePaths);
+    } else {
+        m_imagePaths += batch;
+        m_unfilteredImagePaths += batch;
+        m_thumbnailPanel->appendImages(batch);
+    }
+
+    if (m_requestedFile.isEmpty()) {
+        // Nic zvenku nezadáno — ukázat první nalezený soubor.
+        if (firstBatch) {
+            showImage(0);
+            return;
+        }
+    } else if (!m_scanRequestedLocated) {
+        // Požadovaný soubor se zobrazuje už přes displayPathEarly(); jakmile ho
+        // dávka přinese, napojit ho na seznam (aktuální index, akce jako
+        // mazání či přejmenování), ať s ním jde pracovat před koncem načítání.
+        int idx = m_imagePaths.indexOf(m_requestedFile);
+        if (idx < 0) {
+            const QString name = QFileInfo(m_requestedFile).fileName();
+            for (int i = m_imagePaths.size() - static_cast<int>(batch.size()); i < m_imagePaths.size(); ++i) {
+                if (QFileInfo(m_imagePaths.at(i)).fileName() == name) {
+                    idx = i;
+                    break;
+                }
+            }
+        }
+        if (idx >= 0) {
+            m_scanRequestedLocated = true;
+            showImage(idx);
+            return;
+        }
+    }
+    applyActionStates();
+}
+
+void MainWindow::cancelScan()
+{
+    if (m_folderScanWorker == nullptr) {
+        return;
+    }
+    // Zvýšená generace zajistí, že pozdě doručený výsledek se zahodí; worker
+    // sám přestane číst při dalším souboru.
+    ++m_scanGeneration;
+    m_folderScanWorker->cancel();
+    disconnect(m_folderScanWorker, nullptr, this, nullptr);
+    m_folderScanWorker = nullptr;
+    m_restoreScanGeneration = -1;
+    m_restoreWatchdog->stop();
+    hideScanProgress();
+    m_scanRunning = false;
+
+    if (m_scanStreamedCount == 0) {
+        // Nic se ještě neukázalo — zůstává původní složka.
+        m_currentFolder = m_folderBeforeScan;
+        m_requestedFile.clear();
+        refreshFolderNavData();
+        m_statusLabel->setText(tr("Načítání složky zrušeno."));
+    } else {
+        m_statusLabel->setText(
+            tr("Načítání zrušeno — zobrazeno %1 souborů (seznam není úplný ani seřazený, F5 načte složku znovu).")
+                .arg(m_scanStreamedCount));
+    }
+    m_scanStreamed = false;
+    m_scanStreamedCount = 0;
+}
+
 void MainWindow::onScanComplete(int generation, const QStringList &paths)
 {
     if (m_shuttingDown || generation != m_scanGeneration) {
         return;
     }
+    hideScanProgress();
     m_scanRunning = false;
+    // Při postupném načítání se už nějaký soubor zobrazuje (a uživatel mohl
+    // listovat) — po seřazení zůstat na něm, ne skočit na první.
+    if (m_scanStreamed && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        m_requestedFile = m_imagePaths.at(m_currentIndex);
+    }
+    m_scanStreamed = false;
+    m_scanRequestedLocated = false;
+    m_scanStreamedCount = 0;
 
     // Sken obnovené poslední složky doběhl v limitu — watchdog už není třeba.
     if (generation == m_restoreScanGeneration) {
@@ -271,6 +384,7 @@ void MainWindow::onScanError(int generation, const QString &error)
             m_restoreWatchdog->stop();
             m_restoreScanGeneration = -1;
         }
+        hideScanProgress();
         m_scanRunning = false;
         m_statusLabel->setText(tr("Chyba při skenování: %1").arg(error));
     }
@@ -302,7 +416,13 @@ void MainWindow::loadFolder(const QString &folderPath)
         return;
     }
 
+    m_folderBeforeScan = m_currentFolder;
+    m_scanStreamed = false;
+    m_scanRequestedLocated = false;
+    m_scanStreamedCount = 0;
     m_scanRunning = true;
+    m_scanProgressLabel->setText(tr("⏳ Načítám složku…"));
+    m_scanProgressWidget->show();
     m_currentFolder = folderPath;
     ++m_scanGeneration;
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(true);
@@ -322,6 +442,7 @@ void MainWindow::loadFolder(const QString &folderPath)
     }
 
     auto *worker = new FolderScanWorker(m_settingsManager.get(), folderPath, m_scanGeneration, nullptr);
+    connect(worker, &FolderScanWorker::scanProgress, this, &MainWindow::onScanProgress);
     connect(worker, &FolderScanWorker::scanComplete, this, &MainWindow::onScanComplete);
     connect(worker, &FolderScanWorker::scanError, this, &MainWindow::onScanError);
     connect(worker, &FolderScanWorker::finished, this, &MainWindow::onScanFinished);
@@ -417,6 +538,7 @@ void MainWindow::onRestoreTimeout()
         }
         m_currentFolder.clear();
         m_requestedFile.clear();
+        hideScanProgress();
         m_scanRunning = false;
         if (m_reloadFolderAction) {
             m_reloadFolderAction->setEnabled(false);

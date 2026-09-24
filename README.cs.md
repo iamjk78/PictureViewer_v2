@@ -74,6 +74,9 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   nečte všechno najednou. Po chvíli klidu se zbytek pomalu uloží do cache na
   pozadí (miniatury videí až po dlouhém klidu) a ustupuje tomu, co právě
   prohlížíš
+- **Postupné načítání složky** — při řazení podle jména se soubory ukazují,
+  jak přicházejí, ne až po přečtení celé složky; během načítání je vidět počet
+  a tlačítko Zrušit (nebo Esc)
 - **Hromadné operace ukazují průběh** — mazání nebo přesun mnoha souborů
   najednou zobrazí okno s průběhem a Zrušit a upozorní, když se složka ještě
   načítá

@@ -43,6 +43,9 @@ public:
     // Na pomalém/síťovém úložišti by jinak čtení miniatur celé složky trvalo
     // desítky minut a brzdilo i právě prohlížený obrázek.
     void loadImages(const QStringList &paths);
+    // Přidá položky na konec (postupné načítání složky). Nemění generaci ani
+    // nezahazuje rozdělanou práci — nové položky se jen zařadí mezi ostatní.
+    void appendImages(const QStringList &paths);
     void setCurrentIndex(int index);
     void removeImage(int index);
     void updateImagePath(const QString &oldPath, const QString &newPath);
@@ -106,6 +109,8 @@ private:
     // zobrazení panelu nebo načtení nového seznamu. Zároveň je to "uživatel
     // něco dělá" — zahřívání cache na pozadí se pozastaví.
     void scheduleThumbnailUpdate();
+    // Vytvoří položky seznamu pro dané cesty (sdílí loadImages a appendImages).
+    void addImageItems(const QStringList &paths);
     // Zjistí viditelné položky + okolí, přeuspořádá frontu čekajících miniatur
     // (nejdřív viditelné, od středu) a oznámí seznam potřebných videí.
     void updateWantedThumbnails();
@@ -156,6 +161,7 @@ private:
     QStringList m_lastWantedVideos;
     QTimer *m_updateTimer = nullptr;
     int m_generation;
+    QIcon m_playIcon;   // placeholder videa; QStyle::standardIcon je drahé, vyrábí se jednou
     bool m_shuttingDown = false;
     DisplayMode m_displayMode = DisplayMode::Vertical;
     int m_thumbSize = 96;

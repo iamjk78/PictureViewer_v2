@@ -308,6 +308,21 @@ void MainWindow::setupStatusBar()
         "Zapnuto: malé obrázky se při načtení zvětší na velikost okna.\n"
         "Vypnuto: malé obrázky se zobrazí v původní velikosti, i když jsou menší než okno.");
 
+    // Průběh načítání složky (viz onScanProgress) — skrytý, dokud se nečte.
+    m_scanProgressWidget = new QWidget(this);
+    auto *scanLayout = new QHBoxLayout(m_scanProgressWidget);
+    scanLayout->setContentsMargins(0, 0, 8, 0);
+    scanLayout->setSpacing(4);
+    m_scanProgressLabel = new QLabel(m_scanProgressWidget);
+    scanLayout->addWidget(m_scanProgressLabel);
+    auto *scanCancel = new QToolButton(m_scanProgressWidget);
+    scanCancel->setText(tr("Zrušit"));
+    scanCancel->setToolTip(tr("Přerušit načítání složky (Esc)"));
+    connect(scanCancel, &QToolButton::clicked, this, &MainWindow::cancelScan);
+    scanLayout->addWidget(scanCancel);
+    m_scanProgressWidget->hide();
+    statusBar()->addPermanentWidget(m_scanProgressWidget);
+
     m_fitControlsWidget = new QWidget(this);
     auto *fitLayout = new QHBoxLayout(m_fitControlsWidget);
     fitLayout->setContentsMargins(0, 0, 8, 0);

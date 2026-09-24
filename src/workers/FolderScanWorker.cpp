@@ -3,6 +3,8 @@
 #include "app/SettingsManager.hpp"
 #include "core/ImageCatalog.hpp"
 
+#include <QThread>
+
 #include <exception>
 
 namespace pictureviewer {
@@ -26,6 +28,15 @@ FolderScanWorker::FolderScanWorker(const SettingsManager *settings, QString fold
     }
 }
 
+namespace {
+std::atomic_int g_streamDelayMs{0};
+}
+
+void FolderScanWorker::setStreamDelayForTesting(int msPerBatch)
+{
+    g_streamDelayMs = msPerBatch;
+}
+
 void FolderScanWorker::cancel()
 {
     m_cancelled.store(true);
@@ -40,9 +51,27 @@ void FolderScanWorker::run()
 
     try {
         ImageCatalog catalog;
-        const QStringList paths = catalog.loadFolder(
-            m_folderPath, m_includePdf, m_sortKey, m_ascending,
-            m_includeImages, m_includeVideos);
+        QStringList paths;
+        if (m_sortKey == SortKey::Name) {
+            // Řazení podle jména nepotřebuje stat() souborů, takže se výpis
+            // dá ukazovat postupně (na pomalém úložišti trvá minuty).
+            paths = catalog.loadFolderStreaming(
+                m_folderPath, m_includePdf, m_ascending, m_includeImages, m_includeVideos,
+                [this] { return m_cancelled.load(); },
+                [this](const QStringList &batch) {
+                    if (m_cancelled.load()) {
+                        return;
+                    }
+                    emit scanProgress(m_generation, batch);
+                    if (g_streamDelayMs > 0) {
+                        QThread::msleep(static_cast<unsigned long>(g_streamDelayMs.load()));
+                    }
+                });
+        } else {
+            paths = catalog.loadFolder(
+                m_folderPath, m_includePdf, m_sortKey, m_ascending,
+                m_includeImages, m_includeVideos);
+        }
         if (!m_cancelled.load()) {
             emit scanComplete(m_generation, paths);
         }

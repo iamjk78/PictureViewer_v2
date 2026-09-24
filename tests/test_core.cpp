@@ -1579,6 +1579,88 @@ private slots:
             QCOMPARE(deriveActionStates(st).save, expected);
         }
     }
+    // ── ImageCatalog: postupné načítání složky ───────────────────────────────
+    void catalogStreaming_deliversBatchesAndReturnsSortedList()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (const char *name : {"img2.jpg", "img10.jpg", "img1.jpg", "note.txt", "clip.mp4", "doc.pdf"}) {
+            QVERIFY(writeFileOfSize(dir.filePath(QString::fromLatin1(name)), 1));
+        }
+
+        ImageCatalog catalog;
+        QStringList streamed;
+        int batches = 0;
+        const QStringList result = catalog.loadFolderStreaming(
+            dir.path(), /*pdf*/ true, /*asc*/ true, /*images*/ true, /*videos*/ true,
+            [] { return false; },
+            [&](const QStringList &batch) {
+                QVERIFY(batch.size() <= 2);   // maxBatch
+                streamed += batch;
+                ++batches;
+            },
+            /*maxBatch*/ 2, /*flushMs*/ 1000000);
+
+        // Dávky dohromady = všechny podporované soubory (bez note.txt)…
+        QCOMPARE(streamed.size(), 5);
+        QVERIFY(batches >= 3);
+        // …a výsledek je přirozeně seřazený stejně jako u loadFolder().
+        QCOMPARE(result, catalog.loadFolder(dir.path(), true, SortKey::Name, true, true, true));
+        QCOMPARE(QFileInfo(result.first()).fileName(), QStringLiteral("clip.mp4"));
+        QVERIFY(result.indexOf(dir.filePath("img2.jpg")) < result.indexOf(dir.filePath("img10.jpg")));
+    }
+
+    void catalogStreaming_descendingReversesTheSortedResult()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (const char *name : {"a.jpg", "b.jpg", "c.jpg"}) {
+            QVERIFY(writeFileOfSize(dir.filePath(QString::fromLatin1(name)), 1));
+        }
+        ImageCatalog catalog;
+        const QStringList result = catalog.loadFolderStreaming(
+            dir.path(), false, /*asc*/ false, true, false, [] { return false; }, {});
+        QCOMPARE(QFileInfo(result.first()).fileName(), QStringLiteral("c.jpg"));
+        QCOMPARE(QFileInfo(result.last()).fileName(), QStringLiteral("a.jpg"));
+    }
+
+    // Zrušení musí přerušit čtení hned, ne až po dočtení celé složky (na
+    // pomalém úložišti to jsou minuty): po zrušení se nevydá už ani dávka.
+    void catalogStreaming_cancelStopsReadingEarly()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (int i = 0; i < 60; ++i) {
+            QVERIFY(writeFileOfSize(dir.filePath(QStringLiteral("f%1.jpg").arg(i, 3, 10, QLatin1Char('0'))), 1));
+        }
+        ImageCatalog catalog;
+        int delivered = 0;
+        bool cancelled = false;
+        const QStringList result = catalog.loadFolderStreaming(
+            dir.path(), false, true, true, false,
+            [&] { return cancelled; },
+            [&](const QStringList &batch) {
+                delivered += batch.size();
+                cancelled = true;   // uživatel zrušil po první dávce
+            },
+            /*maxBatch*/ 5, /*flushMs*/ 1000000);
+
+        QVERIFY(result.isEmpty());
+        QCOMPARE(delivered, 5);   // jen ta první, nic dalšího
+    }
+
+    void catalogStreaming_missingFolderThrows()
+    {
+        ImageCatalog catalog;
+        bool threw = false;
+        try {
+            catalog.loadFolderStreaming(QStringLiteral("/tato/cesta/neexistuje"), false, true, true, false,
+                                        [] { return false; }, {});
+        } catch (const std::exception &) {
+            threw = true;
+        }
+        QVERIFY(threw);
+    }
     // ── CompanionIndex: párování z paměti ────────────────────────────────────
     // Musí dávat přesně to, co findCompanions() nad diskem — jen bez dotazů na úložiště.
 

@@ -2,6 +2,8 @@
 
 #include <QStringList>
 
+#include <functional>
+
 class QFileInfo;
 
 namespace pictureviewer {
@@ -24,6 +26,29 @@ public:
                            bool includePdf = true,
                            SortKey sortKey = SortKey::Name,
                            bool ascending = true,
+                           bool includeImages = true,
+                           bool includeVideos = false) const;
+    // Postupné načítání pro pomalá (síťová) úložiště: výpis složky se čte po
+    // dávkách a každá se hned předá onBatch() (v pořadí, v jakém ji úložiště
+    // vrací — nesetříděné), takže volající může první soubory ukázat dřív,
+    // než se dočte celá složka. Na konci vrátí kompletní seznam seřazený
+    // podle jména (bez dalšího čtení z disku). isCancelled se kontroluje při
+    // KAŽDÉM souboru; po zrušení vrací prázdný seznam a už nic nevydá.
+    // Dávka se vydá po maxBatch souborech nebo po flushMs od poslední.
+    // Řazení podle data/velikosti potřebuje stat() všech souborů — pro ně
+    // použij loadFolder(); tahle varianta řadí jen podle jména.
+    QStringList loadFolderStreaming(const QString &folderPath,
+                                    bool includePdf,
+                                    bool ascending,
+                                    bool includeImages,
+                                    bool includeVideos,
+                                    const std::function<bool()> &isCancelled,
+                                    const std::function<void(const QStringList &)> &onBatch,
+                                    int maxBatch = 500,
+                                    int flushMs = 300) const;
+    // Rozhodnutí podle přípony (bez dotazu na úložiště).
+    bool isSupportedSuffix(const QString &suffix,
+                           bool includePdf = true,
                            bool includeImages = true,
                            bool includeVideos = false) const;
     bool isSupported(const QFileInfo &fileInfo,

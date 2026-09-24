@@ -4,6 +4,8 @@
 #include "core/ImageFormats.hpp"
 
 #include <QDir>
+#include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFileInfoList>
 #include <QString>
@@ -87,8 +89,15 @@ bool ImageCatalog::isSupported(const QFileInfo &fileInfo,
     if (!fileInfo.isFile()) {
         return false;
     }
+    return isSupportedSuffix(fileInfo.suffix(), includePdf, includeImages, includeVideos);
+}
 
-    const QString suffix = QStringLiteral(".") + fileInfo.suffix();
+bool ImageCatalog::isSupportedSuffix(const QString &rawSuffix,
+                                     bool includePdf,
+                                     bool includeImages,
+                                     bool includeVideos) const
+{
+    const QString suffix = QStringLiteral(".") + rawSuffix;
 
     if (includeImages && isSupportedImageExtension(suffix)) {
         return true;
@@ -103,6 +112,63 @@ bool ImageCatalog::isSupported(const QFileInfo &fileInfo,
     }
 
     return false;
+}
+
+QStringList ImageCatalog::loadFolderStreaming(const QString &folderPath,
+                                              bool includePdf,
+                                              bool ascending,
+                                              bool includeImages,
+                                              bool includeVideos,
+                                              const std::function<bool()> &isCancelled,
+                                              const std::function<void(const QStringList &)> &onBatch,
+                                              int maxBatch,
+                                              int flushMs) const
+{
+    const QDir directory(folderPath);
+    if (!directory.exists()) {
+        throw std::runtime_error(QString("Cesta není složka: %1").arg(folderPath).toStdString());
+    }
+
+    QStringList all;
+    QStringList batch;
+    QElapsedTimer sinceFlush;
+    sinceFlush.start();
+
+    // Jen názvy — žádné QFileInfo/stat na soubor (typ dodá samotný výpis).
+    QDirIterator it(directory.absolutePath(), QDir::Files | QDir::NoDotAndDotDot);
+    while (it.hasNext()) {
+        if (isCancelled && isCancelled()) {
+            return {};
+        }
+        it.next();
+        const QString name = it.fileName();
+        if (!isSupportedSuffix(QFileInfo(name).suffix(), includePdf, includeImages, includeVideos)) {
+            continue;
+        }
+        const QString path = directory.absoluteFilePath(name);
+        all.append(path);
+        batch.append(path);
+        if (batch.size() >= maxBatch || sinceFlush.elapsed() >= flushMs) {
+            if (onBatch) {
+                onBatch(batch);
+            }
+            batch.clear();
+            sinceFlush.restart();
+        }
+    }
+    if (!batch.isEmpty() && onBatch && !(isCancelled && isCancelled())) {
+        onBatch(batch);
+    }
+    if (isCancelled && isCancelled()) {
+        return {};
+    }
+
+    const QCollator collator = makeNaturalCollator();
+    std::sort(all.begin(), all.end(), [&](const QString &a, const QString &b) {
+        const int cmp = collator.compare(QFileInfo(a).fileName(), QFileInfo(b).fileName());
+        return ascending ? cmp < 0 : cmp > 0;
+    });
+    return all;
 }
 
 } // namespace pictureviewer

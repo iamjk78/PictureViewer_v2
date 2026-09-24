@@ -22,7 +22,14 @@ public:
     void cancel();
     void run() override;
 
+    // Jen pro testy: zpomalí každou dávku (simulace pomalého úložiště).
+    static void setStreamDelayForTesting(int msPerBatch);
+
 signals:
+    // Dílčí výsledek při řazení podle jména: soubory v pořadí, v jakém je
+    // vrací úložiště (nesetříděné). Kompletní seřazený seznam přijde
+    // v scanComplete().
+    void scanProgress(int generation, const QStringList &batch);
     void scanComplete(int generation, const QStringList &paths);
     void scanError(int generation, const QString &error);
     void finished(int generation);

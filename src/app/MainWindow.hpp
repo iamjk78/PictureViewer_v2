@@ -94,6 +94,7 @@ private slots:
     void onEnableVideosToggled(bool checked);
     void onRotateLeft();
     void onRotateRight();
+    void onScanProgress(int generation, const QStringList &batch);
     void onScanComplete(int generation, const QStringList &paths);
     void onScanError(int generation, const QString &error);
     void onScanFinished(int generation);
@@ -127,6 +128,10 @@ private slots:
 private:
     void cancelAllWorkers();   // cancel + disconnect every background task
     void loadFolder(const QString &folderPath);
+    // Přeruší načítání složky (Esc / tlačítko Zrušit). Už načtené soubory
+    // zůstanou zobrazené; seznam je pak neúplný a nesetříděný (F5 načte znovu).
+    void cancelScan();
+    void hideScanProgress();
     void reloadCurrentFolder();   // znovu naskenovat (po změně řazení), zachovat obrázek
     void applyUiLayout(UiLayout layout);
     void displayPathEarly(const QString &path);   // zobrazení souboru před koncem skenu
@@ -324,6 +329,15 @@ private:
     // kliknutí (viz onFolderNavClicked()).
     QString m_cachedSiblingsParent;
     QStringList m_cachedParentSubfolderNames;
+
+    // ── Postupné načítání složky ─────────────────────────────────────────
+    // Řazení podle jména se čte po dávkách (viz FolderScanWorker::scanProgress).
+    bool m_scanStreamed = false;        // ukázala se už aspoň jedna dávka
+    bool m_scanRequestedLocated = false;  // požadovaný soubor už je napojený na seznam
+    int m_scanStreamedCount = 0;        // kolik souborů zatím přišlo
+    QString m_folderBeforeScan;         // pro návrat při zrušení před první dávkou
+    QWidget *m_scanProgressWidget = nullptr;   // "Načítám složku… N souborů [Zrušit]"
+    QLabel *m_scanProgressLabel = nullptr;
 
     // ── Časový limit obnovy poslední složky po startu ────────────────────
     static constexpr int kRestoreLastFolderTimeoutMs = 5000;

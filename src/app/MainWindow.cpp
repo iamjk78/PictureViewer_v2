@@ -564,6 +564,9 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Escape:
         if (m_isFullscreen) {
             exitFullscreen();
+        } else if (m_folderScanWorker != nullptr) {
+            // Načítání složky běží — Esc ho přeruší (místo zavření aplikace).
+            cancelScan();
         } else if (m_galleryGridActive
                    && m_centralStack->currentWidget() == m_imageView) {
             // V režimu Galerie se Esc vrací z obrázku zpět do mřížky

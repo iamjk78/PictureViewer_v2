@@ -41,6 +41,7 @@
 #include "app/BatchProgress.hpp"
 #include "app/MainWindow.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "workers/FolderScanWorker.hpp"
 
 using namespace pictureviewer;
 
@@ -98,7 +99,7 @@ void writeConfigForRestore(const QString &folder, bool remember)
 bool statusMentions(const QWidget &window, const QString &needle)
 {
     for (const QLabel *label : window.findChildren<QLabel *>()) {
-        if (label->text().contains(needle)) {
+        if (label->isVisible() && label->text().contains(needle)) {
             return true;
         }
     }
@@ -659,6 +660,92 @@ private slots:
         // …a viditelné video je v popředí (jedno), vzdálené v ocasu.
         QCOMPARE(spy.last().at(2).toInt(), 1);
     }
+    // ── Postupné načítání složky ─────────────────────────────────────────────
+    // Zpomalení "úložiště": worker po každé dávce (500 souborů) počká.
+
+    void scan_showsPartialResultsBeforeTheScanFinishes()
+    {
+        writeConfigForRestore(QString(), false);   // bez obnovy složky, řazení podle jména
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 1300);
+        auto reset = qScopeGuard([] { FolderScanWorker::setStreamDelayForTesting(0); });
+        FolderScanWorker::setStreamDelayForTesting(700);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+
+        // Po první dávce je už co ukázat, i když sken ještě neskončil…
+        QTRY_VERIFY_WITH_TIMEOUT(panel->count() >= 500, 5000);
+        QVERIFY2(panel->count() < 1300, "seznam už je kompletní — dávky se neukázaly postupně");
+        QVERIFY(statusMentions(window, QStringLiteral("Načítám složku")));
+
+        // …a nakonec je seznam kompletní, seřazený podle jména, ukazatel zmizí.
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 1300, 10000);
+        // Dávky přicházejí v pořadí úložiště (nesetříděné); seřazený seznam
+        // přijde až s dokončením skenu.
+        const QString base = QDir(QFileInfo(dir.path()).canonicalFilePath()).filePath("img_%1.jpg");
+        QTRY_COMPARE_WITH_TIMEOUT(panel->item(0)->data(Qt::UserRole).toString(),
+                                  base.arg(1, 4, 10, QLatin1Char('0')), 10000);
+        QCOMPARE(panel->item(1299)->data(Qt::UserRole).toString(),
+                 base.arg(1300, 4, 10, QLatin1Char('0')));
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 3000);
+        window.close();
+    }
+
+    void scan_escapeCancelsTheScanInsteadOfClosingTheApp()
+    {
+        writeConfigForRestore(QString(), false);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 1300);
+        auto reset = qScopeGuard([] { FolderScanWorker::setStreamDelayForTesting(0); });
+        FolderScanWorker::setStreamDelayForTesting(1000);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->count() >= 500, 5000);
+
+        QTest::keyClick(&window, Qt::Key_Escape);
+
+        // Načítání se přerušilo (okno zůstalo otevřené) a seznam už neroste.
+        QVERIFY(window.isVisible());
+        QTRY_VERIFY_WITH_TIMEOUT(statusMentions(window, QStringLiteral("zrušeno")), 3000);
+        const int atCancel = panel->count();
+        QTest::qWait(2500);   // dost času, aby dorazily zbylé dávky, kdyby se nezrušily
+        QCOMPARE(panel->count(), atCancel);
+        QVERIFY(atCancel < 1300);
+        QVERIFY(window.isVisible());
+    }
+
+    void scan_appendImagesKeepsWhatWasAlreadyThere()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 120);
+
+        ThumbnailPanel panel;
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages(paths.mid(0, 60));
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.iconAt(0).isNull(), 5000);
+        const int generation = panel.generation();
+
+        panel.appendImages(paths.mid(60));
+        QCOMPARE(panel.count(), 120);
+        QCOMPARE(panel.generation(), generation);   // přidání neruší rozdělanou práci
+        QVERIFY(!panel.iconAt(0).isNull());          // dosavadní miniatura zůstala
+        QCOMPARE(panel.item(119)->data(Qt::UserRole).toString(), paths.last());
+    }
     // ── Hromadné operace: páry z paměti, průběh se zrušením, varování ─────────
     void batch_deleteMovesPairsTogether()
     {
@@ -743,6 +830,45 @@ private slots:
         window.close();
     }
 
+    void batch_warnsWhileTheFolderIsStillLoading()
+    {
+        writeConfigForBatch(false);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 1300);
+        auto reset = qScopeGuard([] { FolderScanWorker::setStreamDelayForTesting(0); });
+        FolderScanWorker::setStreamDelayForTesting(1500);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->count() >= 500, 6000);
+        QVERIFY(statusMentions(window, QStringLiteral("Načítám složku")));   // načítání ještě běží
+
+        QMetaObject::invokeMethod(panel, "imageSelected", Q_ARG(int, 0));   // aktuální soubor
+        auto selectTwo = [&] {
+            panel->clearSelection();
+            panel->item(0)->setSelected(true);
+            panel->item(1)->setSelected(true);
+        };
+        const QString deleted = QDir(dir.path()).filePath("Delete");
+
+        // Zrušit → nic se nesmaže.
+        selectTwo();
+        clickMessageBoxButtonSoon(QStringLiteral("Zrušit"), 300);
+        QTest::keyClick(panel, Qt::Key_Delete);
+        QVERIFY(!QDir(deleted).exists() || QDir(deleted).entryList(QDir::Files).isEmpty());
+        QCOMPARE(QDir(dir.path()).entryList({"*.jpg"}, QDir::Files).size(), 1300);
+
+        // Pokračovat → smaže se.
+        selectTwo();
+        clickMessageBoxButtonSoon(QStringLiteral("Pokračovat"), 300);
+        QTest::keyClick(panel, Qt::Key_Delete);
+        QTRY_COMPARE_WITH_TIMEOUT(QDir(deleted).entryList(QDir::Files).size(), 2, 5000);
+        window.close();
+    }
     // Důkaz, že se páry berou ze seznamu v aplikaci, ne z disku (na síťovém
     // úložišti stál dotaz na disk ~30 síťových volání na soubor): video, které
     // se na disku objevilo AŽ PO dokončení načtení, seznam nezná, takže se s
