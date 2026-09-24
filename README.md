@@ -84,6 +84,20 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
 - **Progressive folder loading** — with name sorting, files appear as the
   listing arrives instead of after the whole folder has been read; a progress
   counter and a Cancel button (or Esc) are shown while it runs
+- **Fast on network storage** — on macOS the folder listing comes in large
+  chunks (`getattrlistbulk`, several times faster over SMB) together with file
+  sizes and dates, so thumbnail cache keys need no per-file network round trip;
+  JPEG thumbnails are taken from the small preview embedded in the EXIF header
+  (only the first ~128 kB of the file is read; files without a usable preview
+  fall back to a normal decode); image metadata and neighbour prefetching no
+  longer block the window while browsing; cache warm-up and neighbour
+  prefetching wait until the folder listing is finished, and quitting doesn't
+  wait more than 3 s for reads stuck on the network
+- **Local diagnostic log** — timings of folder loading, thumbnails, UI stalls
+  and file operations are written to `~/Library/Logs/PictureViewer/` (macOS) or
+  `%LOCALAPPDATA%\JiriKrejci\PictureViewer\logs` (Windows), one file per run,
+  the 10 newest kept. It never leaves your machine; open it via
+  *Help → Show log folder*
 - **Batch operations show progress** — deleting or moving many files at once
   shows a progress dialog with Cancel, and warns if the folder is still loading
 - **Inline video player** (Qt Multimedia) — MP4, MKV, MOV, WebM and more, played

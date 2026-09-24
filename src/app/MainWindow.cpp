@@ -39,6 +39,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QCursor>
+#include "core/DiagLog.hpp"
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QDragEnterEvent>
@@ -269,6 +270,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_imageLoader = new ImageLoader(this);
     connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
+    connect(m_imageLoader, &ImageLoader::imageChangedOnDisk, this, &MainWindow::onImageChangedOnDisk);
     // Dokud se načítá prohlížený obrázek, zahřívání cache miniatur stojí.
     connect(m_imageLoader, &ImageLoader::busyChanged, m_thumbnailPanel, &ThumbnailPanel::setViewerBusy);
     connect(m_imageView, &ImageView::contextMenuRequested, this, &MainWindow::showImageContextMenu);
@@ -469,7 +471,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
     m_settingsManager->syncToDisk();
 
     cancelAllWorkers();
-    QThreadPool::globalInstance()->waitForDone();
+    // Vlákno zaseknuté v čtení ze sítě nejde přerušit; déle než pár sekund se
+    // na něj nečeká (viz shutdownTimedOut()).
+    m_shutdownTimedOut = !QThreadPool::globalInstance()->waitForDone(3000);
+    if (m_shutdownTimedOut) {
+        diag::log(QStringLiteral("ukončení: vlákna na pozadí se do 3 s nezastavila (čtení ze sítě)"));
+    }
     // NOTE: processEvents() is intentionally omitted here.
     // cancelAllWorkers() sets m_shuttingDown=true so any stale queued signals
     // that processEvents() would have delivered are dropped at their own entry
@@ -488,6 +495,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
 MainWindow::~MainWindow()
 {
     cancelAllWorkers();
+    if (m_shutdownTimedOut) {
+        return;   // vlákna ještě běží; proces se ukončí natvrdo v Application::run()
+    }
     QThreadPool::globalInstance()->waitForDone();
 }
 
@@ -1303,6 +1313,10 @@ void MainWindow::setupMenu()
     helpMenu->addAction(tr("Klávesové zkratky"),     this, [this] { HelpDialog::showShortcuts(this); });
     helpMenu->addSeparator();
     helpMenu->addAction(tr("Co je nového"),          this, [this] { HelpDialog::showWhatsNew(this);  });
+    helpMenu->addSeparator();
+    helpMenu->addAction(tr("Zobrazit složku s logy"), this, [] {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(diag::defaultDirectory()));
+    });
     helpMenu->addSeparator();
     helpMenu->addAction(tr("Zkontrolovat aktualizace…"), this, [this] {
         if (m_updateChecker != nullptr) {

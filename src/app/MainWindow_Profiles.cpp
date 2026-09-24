@@ -123,7 +123,7 @@ void MainWindow::switchProfile(const QString &profileName)
         m_folderScanWorker = nullptr;
     }
     hideScanProgress();
-    m_scanRunning = false;
+    setScanRunning(false);
     m_scanStreamed = false;
     m_scanStreamedCount = 0;
 

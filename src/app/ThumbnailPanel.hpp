@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/FileStampIndex.hpp"
+#include <QElapsedTimer>
 #include <QHash>
 #include <QListWidget>
 #include <QPersistentModelIndex>
@@ -36,6 +38,9 @@ public:
 
     // Konfigurace diskové cache miniatur; projeví se při dalším loadImages().
     void setDiskCache(bool enabled, const QString &cacheDir);
+    // Otisky souborů z výpisu složky (předají se generátorům miniatur, aby
+    // klíč cache nepotřeboval stat() přes síť).
+    void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
 
     // Nahradí seznam položek. Miniatury se NEgenerují hned pro všechny —
     // panel si sám hlídá, které položky jsou vidět (plus okolí ve směru
@@ -74,6 +79,10 @@ public:
     // soupeřilo o stejné spojení a prohlížený obrázek by se načítal
     // násobně déle.
     void setViewerBusy(bool busy);
+    // Dokud se čte výpis složky, zahřívání cache stojí — výpis i čtení souborů
+    // jdou přes stejné síťové spojení a vzájemně by se zpomalovaly. Miniatury
+    // viditelných položek se generují dál.
+    void setScanRunning(bool running);
 
     // Jen pro testy: zkrátí dobu klidu před zahájením zahřívání cache
     // (obrázky / videa) a škrcení mezi miniaturami (výchozí hodnoty jsou
@@ -140,6 +149,7 @@ private:
     bool m_videoIdleReady = false;
     bool m_videoTailPrepared = false;
     bool m_viewerBusy = false;
+    bool m_scanRunning = false;
     QThreadPool m_warmPool;                         // 1 vlákno, nízká priorita
     ThumbnailWorker *m_warmWorker = nullptr;
     QTimer *m_idleTimer = nullptr;
@@ -167,6 +177,9 @@ private:
     int m_thumbSize = 96;
     bool m_diskCacheEnabled = true;
     QString m_diskCacheDir;
+    QSharedPointer<FileStampIndex> m_stamps;
+    int m_doneCount = 0;                 // miniatury dokončené v popředí od posledního loadImages
+    QElapsedTimer m_statsTimer;
     // O(1) lookup by path. QPersistentModelIndex (ne surový QListWidgetItem*):
     // přežívá posuny řádků při mazání uprostřed seznamu a při smazání svého
     // řádku se sám zneplatní — asynchronně doručený náhled (ThumbnailWorker /

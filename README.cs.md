@@ -77,6 +77,19 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
 - **Postupné načítání složky** — při řazení podle jména se soubory ukazují,
   jak přicházejí, ne až po přečtení celé složky; během načítání je vidět počet
   a tlačítko Zrušit (nebo Esc)
+- **Rychlé na síťovém úložišti** — na macOS se výpis složky čte ve velkých
+  dávkách (`getattrlistbulk`, přes SMB několikanásobně rychleji) i s velikostmi
+  a daty souborů, takže klíče cache miniatur nepotřebují dotaz přes síť na
+  každý soubor; miniatury JPEG se berou z malého náhledu vloženého v EXIF
+  (čte se jen prvních ~128 kB souboru; soubory bez použitelného náhledu se
+  dekódují normálně); metadata obrázku a přednačítání sousedů už při
+  procházení neblokují okno; zahřívání cache a přednačítání sousedů počká, až se
+  dočte výpis složky, a ukončení nečeká na zaseknuté čtení ze sítě déle než 3 s
+- **Lokální diagnostický log** — časování načítání složek, miniatur, zamrznutí okna
+  a souborových operací se zapisuje do `~/Library/Logs/PictureViewer/` (macOS)
+  nebo `%LOCALAPPDATA%\JiriKrejci\PictureViewer\logs` (Windows), jeden soubor
+  na běh, uchovává se 10 nejnovějších. Nikam se neodesílá; otevřeš ho přes
+  *Nápověda → Zobrazit složku s logy*
 - **Hromadné operace ukazují průběh** — mazání nebo přesun mnoha souborů
   najednou zobrazí okno s průběhem a Zrušit a upozorní, když se složka ještě
   načítá

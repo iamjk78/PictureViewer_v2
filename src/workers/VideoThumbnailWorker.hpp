@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/FileStampIndex.hpp"
 #include <QObject>
 #include <QSet>
 #include <QStringList>
@@ -51,6 +52,8 @@ public:
     // miniatur). Bez toho by generátor zůstal u hodnot z konstruktoru a psal
     // do staré složky i po jejím přenastavení nebo vypnutí cache.
     void setDiskCache(bool enabled, const QString &cacheDir);
+    // Otisky souborů z výpisu složky — klíč cache pak nepotřebuje stat().
+    void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
 
 signals:
     void thumbnailReady(int generation, const QString &path, const QImage &image);
@@ -95,6 +98,7 @@ private:
     bool          m_suspended  = false;
     bool          m_diskCacheEnabled;
     QString       m_diskCacheDir;
+    QSharedPointer<FileStampIndex> m_stamps;
 };
 
 } // namespace pictureviewer

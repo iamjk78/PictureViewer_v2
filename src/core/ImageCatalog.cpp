@@ -1,10 +1,12 @@
 #include "core/ImageCatalog.hpp"
 
+#include "core/BulkDirectoryLister.hpp"
 #include "core/Collation.hpp"
+#include "core/DiagLog.hpp"
+#include "core/FileStampIndex.hpp"
 #include "core/ImageFormats.hpp"
 
 #include <QDir>
-#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFileInfoList>
@@ -17,7 +19,8 @@ namespace pictureviewer {
 
 QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
                                      SortKey sortKey, bool ascending,
-                                     bool includeImages, bool includeVideos) const
+                                     bool includeImages, bool includeVideos,
+                                     FileStampIndex *stamps) const
 {
     const QDir directory(folderPath);
     if (!directory.exists()) {
@@ -38,6 +41,10 @@ QStringList ImageCatalog::loadFolder(const QString &folderPath, bool includePdf,
             continue;
         }
         supported.append(entry);
+        if (stamps != nullptr) {
+            stamps->set(entry.absoluteFilePath(),
+                        {entry.lastModified().toSecsSinceEpoch(), entry.size()});
+        }
     }
 
     // Přirozené locale-aware řazení (sdílený collator — viz core/Collation.hpp).
@@ -122,30 +129,38 @@ QStringList ImageCatalog::loadFolderStreaming(const QString &folderPath,
                                               const std::function<bool()> &isCancelled,
                                               const std::function<void(const QStringList &)> &onBatch,
                                               int maxBatch,
-                                              int flushMs) const
+                                              int flushMs,
+                                              FileStampIndex *stamps) const
 {
     const QDir directory(folderPath);
-    if (!directory.exists()) {
+    QElapsedTimer existsTimer;
+    existsTimer.start();
+    const bool folderExists = directory.exists();
+    diag::log(QStringLiteral("výpis: kontrola existence složky %1 ms").arg(existsTimer.elapsed()));
+    if (!folderExists) {
         throw std::runtime_error(QString("Cesta není složka: %1").arg(folderPath).toStdString());
     }
 
     QStringList all;
     QStringList batch;
+    bool cancelled = false;
     QElapsedTimer sinceFlush;
     sinceFlush.start();
 
-    // Jen názvy — žádné QFileInfo/stat na soubor (typ dodá samotný výpis).
-    QDirIterator it(directory.absolutePath(), QDir::Files | QDir::NoDotAndDotDot);
-    while (it.hasNext()) {
+    // Typ, velikost i čas změny dodá samotný výpis — žádné stat() na soubor.
+    const QString dirPath = directory.absolutePath();
+    listFilesBulk(dirPath, [&](const ListedFile &file) {
         if (isCancelled && isCancelled()) {
-            return {};
+            cancelled = true;
+            return false;
         }
-        it.next();
-        const QString name = it.fileName();
-        if (!isSupportedSuffix(QFileInfo(name).suffix(), includePdf, includeImages, includeVideos)) {
-            continue;
+        if (!isSupportedSuffix(QFileInfo(file.name).suffix(), includePdf, includeImages, includeVideos)) {
+            return true;
         }
-        const QString path = directory.absoluteFilePath(name);
+        const QString path = directory.absoluteFilePath(file.name);
+        if (stamps != nullptr) {
+            stamps->set(path, {file.mtimeSecs, file.size});
+        }
         all.append(path);
         batch.append(path);
         if (batch.size() >= maxBatch || sinceFlush.elapsed() >= flushMs) {
@@ -155,6 +170,10 @@ QStringList ImageCatalog::loadFolderStreaming(const QString &folderPath,
             batch.clear();
             sinceFlush.restart();
         }
+        return true;
+    });
+    if (cancelled) {
+        return {};
     }
     if (!batch.isEmpty() && onBatch && !(isCancelled && isCancelled())) {
         onBatch(batch);

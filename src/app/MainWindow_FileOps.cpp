@@ -15,8 +15,10 @@
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
 #include "core/CompanionFinder.hpp"
+#include "core/DiagLog.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
+#include "core/ImageMetadataReader.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
@@ -57,10 +59,12 @@
 #include <sys/xattr.h>
 
 namespace {
+// xattr přes síťový disk stojí desetiny sekundy, proto mimo UI vlákno.
 void removeQuarantine(const QString &path)
 {
-    const QByteArray p = path.toUtf8();
-    removexattr(p.constData(), "com.apple.quarantine", 0);
+    QThreadPool::globalInstance()->start([p = path.toUtf8()] {
+        removexattr(p.constData(), "com.apple.quarantine", 0);
+    });
 }
 } // namespace
 #endif
@@ -200,8 +204,18 @@ void MainWindow::hideScanProgress()
     }
 }
 
+void MainWindow::setScanRunning(bool running)
+{
+    m_scanRunning = running;
+    m_thumbnailPanel->setScanRunning(running);
+    if (m_imageLoader != nullptr) {
+        m_imageLoader->setPrefetchPaused(running);
+    }
+}
+
 void MainWindow::onScanProgress(int generation, const QStringList &batch)
 {
+    diag::ScopedTimer timer(QStringLiteral("onScanProgress: dávka %1 souborů (UI)").arg(batch.size()), 50);
     if (m_shuttingDown || generation != m_scanGeneration || batch.isEmpty()) {
         return;
     }
@@ -280,7 +294,7 @@ void MainWindow::cancelScan()
     m_restoreScanGeneration = -1;
     m_restoreWatchdog->stop();
     hideScanProgress();
-    m_scanRunning = false;
+    setScanRunning(false);
 
     if (m_scanStreamedCount == 0) {
         // Nic se ještě neukázalo — zůstává původní složka.
@@ -299,11 +313,12 @@ void MainWindow::cancelScan()
 
 void MainWindow::onScanComplete(int generation, const QStringList &paths)
 {
+    diag::ScopedTimer timer(QStringLiteral("onScanComplete: %1 souborů (UI)").arg(paths.size()), 50);
     if (m_shuttingDown || generation != m_scanGeneration) {
         return;
     }
     hideScanProgress();
-    m_scanRunning = false;
+    setScanRunning(false);
     // Při postupném načítání se už nějaký soubor zobrazuje (a uživatel mohl
     // listovat) — po seřazení zůstat na něm, ne skočit na první.
     if (m_scanStreamed && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
@@ -341,7 +356,10 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_imagePaths = paths;
     }
 
-    m_thumbnailPanel->loadImages(m_imagePaths);
+    {
+        diag::ScopedTimer panelTimer(QStringLiteral("onScanComplete: thumbnailPanel->loadImages (UI)"), 50);
+        m_thumbnailPanel->loadImages(m_imagePaths);
+    }
 
     // Miniatury videí se negenerují pro všechna videa najednou — panel náhledů
     // si po načtení seznamu sám řekne o ta viditelná (videoThumbnailsWanted).
@@ -385,7 +403,7 @@ void MainWindow::onScanError(int generation, const QString &error)
             m_restoreScanGeneration = -1;
         }
         hideScanProgress();
-        m_scanRunning = false;
+        setScanRunning(false);
         m_statusLabel->setText(tr("Chyba při skenování: %1").arg(error));
     }
 }
@@ -416,11 +434,12 @@ void MainWindow::loadFolder(const QString &folderPath)
         return;
     }
 
+    diag::markFolderStart(folderPath);
     m_folderBeforeScan = m_currentFolder;
     m_scanStreamed = false;
     m_scanRequestedLocated = false;
     m_scanStreamedCount = 0;
-    m_scanRunning = true;
+    setScanRunning(true);
     m_scanProgressLabel->setText(tr("⏳ Načítám složku…"));
     m_scanProgressWidget->show();
     m_currentFolder = folderPath;
@@ -430,7 +449,10 @@ void MainWindow::loadFolder(const QString &folderPath)
 
     // Navigace mezi složkami nezávisí na skenu obrázků (ImageCatalog) — je to
     // čistě informace o adresářové struktuře, proto se aktualizuje hned tady.
-    refreshFolderNavData();
+    {
+        diag::ScopedTimer navTimer(QStringLiteral("loadFolder: refreshFolderNavData (UI)"), 50);
+        refreshFolderNavData();
+    }
 
     if (!m_requestedFile.isEmpty()) {
         displayPathEarly(m_requestedFile);
@@ -441,7 +463,15 @@ void MainWindow::loadFolder(const QString &folderPath)
         m_folderScanWorker = nullptr;
     }
 
-    auto *worker = new FolderScanWorker(m_settingsManager.get(), folderPath, m_scanGeneration, nullptr);
+    // Nový výpis = nové otisky (staré patřily jiné složce / stavu disku).
+    m_fileStamps = QSharedPointer<FileStampIndex>::create();
+    m_thumbnailPanel->setFileStamps(m_fileStamps);
+    if (m_videoThumbnailWorker != nullptr) {
+        m_videoThumbnailWorker->setFileStamps(m_fileStamps);
+    }
+
+    auto *worker = new FolderScanWorker(m_settingsManager.get(), folderPath, m_scanGeneration,
+                                        m_fileStamps, nullptr);
     connect(worker, &FolderScanWorker::scanProgress, this, &MainWindow::onScanProgress);
     connect(worker, &FolderScanWorker::scanComplete, this, &MainWindow::onScanComplete);
     connect(worker, &FolderScanWorker::scanError, this, &MainWindow::onScanError);
@@ -539,7 +569,7 @@ void MainWindow::onRestoreTimeout()
         m_currentFolder.clear();
         m_requestedFile.clear();
         hideScanProgress();
-        m_scanRunning = false;
+        setScanRunning(false);
         if (m_reloadFolderAction) {
             m_reloadFolderAction->setEnabled(false);
         }
@@ -558,6 +588,7 @@ void MainWindow::onRestoreTimeout()
 
 void MainWindow::showImage(int index)
 {
+    diag::ScopedTimer timer(QStringLiteral("showImage(%1) (UI)").arg(index), 50);
     const QStringList imagePaths = m_imagePaths;
     if (index < 0 || index >= imagePaths.size()) {
         return;
@@ -725,7 +756,9 @@ void MainWindow::prefetchNeighbors()
         return !isPdfFile(suffix) && !isGif;
     };
 
-    for (int i = 1; i <= 5; ++i) {
+    // Jen nejbližší sousedé ve směru procházení — dál se na pomalém úložišti
+    // nevyplatí (přednačtení soupeří o spojení s právě zobrazovaným obrázkem).
+    for (int i = 1; i <= 2; ++i) {
         int idx = m_currentIndex + (direction > 0 ? i : -i);
         idx = ((idx % size) + size) % size;
         if (worthPrefetching(m_imagePaths.at(idx))) {
@@ -736,8 +769,19 @@ void MainWindow::prefetchNeighbors()
     m_imageLoader->prefetch(neighbors);
 }
 
+void MainWindow::onImageChangedOnDisk(const QString &path)
+{
+    // Rozpracované (neuložené) úpravy se nesmí přepsat verzí z disku.
+    if (m_imageModified || m_currentIndex < 0 || m_currentIndex >= m_imagePaths.size()
+        || m_imagePaths.at(m_currentIndex) != path) {
+        return;
+    }
+    showImage(m_currentIndex);
+}
+
 void MainWindow::onImageDecoded(const QString &path, const QImage &image)
 {
+    diag::ScopedTimer timer(QStringLiteral("onImageDecoded (UI)"), 50);
     if (path != m_pendingDisplayPath) {
         return;
     }
@@ -753,43 +797,65 @@ void MainWindow::onImageDecoded(const QString &path, const QImage &image)
 
 void MainWindow::updateStatus(const QString &path)
 {
-    try {
-        const ImageInfo info = m_imageMetadataReader.read(path);
-        if (m_metadataPanel != nullptr) {
-            m_metadataPanel->setMetadata(info);
+    // Štítky jsou v paměti — vypíšou se hned. Metadata (rozměry) vyžadují
+    // otevřít soubor, což přes síť trvá; čtou se proto na pozadí a stavový
+    // řádek se o ně doplní, až dorazí.
+    QString categoryStr;
+    if (m_categoryManager) {
+        QList<Category> cats = m_categoryManager->categoriesForImage(path);
+        QStringList catNames;
+        for (int i = 0; i < qMin(3, cats.size()); ++i) {
+            catNames.append(cats[i].name);
         }
-
-        QString categoryStr;
-        if (m_categoryManager) {
-            QList<Category> cats = m_categoryManager->categoriesForImage(path);
-            QStringList catNames;
-            for (int i = 0; i < qMin(3, cats.size()); ++i) {
-                catNames.append(cats[i].name);
-            }
-            if (cats.size() > 3) {
-                catNames.append("...");
-            }
-            if (!catNames.isEmpty()) {
-                categoryStr = tr("   |   Štítky: ") + catNames.join(", ");
-            }
+        if (cats.size() > 3) {
+            catNames.append("...");
         }
-
-        m_statusLabel->setText(
-            tr("%1   |   %2   |   %3   |   %4 kB   |   %5 / %6%7")
-                .arg(info.path.section('/', -1))
-                .arg(info.dimensionsString())
-                .arg(info.format)
-                .arg(QString::number(info.fileSizeKb(), 'f', 1))
-                .arg(m_currentIndex + 1)
-                .arg(m_imagePaths.size())
-                .arg(categoryStr)
-        );
-    } catch (...) {
-        m_statusLabel->setText(path.section('/', -1));
-        if (m_metadataPanel != nullptr) {
-            m_metadataPanel->clearMetadata();
+        if (!catNames.isEmpty()) {
+            categoryStr = tr("   |   Štítky: ") + catNames.join(", ");
         }
     }
+
+    const QString fileName = path.section('/', -1);
+    const int position = m_currentIndex + 1;
+    const int total = static_cast<int>(m_imagePaths.size());
+    m_statusLabel->setText(tr("%1   |   %2 / %3%4").arg(fileName).arg(position).arg(total).arg(categoryStr));
+
+    const int token = ++m_statusToken;
+    auto *watcher = new QFutureWatcher<std::optional<ImageInfo>>(this);
+    connect(watcher, &QFutureWatcher<std::optional<ImageInfo>>::finished, this,
+            [this, watcher, token, fileName, position, total, categoryStr] {
+        watcher->deleteLater();
+        if (token != m_statusToken) {
+            return;   // mezitím se zobrazil jiný soubor
+        }
+        const std::optional<ImageInfo> info = watcher->result();
+        if (!info) {
+            if (m_metadataPanel != nullptr) {
+                m_metadataPanel->clearMetadata();
+            }
+            return;
+        }
+        if (m_metadataPanel != nullptr) {
+            m_metadataPanel->setMetadata(*info);
+        }
+        m_statusLabel->setText(
+            tr("%1   |   %2   |   %3   |   %4 kB   |   %5 / %6%7")
+                .arg(info->path.section('/', -1))
+                .arg(info->dimensionsString())
+                .arg(info->format)
+                .arg(QString::number(info->fileSizeKb(), 'f', 1))
+                .arg(position)
+                .arg(total)
+                .arg(categoryStr)
+        );
+    });
+    watcher->setFuture(QtConcurrent::run([path]() -> std::optional<ImageInfo> {
+        try {
+            return ImageMetadataReader().read(path);
+        } catch (...) {
+            return std::nullopt;
+        }
+    }));
 }
 
 QStringList MainWindow::selectedOrCurrentFiles() const
@@ -866,6 +932,7 @@ void MainWindow::deleteOrMoveCurrentImage()
 
 void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
 {
+    diag::ScopedTimer timer(QStringLiteral("mazání do koše: %1 souborů (UI)").arg(activeFiles.size()));
     if (activeFiles.isEmpty()) {
         return;
     }
@@ -968,6 +1035,7 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
 
 void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
 {
+    diag::ScopedTimer timer(QStringLiteral("přesun do Delete: %1 souborů (UI)").arg(activeFiles.size()));
     if (activeFiles.isEmpty()) {
         return;
     }

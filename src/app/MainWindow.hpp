@@ -1,12 +1,13 @@
 #pragma once
 
+#include "core/FileStampIndex.hpp"
 #include "app/ProfileManager.hpp"
 #include "app/ToolbarStyle.hpp"
 #include "core/CompanionFinder.hpp"
 #include "core/ContentState.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
-#include "core/ImageMetadataReader.hpp"
+
 
 #include <QHash>
 #include <QKeyEvent>
@@ -67,6 +68,11 @@ public:
 
     // Called when a file is opened from macOS Finder or command line
     void openFile(const QString &filePath);
+
+    // true, pokud se při zavírání okna nepodařilo do limitu zastavit vlákna na
+    // pozadí (typicky zaseknutá v síťovém čtení, které nejde přerušit). Aplikace
+    // pak po návratu z event loopu skončí natvrdo, ne až po desítkách sekund.
+    bool shutdownTimedOut() const { return m_shutdownTimedOut; }
 
     // Jen pro testy: přebije časový limit obnovy poslední složky a umožní
     // nahradit sondu (např. o uměle pomalou). Platí pro okna vytvořená PO
@@ -154,6 +160,9 @@ private:
     void onRestoreTimeout();
     void showImage(int index);
     void updateStatus(const QString &path);
+    void onImageChangedOnDisk(const QString &path);
+    // Nastaví m_scanRunning a dá vědět částem, které soupeří o síť (prefetch, zahřívání).
+    void setScanRunning(bool running);
     void setupDock();
     void setupMenu();
     void setupStatusBar();
@@ -349,7 +358,6 @@ private:
     // Generace skenu, který hlídá watchdog; -1 = žádný.
     int m_restoreScanGeneration = -1;
 
-    ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)
     QStringList m_unfilteredImagePaths;  // všechny obrázky bez filtru
     QString m_requestedFile;
@@ -357,6 +365,9 @@ private:
     int m_currentIndex = -1;
     int m_lastPrefetchIndex = -1;   // pro detekci směru listování
     int m_scanGeneration = 0;
+    QSharedPointer<FileStampIndex> m_fileStamps;   // otisky souborů z posledního výpisu složky
+    bool m_shutdownTimedOut = false;
+    int m_statusToken = 0;   // zahazuje opožděná metadata z předchozího souboru
     bool m_isFullscreen = false;
     // Geometrie okna před vstupem do fullscreenu — showNormal() po showFullScreen()
     // na macOS/Qt spolehlivě nevrací přesně stejnou pozici/velikost, proto se

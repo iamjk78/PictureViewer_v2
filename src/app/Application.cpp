@@ -1,8 +1,10 @@
 #include "app/Application.hpp"
 #include "app/DockMenu.hpp"
 #include "app/MainWindow.hpp"
+#include "core/DiagLog.hpp"
 
 #include <QEvent>
+#include <QSysInfo>
 #include <QFileOpenEvent>
 #include <QImageReader>
 #include <QPainter>
@@ -11,6 +13,10 @@
 #include <QProxyStyle>
 #include <QTimer>
 #include <QDebug>
+#include <QElapsedTimer>
+
+#include <cstdlib>
+#include <memory>
 
 // On macOS 26 (Tahoe) the SF Symbol used for the QToolBarExtension (">>")
 // button crashes inside NSImageSymbolRepProvider when QStyleSheetStyle is
@@ -116,6 +122,23 @@ Application::Application(int &argc, char **argv)
     // QApplication (a tedy NSApp na macOS) už v tuto chvíli existuje.
     setupDockMenu();
 
+    // Trvalý lokální log pro vyhodnocování výkonu (nikdy se neodesílá).
+    diag::start(diag::defaultDirectory());
+    diag::log(QStringLiteral("Qt %1, %2").arg(QLatin1String(qVersion()), QSysInfo::prettyProductName()));
+
+    // Hlídač zamrznutí UI vlákna: tikne po 100 ms, větší mezera = UI bylo blokované.
+    auto *stallTimer = new QTimer(m_qtApplication.get());
+    stallTimer->setInterval(100);
+    auto lastTick = std::make_shared<QElapsedTimer>();
+    lastTick->start();
+    QObject::connect(stallTimer, &QTimer::timeout, m_qtApplication.get(), [lastTick] {
+        const qint64 gap = lastTick->restart();
+        if (gap > 400) {
+            diag::log(QStringLiteral("!!! UI VLÁKNO BYLO BLOKOVANÉ ~%1 ms").arg(gap - 100));
+        }
+    });
+    stallTimer->start();
+
     m_mainWindow = std::make_unique<MainWindow>();
     m_qtApplication->setMainWindow(m_mainWindow.get());
 }
@@ -134,7 +157,16 @@ int Application::run()
     m_mainWindow->show();
     // Mark that startup is complete - now FileOpen events should spawn new instances
     QTimer::singleShot(100, [this]() { m_qtApplication->setStarting(false); });
-    return m_qtApplication->exec();
+    const int exitCode = m_qtApplication->exec();
+    if (m_mainWindow->shutdownTimedOut()) {
+        // Vlákna zaseknutá v síťovém čtení nejdou zastavit a destruktory (fond
+        // vláken, ImageLoader) by na ně čekaly desítky sekund. Nastavení je už
+        // uložené v closeEvent().
+        diag::log(QStringLiteral("ukončení: končím bez čekání na zaseknutá vlákna"));
+        diag::stop();
+        std::_Exit(exitCode);
+    }
+    return exitCode;
 }
 
 } // namespace pictureviewer

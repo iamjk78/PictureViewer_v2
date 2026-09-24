@@ -1,4 +1,5 @@
 #include "app/ThumbnailPanel.hpp"
+#include "core/DiagLog.hpp"
 
 #include "core/ImageFormats.hpp"
 #include "workers/ThumbnailWorker.hpp"
@@ -226,6 +227,9 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     ++m_generation;
     clear();
     m_pathToIndex.clear();
+    diag::thumb().reset();
+    m_doneCount = 0;
+    m_statsTimer.start();
 
     addImageItems(paths);
 
@@ -376,6 +380,7 @@ void ThumbnailPanel::dispatchThumbnails()
         // cestu mazání a způsobil double-free.
         auto *worker = new ThumbnailWorker(QStringList{path}, m_generation,
                                            m_diskCacheEnabled, m_diskCacheDir, nullptr);
+        worker->setFileStamps(m_stamps);
         connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
         connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
         connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
@@ -383,7 +388,11 @@ void ThumbnailPanel::dispatchThumbnails()
             if (generation != m_generation) {
                 return;
             }
+            ++m_doneCount;
             dispatchThumbnails();
+            if (m_activeWorkers.isEmpty() && m_pendingThumbs.isEmpty()) {
+                diag::log(diag::thumbSummary(m_doneCount, m_statsTimer.elapsed()));
+            }
             maybeStartWarmup();   // popředí dojelo — případně navázat zahříváním
         });
         m_activeWorkers.insert(worker);
@@ -403,6 +412,12 @@ void ThumbnailPanel::setViewerBusy(bool busy)
     m_viewerBusy = busy;
     // Ať busy začíná, nebo končí, doba klidu se odměřuje znovu od teď.
     noteActivity();
+}
+
+void ThumbnailPanel::setScanRunning(bool running)
+{
+    m_scanRunning = running;
+    noteActivity();   // po skončení skenu se klid odměřuje znovu od teď
 }
 
 void ThumbnailPanel::noteActivity()
@@ -428,7 +443,7 @@ void ThumbnailPanel::noteActivity()
 
 void ThumbnailPanel::maybeStartWarmup()
 {
-    if (m_shuttingDown || !m_idleReady || m_viewerBusy || count() == 0) {
+    if (m_shuttingDown || !m_idleReady || m_viewerBusy || m_scanRunning || count() == 0) {
         return;
     }
     // Popředí (viditelné miniatury) má přednost — zahřívání navazuje, až dojede.
@@ -473,6 +488,7 @@ void ThumbnailPanel::maybeStartWarmup()
 
     auto *worker = new ThumbnailWorker(remaining, m_generation, m_diskCacheEnabled, m_diskCacheDir, nullptr);
     worker->setCacheOnly(m_claims, m_warmupThrottleMs);
+    worker->setFileStamps(m_stamps);
     connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
     connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
         if (worker == m_warmWorker && generation == m_generation) {
@@ -489,7 +505,7 @@ void ThumbnailPanel::maybeStartVideoWarmup()
     // Videa jsou zdaleka nejtěžší (desítky MB po síti na jednu miniaturu), proto
     // jen v PLNÉM klidu a až po obrázcích: klid ≥ kVideoWarmupIdleMs, nic
     // se nenačítá, popředí nemá práci a zahřívání obrázků skončilo.
-    if (m_shuttingDown || !m_videoIdleReady || m_viewerBusy || count() == 0
+    if (m_shuttingDown || !m_videoIdleReady || m_viewerBusy || m_scanRunning || count() == 0
         || m_videoWarmupActive) {
         return;
     }

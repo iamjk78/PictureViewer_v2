@@ -1,9 +1,12 @@
 #include "workers/ThumbnailWorker.hpp"
 
+#include "core/DiagLog.hpp"
+#include "core/ExifThumbnail.hpp"
 #include "core/ImageFormats.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -48,8 +51,20 @@ void ThumbnailWorker::sleepInterruptible(int ms) const
 
 void ThumbnailWorker::run()
 {
+    QElapsedTimer warmTimer;
+    warmTimer.start();
+    int warmProcessed = 0;
+    int warmGenerated = 0;
+    if (m_cacheOnly) {
+        diag::log(QStringLiteral("zahřátí cache: START, %1 souborů, škrcení %2 ms")
+                      .arg(m_paths.size()).arg(m_throttleMs));
+    }
     for (int batchStart = 0; batchStart < m_paths.size(); batchStart += BatchSize) {
         if (m_cancelled.load()) {
+            if (m_cacheOnly) {
+                diag::log(QStringLiteral("zahřátí cache: PŘERUŠENO po %1 souborech (vygenerováno %2)")
+                              .arg(warmProcessed).arg(warmGenerated));
+            }
             emit workerFinished(m_generation);
             return;
         }
@@ -78,8 +93,15 @@ void ThumbnailWorker::run()
                 } catch (...) {
                     generated = false;
                 }
+                ++warmProcessed;
                 if (generated) {
+                    ++warmGenerated;
                     sleepInterruptible(m_throttleMs);
+                }
+                if (warmProcessed % 100 == 0) {
+                    diag::log(QStringLiteral("zahřátí cache: %1/%2 zpracováno, vygenerováno %3, %4 s")
+                                  .arg(warmProcessed).arg(m_paths.size()).arg(warmGenerated)
+                                  .arg(warmTimer.elapsed() / 1000));
                 }
                 continue;
             }
@@ -99,6 +121,10 @@ void ThumbnailWorker::run()
         QThread::yieldCurrentThread();
     }
 
+    if (m_cacheOnly) {
+        diag::log(QStringLiteral("zahřátí cache: HOTOVO, %1 souborů, vygenerováno %2, %3 s")
+                      .arg(warmProcessed).arg(warmGenerated).arg(warmTimer.elapsed() / 1000));
+    }
     emit workerFinished(m_generation);
 }
 
@@ -107,10 +133,14 @@ void ThumbnailWorker::run()
 // přirozeně přestane dostávat hity. Dvě úrovně adresářů kvůli velkým složkám.
 QString ThumbnailWorker::cacheFilePath(const QString &path) const
 {
-    const QFileInfo fileInfo(path);
+    // Otisk souboru z výpisu složky; bez něj stat() (přes síť desetiny sekundy).
+    QElapsedTimer timer;
+    timer.start();
+    const FileStamp stamp = FileStampIndex::resolve(m_stamps, path);
+    diag::thumb().keyNs += timer.nsecsElapsed();
     const QString keySource = path + QLatin1Char('|')
-        + QString::number(fileInfo.lastModified().toSecsSinceEpoch()) + QLatin1Char('|')
-        + QString::number(fileInfo.size()) + QLatin1Char('|')
+        + QString::number(stamp.mtimeSecs) + QLatin1Char('|')
+        + QString::number(stamp.size) + QLatin1Char('|')
         + QString::number(ThumbnailSize);
     const QString hash = QString::fromLatin1(
         QCryptographicHash::hash(keySource.toUtf8(), QCryptographicHash::Sha1).toHex());
@@ -123,13 +153,25 @@ QImage ThumbnailWorker::loadThumbnail(const QString &path) const
     QString cacheFile;
     if (m_diskCacheEnabled && !m_diskCacheDir.isEmpty()) {
         cacheFile = cacheFilePath(path);
+        QElapsedTimer readTimer;
+        readTimer.start();
         const QImage cached(cacheFile);   // formát se pozná z obsahu souboru
+        diag::thumb().cacheReadNs += readTimer.nsecsElapsed();
         if (!cached.isNull()) {
+            ++diag::thumb().hit;
             return cached;
         }
     }
 
+    QElapsedTimer generateTimer;
+    generateTimer.start();
     const QImage thumbnail = generateThumbnail(path);
+    diag::thumb().generateNs += generateTimer.nsecsElapsed();
+    if (thumbnail.isNull()) {
+        ++diag::thumb().failed;
+    } else {
+        ++diag::thumb().generated;
+    }
 
     if (!cacheFile.isEmpty() && !thumbnail.isNull()) {
         QDir().mkpath(QFileInfo(cacheFile).absolutePath());
@@ -149,10 +191,15 @@ bool ThumbnailWorker::warmOne(const QString &path) const
     if (QFile::exists(cacheFile)) {
         return false;
     }
+    QElapsedTimer generateTimer;
+    generateTimer.start();
     const QImage thumbnail = generateThumbnail(path);
+    diag::thumb().generateNs += generateTimer.nsecsElapsed();
     if (thumbnail.isNull()) {
+        ++diag::thumb().failed;
         return false;
     }
+    ++diag::thumb().generated;
     QDir().mkpath(QFileInfo(cacheFile).absolutePath());
     thumbnail.save(cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
     return true;
@@ -185,6 +232,22 @@ QImage ThumbnailWorker::generateThumbnail(const QString &path) const
         painter.drawImage(0, 0, rendered);
         painter.end();
         return white;
+    }
+
+    // JPEG s vloženou EXIF miniaturou: stačí přečíst začátek souboru (desítky kB
+    // místo několika MB — na síťovém disku rozhodující).
+    if (suffix.compare(QLatin1String(".jpg"), Qt::CaseInsensitive) == 0
+        || suffix.compare(QLatin1String(".jpeg"), Qt::CaseInsensitive) == 0) {
+        QFile file(path);
+        if (file.open(QIODevice::ReadOnly)) {
+            const QImage exifThumb = extractExifThumbnail(file.read(kExifHeaderBytes));
+            if (!exifThumb.isNull()) {
+                ++diag::thumb().exifUsed;
+                return exifThumb.width() > ThumbnailSize || exifThumb.height() > ThumbnailSize
+                    ? exifThumb.scaled(ThumbnailSize, ThumbnailSize, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+                    : exifThumb;
+            }
+        }
     }
 
     QImageReader reader(path);

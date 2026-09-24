@@ -8,6 +8,8 @@ class QFileInfo;
 
 namespace pictureviewer {
 
+class FileStampIndex;
+
 // Kritérium řazení souborů ve složce.
 enum class SortKey {
     Name,   // přirozené řazení podle názvu (img2 < img10)
@@ -27,7 +29,8 @@ public:
                            SortKey sortKey = SortKey::Name,
                            bool ascending = true,
                            bool includeImages = true,
-                           bool includeVideos = false) const;
+                           bool includeVideos = false,
+                           FileStampIndex *stamps = nullptr) const;
     // Postupné načítání pro pomalá (síťová) úložiště: výpis složky se čte po
     // dávkách a každá se hned předá onBatch() (v pořadí, v jakém ji úložiště
     // vrací — nesetříděné), takže volající může první soubory ukázat dřív,
@@ -37,6 +40,9 @@ public:
     // Dávka se vydá po maxBatch souborech nebo po flushMs od poslední.
     // Řazení podle data/velikosti potřebuje stat() všech souborů — pro ně
     // použij loadFolder(); tahle varianta řadí jen podle jména.
+    // Výpis (na macOS getattrlistbulk, viz BulkDirectoryLister) dodá u každého
+    // souboru i čas změny a velikost; pokud je zadán stamps, uloží se tam,
+    // aby generátory miniatur nemusely dělat stat() na každý soubor.
     QStringList loadFolderStreaming(const QString &folderPath,
                                     bool includePdf,
                                     bool ascending,
@@ -45,7 +51,8 @@ public:
                                     const std::function<bool()> &isCancelled,
                                     const std::function<void(const QStringList &)> &onBatch,
                                     int maxBatch = 500,
-                                    int flushMs = 300) const;
+                                    int flushMs = 300,
+                                    FileStampIndex *stamps = nullptr) const;
     // Rozhodnutí podle přípony (bez dotazu na úložiště).
     bool isSupportedSuffix(const QString &suffix,
                            bool includePdf = true,

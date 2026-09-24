@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/FileStampIndex.hpp"
 #include <QMutex>
 #include <QMutexLocker>
 #include <QObject>
@@ -76,6 +77,8 @@ public:
     // počká throttleMs, ať nezahltí úložiště na úkor toho, co uživatel právě
     // prohlíží.
     void setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int throttleMs);
+    // Otisky souborů z výpisu složky — klíč cache pak nepotřebuje stat().
+    void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
     // Pozastaví/obnoví zpracování (worker čeká mezi soubory, nezahazuje frontu).
     void setPaused(bool paused) { m_paused.store(paused); }
 
@@ -101,6 +104,7 @@ private:
     bool m_cacheOnly = false;
     int m_throttleMs = 0;
     QSharedPointer<ThumbnailClaims> m_claims;
+    QSharedPointer<FileStampIndex> m_stamps;
     bool m_diskCacheEnabled;
     QString m_diskCacheDir;
 };

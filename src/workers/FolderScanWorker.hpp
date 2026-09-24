@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/FileStampIndex.hpp"
+
 #include "core/ImageCatalog.hpp"
 
 #include <QObject>
@@ -17,7 +19,9 @@ class FolderScanWorker : public QObject, public QRunnable
     Q_OBJECT
 
 public:
-    FolderScanWorker(const SettingsManager *settings, QString folderPath, int generation, QObject *parent = nullptr);
+    // stamps: sem sken ukládá čas změny a velikost souborů z výpisu složky.
+    FolderScanWorker(const SettingsManager *settings, QString folderPath, int generation,
+                     QSharedPointer<FileStampIndex> stamps, QObject *parent = nullptr);
 
     void cancel();
     void run() override;
@@ -45,6 +49,7 @@ private:
     bool    m_ascending     = true;
 
     QString m_folderPath;
+    QSharedPointer<FileStampIndex> m_stamps;
     int m_generation;
     std::atomic_bool m_cancelled;
 };

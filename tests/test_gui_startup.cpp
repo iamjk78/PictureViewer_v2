@@ -21,6 +21,9 @@
 #include <QtTest>
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QThreadPool>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -38,9 +41,12 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "ExifTestData.hpp"
 #include "app/BatchProgress.hpp"
+#include "app/ImageLoader.hpp"
 #include "app/MainWindow.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "core/FileStampIndex.hpp"
 #include "workers/FolderScanWorker.hpp"
 
 using namespace pictureviewer;
@@ -395,6 +401,151 @@ private slots:
     // ── Líné generování miniatur ─────────────────────────────────────────────
     // Samostatný panel (bez okna) — cílem je chování "jen pro viditelné".
 
+    // ── ImageLoader: cache podle cesty, změna souboru se pozná na pozadí ─────
+    void imageLoader_hitDoesNotBlockAndDetectsChangedFile()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = QDir(dir.path()).filePath("a.png");
+        QImage first(16, 16, QImage::Format_RGB32);
+        first.fill(Qt::red);
+        QVERIFY(first.save(path, "PNG"));
+
+        ImageLoader loader;
+        QSignalSpy ready(&loader, &ImageLoader::imageReady);
+        QSignalSpy changed(&loader, &ImageLoader::imageChangedOnDisk);
+        loader.request(path);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, 5000);
+
+        // Zásah vrací starý obrázek OKAMŽITĚ (bez čekání na kontrolu disku)…
+        QCOMPARE(loader.cachedImage(path).size(), QSize(16, 16));
+        QTest::qWait(200);   // doběhne kontrola z prvního zásahu (soubor je beze změny)
+        QCOMPARE(changed.count(), 0);
+
+        // …a mezitím se soubor změní (jiné rozměry i velikost).
+        QImage second(32, 32, QImage::Format_RGB32);
+        second.fill(Qt::blue);
+        QVERIFY(second.save(path, "PNG"));
+
+        // Další zásah spustí kontrolu na pozadí; změněný soubor se ohlásí
+        // a zahodí z cache.
+        QVERIFY(!loader.cachedImage(path).isNull());
+        QTRY_COMPARE_WITH_TIMEOUT(changed.count(), 1, 5000);
+        QVERIFY(loader.cachedImage(path).isNull());
+
+        loader.request(path);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, 5000);
+        QCOMPARE(loader.cachedImage(path).size(), QSize(32, 32));
+    }
+
+    void imageLoader_unchangedFileIsNotReportedAsChanged()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 1);
+
+        ImageLoader loader;
+        QSignalSpy ready(&loader, &ImageLoader::imageReady);
+        QSignalSpy changed(&loader, &ImageLoader::imageChangedOnDisk);
+        loader.request(paths.at(0));
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, 5000);
+        for (int i = 0; i < 3; ++i) {
+            QVERIFY(!loader.cachedImage(paths.at(0)).isNull());
+            QTest::qWait(150);
+        }
+        QCOMPARE(changed.count(), 0);
+    }
+
+    void imageLoader_prefetchWaitsForTheDisplayedImage()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 3);
+        // Zobrazovaný obrázek je velký (dekóduje se výrazně déle než drobné sousedy).
+        QImage big(4000, 4000, QImage::Format_RGB32);
+        for (int y = 0; y < big.height(); ++y) {
+            QRgb *line = reinterpret_cast<QRgb *>(big.scanLine(y));
+            for (int x = 0; x < big.width(); ++x) {
+                line[x] = qRgb(x & 255, y & 255, (x * y) & 255);
+            }
+        }
+        const QString bigPath = QDir(dir.path()).filePath("big.png");
+        QVERIFY(big.save(bigPath, "PNG"));
+
+        ImageLoader loader;
+        QSignalSpy ready(&loader, &ImageLoader::imageReady);
+        loader.request(bigPath);
+        loader.prefetch({paths.at(1), paths.at(2)});
+
+        // Přednačítání naváže až po zobrazovaném obrázku, ne souběžně s ním.
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, 10000);
+        QCOMPARE(ready.at(0).at(0).toString(), bigPath);
+        QVERIFY(!loader.cachedImage(paths.at(1)).isNull());
+        QVERIFY(!loader.cachedImage(paths.at(2)).isNull());
+    }
+
+    // Klíč diskové cache miniatur se bere z otisků výpisu složky, ne ze stat()
+    // (přes síť desetiny sekundy na každou miniaturu). Umělý otisk se proto
+    // musí objevit v názvu souboru v cache.
+    void thumbnails_cacheKeyUsesStampsFromTheListing()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 3);
+
+        auto stamps = QSharedPointer<pictureviewer::FileStampIndex>::create();
+        stamps->set(paths.at(0), {1234, 5678});
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.setFileStamps(stamps);
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages(paths);
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.iconAt(0).isNull(), 5000);
+
+        auto cacheFor = [&](const QString &path, qint64 mtime, qint64 size) {
+            const QString source = QStringLiteral("%1|%2|%3|192").arg(path).arg(mtime).arg(size);
+            const QString hash = QString::fromLatin1(
+                QCryptographicHash::hash(source.toUtf8(), QCryptographicHash::Sha1).toHex());
+            return QDir(cache.path()).filePath(hash.left(2) + "/" + hash + ".thumb");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(cacheFor(paths.at(0), 1234, 5678)), 5000);
+
+        // Soubor bez otisku v indexu spadne na stat().
+        const QFileInfo real(paths.at(1));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            QFile::exists(cacheFor(paths.at(1), real.lastModified().toSecsSinceEpoch(), real.size())), 5000);
+    }
+
+    // Miniatura JPEG se bere z EXIF hlavičky (celý soubor se nečte): hlavní
+    // snímek je tu jednobarevný černý, miniatura v EXIF má barevné kvadranty —
+    // barvy v miniatuře i její rozměr (bez zvětšení na 192) dokazují původ.
+    void thumbnails_jpegUsesTheEmbeddedExifThumbnail()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QImage black(640, 480, QImage::Format_RGB32);
+        black.fill(Qt::black);
+        const QString path = QDir(dir.path()).filePath("exif.jpg");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(exiftest::jpegWithExifThumb(black, exiftest::quadrantImage(160, 120), 1));
+        file.close();
+
+        ThumbnailPanel panel;
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.loadImages({path});
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.iconAt(0).isNull(), 5000);
+        const QImage icon = panel.iconAt(0).pixmap(QSize(400, 400)).toImage();
+        QCOMPARE(icon.height(), 120);
+        QVERIFY(icon.pixelColor(10, 10).red() > 128);                       // vlevo nahoře červená
+        QVERIFY(icon.pixelColor(icon.width() - 10, 10).green() > 128);      // vpravo nahoře zelená
+    }
+
     void thumbnails_areGeneratedOnlyForVisibleItems()
     {
         QTemporaryDir dir;
@@ -695,6 +846,76 @@ private slots:
                  base.arg(1300, 4, 10, QLatin1Char('0')));
         QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 3000);
         window.close();
+    }
+
+    // Výpis složky a zahřívání cache jdou přes stejné síťové spojení — dokud
+    // výpis běží, zahřívání stojí; po jeho skončení naváže.
+    void warmup_waitsUntilTheScanIsFinished()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 80);
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.setWarmupTimingForTesting(100, 0);
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        panel.setScanRunning(true);
+        panel.loadImages(paths);
+
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.iconAt(0).isNull(), 5000);
+        QTest::qWait(1500);   // dost dlouho, aby se jinak rozběhlo zahřívání
+        QVERIFY(cachedThumbFiles(cache.path()) < 80);
+
+        panel.setScanRunning(false);
+        QTRY_COMPARE_WITH_TIMEOUT(cachedThumbFiles(cache.path()), 80, 15000);
+    }
+
+    void imageLoader_prefetchWaitsWhilePaused()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 2);
+
+        ImageLoader loader;
+        QSignalSpy ready(&loader, &ImageLoader::imageReady);
+        loader.setPrefetchPaused(true);
+        loader.prefetch(paths);
+        QTest::qWait(400);
+        QCOMPARE(ready.count(), 0);
+
+        loader.setPrefetchPaused(false);
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, 5000);
+    }
+
+    // Vlákno zaseknuté v (síťovém) čtení nejde přerušit — zavření okna na něj
+    // nesmí čekat celou dobu, jen omezený limit.
+    void shutdown_doesNotWaitForStuckWorkersForever()
+    {
+        writeConfigForRestore(QString(), false);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 600);
+        auto reset = qScopeGuard([] { FolderScanWorker::setStreamDelayForTesting(0); });
+        FolderScanWorker::setStreamDelayForTesting(7000);   // první dávka „visí“ 7 s
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(panel->count() >= 500, 5000);
+
+        QElapsedTimer timer;
+        timer.start();
+        window.close();
+        QVERIFY2(timer.elapsed() < 5500, qPrintable(QStringLiteral("zavření trvalo %1 ms").arg(timer.elapsed())));
+        QVERIFY(window.shutdownTimedOut());
+
+        // Zaseknuté vlákno doběhne samo — ať neovlivní další testy.
+        QThreadPool::globalInstance()->waitForDone(15000);
     }
 
     void scan_escapeCancelsTheScanInsteadOfClosingTheApp()

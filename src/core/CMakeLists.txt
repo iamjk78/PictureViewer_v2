@@ -14,6 +14,12 @@ set(CORE_SOURCES
     FileNaming.cpp
     ContentState.hpp
     ContentState.cpp
+    BulkDirectoryLister.hpp
+    BulkDirectoryLister.cpp
+    DiagLog.hpp
+    ExifThumbnail.hpp
+    ExifThumbnail.cpp
+    DiagLog.cpp
     PdfHandler.hpp
     PdfHandler.cpp
 )

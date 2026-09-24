@@ -1,5 +1,7 @@
 #include "workers/VideoThumbnailWorker.hpp"
 
+#include "core/DiagLog.hpp"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
@@ -288,6 +290,10 @@ void VideoThumbnailWorker::finishCurrent(const QImage &image)
     // zůstalo zamčené a nešlo by přesunout do Delete ani smazat.
     m_player->setSource(QUrl());
 
+    diag::log(QStringLiteral("video miniatura %1: %2, zbývá ve frontě %3")
+                  .arg(QFileInfo(m_currentPath).fileName(),
+                       image.isNull() ? QStringLiteral("SELHALA") : QStringLiteral("hotovo"))
+                  .arg(m_queue.size()));
     if (!image.isNull()) {
         emit thumbnailReady(m_generation, m_currentPath, image);
     }
@@ -303,10 +309,11 @@ void VideoThumbnailWorker::finishCurrent(const QImage &image)
 
 QString VideoThumbnailWorker::cacheFilePath(const QString &path) const
 {
-    const QFileInfo fi(path);
+    // Běží na UI vlákně — otisk z výpisu složky ušetří stat() přes síť.
+    const FileStamp stamp = FileStampIndex::resolve(m_stamps, path);
     const QString keySource = path + QLatin1Char('|')
-        + QString::number(fi.lastModified().toSecsSinceEpoch()) + QLatin1Char('|')
-        + QString::number(fi.size()) + QLatin1Char('|')
+        + QString::number(stamp.mtimeSecs) + QLatin1Char('|')
+        + QString::number(stamp.size) + QLatin1Char('|')
         + QStringLiteral("video|")
         + QString::number(ThumbnailSize);
     const QString hash = QString::fromLatin1(

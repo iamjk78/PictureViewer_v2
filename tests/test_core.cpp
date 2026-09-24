@@ -1,6 +1,8 @@
 #include <QtTest>
 
+#include <QBuffer>
 #include <QDir>
+#include <QImageReader>
 #include <QFile>
 #include <QSettings>
 #include <QSignalSpy>
@@ -9,6 +11,7 @@
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 
+#include "ExifTestData.hpp"
 #include "app/CategoryManager.hpp"
 #include "app/ImageLoader.hpp"
 #include "app/ProfileManager.hpp"
@@ -17,14 +20,19 @@
 #include "app/SlideshowController.hpp"
 #include "app/ThumbnailCacheManager.hpp"
 #include "app/UpdateChecker.hpp"
+#include "core/BulkDirectoryLister.hpp"
 #include "core/CompanionFinder.hpp"
 #include "core/ContentState.hpp"
+#include "core/DiagLog.hpp"
+#include "core/ExifThumbnail.hpp"
 #include "core/FileNaming.hpp"
+#include "core/FileStampIndex.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
 #include "core/ImageFormats.hpp"
 
 using namespace pictureviewer;
+using namespace exiftest;
 
 namespace {
 
@@ -1608,6 +1616,230 @@ private slots:
         QCOMPARE(result, catalog.loadFolder(dir.path(), true, SortKey::Name, true, true, true));
         QCOMPARE(QFileInfo(result.first()).fileName(), QStringLiteral("clip.mp4"));
         QVERIFY(result.indexOf(dir.filePath("img2.jpg")) < result.indexOf(dir.filePath("img10.jpg")));
+    }
+
+    // ── Výpis složky s metadaty (getattrlistbulk / záloha) ───────────────────
+    static QMap<QString, QPair<qint64, qint64>> listBulk(const QString &dir, bool disableBulk)
+    {
+        setBulkListingDisabledForTesting(disableBulk);
+        QMap<QString, QPair<qint64, qint64>> files;   // jméno → (velikost, mtime)
+        const bool ok = listFilesBulk(dir, [&](const ListedFile &f) {
+            files.insert(f.name, {f.size, f.mtimeSecs});
+            return true;
+        });
+        setBulkListingDisabledForTesting(false);
+        if (!ok) {
+            files.insert(QStringLiteral("!failed"), {});
+        }
+        return files;
+    }
+
+    void bulkLister_matchesFallbackListing()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("a.jpg"), 123));
+        QVERIFY(writeFileOfSize(dir.filePath("Ž ěščř.png"), 4567));
+        QVERIFY(writeFileOfSize(dir.filePath("empty.gif"), 0));
+        QVERIFY(writeFileOfSize(dir.filePath(".hidden.jpg"), 10));   // skryté se vynechávají
+        QVERIFY(QDir(dir.path()).mkdir("subdir"));
+        QVERIFY(writeFileOfSize(dir.filePath("subdir/inner.jpg"), 10));
+        QVERIFY(QFile::link(dir.filePath("a.jpg"), dir.filePath("link.jpg")));        // odkaz na soubor
+        QVERIFY(QFile::link(dir.filePath("subdir"), dir.filePath("dirlink")));        // odkaz na složku
+
+        const auto bulk = listBulk(dir.path(), false);
+        const auto fallback = listBulk(dir.path(), true);
+        QCOMPARE(bulk, fallback);
+        QVERIFY(bulk.contains("a.jpg"));
+        QVERIFY(bulk.contains("link.jpg"));
+        QVERIFY(!bulk.contains("subdir"));
+        QVERIFY(!bulk.contains("dirlink"));
+        QVERIFY(!bulk.contains(".hidden.jpg"));
+        QCOMPARE(bulk.value("a.jpg").first, qint64(123));
+        QCOMPARE(bulk.value("Ž ěščř.png").first, qint64(4567));
+        QCOMPARE(bulk.value("empty.gif").first, qint64(0));
+        QCOMPARE(bulk.value("a.jpg").second, QFileInfo(dir.filePath("a.jpg")).lastModified().toSecsSinceEpoch());
+    }
+
+    void bulkLister_stopsWhenCallbackReturnsFalse()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (int i = 0; i < 20; ++i) {
+            QVERIFY(writeFileOfSize(dir.filePath(QStringLiteral("f%1.jpg").arg(i)), 1));
+        }
+        int seen = 0;
+        QVERIFY(listFilesBulk(dir.path(), [&](const ListedFile &) { return ++seen < 3; }));
+        QCOMPARE(seen, 3);
+    }
+
+    void bulkLister_missingDirectoryFails()
+    {
+        QVERIFY(!listFilesBulk(QStringLiteral("/nonexistent/dir/xyz"), [](const ListedFile &) { return true; }));
+    }
+
+    void catalog_fillsStampsFromTheListing()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("a.jpg"), 321));
+        QVERIFY(writeFileOfSize(dir.filePath("b.png"), 654));
+        QVERIFY(writeFileOfSize(dir.filePath("note.txt"), 9));
+
+        ImageCatalog catalog;
+        FileStampIndex streamed;
+        catalog.loadFolderStreaming(dir.path(), false, true, true, false,
+                                    [] { return false; }, {}, 500, 300, &streamed);
+        FileStampIndex oneShot;
+        catalog.loadFolder(dir.path(), false, SortKey::Date, true, true, false, &oneShot);
+
+        for (const FileStampIndex *index : {&streamed, &oneShot}) {
+            FileStamp stamp;
+            QVERIFY(index->get(dir.filePath("a.jpg"), &stamp));
+            QCOMPARE(stamp.size, qint64(321));
+            QCOMPARE(stamp.mtimeSecs, QFileInfo(dir.filePath("a.jpg")).lastModified().toSecsSinceEpoch());
+            QVERIFY(index->get(dir.filePath("b.png"), &stamp));
+            QCOMPARE(stamp.size, qint64(654));
+            QVERIFY(!index->get(dir.filePath("note.txt"), &stamp));   // nepodporovaný typ
+        }
+    }
+
+    void fileStampIndex_resolveFallsBackToStat()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("a.bin");
+        QVERIFY(writeFileOfSize(path, 77));
+
+        auto index = QSharedPointer<FileStampIndex>::create();
+        QCOMPARE(FileStampIndex::resolve(index, path).size, qint64(77));   // není v indexu → stat
+        QCOMPARE(FileStampIndex::resolve({}, path).size, qint64(77));      // bez indexu → stat
+
+        index->set(path, {5, 6});
+        QCOMPARE(FileStampIndex::resolve(index, path).size, qint64(6));    // z indexu, bez stat
+        index->remove(path);
+        QCOMPARE(FileStampIndex::resolve(index, path).size, qint64(77));
+    }
+
+    // ── EXIF miniatura z JPEG ────────────────────────────────────────────────
+    // Hrubé určení barvy kvadrantu (JPEG barvy mírně posouvá).
+    static QString colorName(const QColor &c)
+    {
+        const bool r = c.red() > 128, g = c.green() > 128, b = c.blue() > 128;
+        if (r && g) return "yellow";
+        if (r) return "red";
+        if (g) return "green";
+        if (b) return "blue";
+        return "other";
+    }
+    static QStringList cornerColors(const QImage &img)
+    {
+        const int w = img.width(), h = img.height();
+        return {colorName(img.pixelColor(w / 8, h / 8)), colorName(img.pixelColor(w - 1 - w / 8, h / 8)),
+                colorName(img.pixelColor(w / 8, h - 1 - h / 8)), colorName(img.pixelColor(w - 1 - w / 8, h - 1 - h / 8))};
+    }
+
+    // Miniatura se otočí stejně jako hlavní snímek při čtení přes Qt (všech 8 orientací).
+    void exifThumbnail_orientationMatchesQtForAllValues()
+    {
+        for (int orientation = 1; orientation <= 8; ++orientation) {
+            const QByteArray bytes = jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(200, 150), orientation);
+
+            QBuffer mainBuffer;
+            mainBuffer.setData(bytes);
+            mainBuffer.open(QIODevice::ReadOnly);
+            QImageReader reader(&mainBuffer);
+            reader.setAutoTransform(true);
+            const QImage expected = reader.read();
+            QVERIFY2(!expected.isNull(), qPrintable(QString("orientace %1").arg(orientation)));
+
+            const QImage thumb = extractExifThumbnail(bytes);
+            QVERIFY2(!thumb.isNull(), qPrintable(QString("orientace %1").arg(orientation)));
+            QCOMPARE(thumb.size() == QSize(200, 150), expected.size() == QSize(640, 480));   // stejné prohození stran
+            QCOMPARE(cornerColors(thumb), cornerColors(expected));
+        }
+    }
+
+    void exifThumbnail_rejectsUnusableThumbnails()
+    {
+        // příliš malá
+        QVERIFY(extractExifThumbnail(jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(100, 75), 1)).isNull());
+        // jiný poměr stran než hlavní snímek (zastaralá po ořezu)
+        QVERIFY(extractExifThumbnail(jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(200, 200), 1)).isNull());
+        // JPEG bez EXIF
+        QVERIFY(extractExifThumbnail(jpegBytes(quadrantImage(640, 480))).isNull());
+        // není JPEG / prázdné
+        QVERIFY(extractExifThumbnail(QByteArray("GIF89a....")).isNull());
+        QVERIFY(extractExifThumbnail({}).isNull());
+    }
+
+    // Poškozená/useknutá hlavička nesmí číst mimo buffer ani spadnout.
+    void exifThumbnail_truncatedOrCorruptInputIsSafe()
+    {
+        const QByteArray good = jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(200, 150), 6);
+        for (qsizetype len = 0; len < 400 && len < good.size(); ++len) {
+            extractExifThumbnail(good.left(len));   // jen nesmí spadnout
+        }
+        for (qsizetype i = 0; i < 400; i += 3) {     // zkažené bajty v hlavičce
+            QByteArray broken = good;
+            broken[i] = char(broken[i] ^ 0xFF);
+            extractExifThumbnail(broken);
+        }
+        QVERIFY(!extractExifThumbnail(good).isNull());
+    }
+
+    // ── Diagnostický log ─────────────────────────────────────────────────────
+    void diagLog_isInertUntilStarted()
+    {
+        QVERIFY(!diag::active());
+        diag::log(QStringLiteral("nikdo neposlouchá"));   // nesmí spadnout ani nic vytvořit
+        { diag::ScopedTimer t(QStringLiteral("nic")); }
+        QVERIFY(diag::logFilePath().isEmpty());
+    }
+
+    void diagLog_writesOwnFileAndKeepsOnlyNewestOnes()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (int i = 1; i <= 5; ++i) {   // staré logy z dřívějších běhů
+            QVERIFY(writeFileOfSize(dir.filePath(QStringLiteral("pictureviewer-2020010%1-000000-1.log").arg(i)), 10));
+        }
+        QVERIFY(writeFileOfSize(dir.filePath("jiny-soubor.txt"), 10));   // cizí soubory se nemažou
+
+        diag::start(dir.path(), /*keepFiles*/ 3);
+        QVERIFY(diag::active());
+        diag::markFolderStart(QStringLiteral("/nejaka/slozka"));
+        diag::log(QStringLiteral("první zpráva"));
+        { diag::ScopedTimer slow(QStringLiteral("dlouhá věc"), 0); }
+        { diag::ScopedTimer fast(QStringLiteral("rychlá věc"), 100000); }   // pod prahem — nezapíše se
+        const QString logPath = diag::logFilePath();
+        diag::stop();
+        QVERIFY(!diag::active());
+        diag::log(QStringLiteral("po stopu"));   // ignoruje se
+
+        QFile file(logPath);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString content = QString::fromUtf8(file.readAll());
+        QVERIFY(content.contains("OTEVÍRÁM SLOŽKU: /nejaka/slozka"));
+        QVERIFY(content.contains("první zpráva"));
+        QVERIFY(content.contains("dlouhá věc:"));
+        QVERIFY(!content.contains("rychlá věc"));
+        QVERIFY(!content.contains("po stopu"));
+
+        const QStringList logs = QDir(dir.path()).entryList({"pictureviewer-*.log"}, QDir::Files, QDir::Name);
+        QCOMPARE(logs.size(), 3);                           // 2 nejnovější staré + nový
+        QVERIFY(!logs.contains("pictureviewer-20200101-000000-1.log"));
+        QVERIFY(QFile::exists(dir.filePath("jiny-soubor.txt")));
+
+        // Další start (např. druhý proces ve stejné vteřině) log prvního nepřepíše.
+        diag::start(dir.path(), 3);
+        diag::log(QStringLiteral("druhá zpráva"));
+        diag::stop();
+        QFile again(logPath);
+        QVERIFY(again.open(QIODevice::ReadOnly));
+        const QString after = QString::fromUtf8(again.readAll());
+        QVERIFY(after.contains("první zpráva"));
+        QVERIFY(after.contains("druhá zpráva"));
     }
 
     void catalogStreaming_descendingReversesTheSortedResult()

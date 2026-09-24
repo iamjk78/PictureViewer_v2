@@ -1,5 +1,8 @@
 #pragma once
 
+#include "core/DiagLog.hpp"
+
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
 
@@ -13,8 +16,19 @@ namespace pictureviewer {
 template <typename Op>
 bool tryWithRetry(Op op, int attempts = 8, int delayMs = 250)
 {
+    // Do logu jen pomalé nebo opakované operace (přes síť trvá i jeden pokus
+    // desetiny sekundy, a UI je po tu dobu zablokované).
+    QElapsedTimer timer;
+    timer.start();
+    auto report = [&](bool ok, int tries) {
+        if (tries > 1 || timer.elapsed() >= 150) {
+            diag::log(QStringLiteral("souborová operace: %1 po %2 pokusech, %3 ms (UI vlákno)")
+                          .arg(ok ? QStringLiteral("OK") : QStringLiteral("SELHALA")).arg(tries).arg(timer.elapsed()));
+        }
+    };
     for (int i = 0; i < attempts; ++i) {
         if (op()) {
+            report(true, i + 1);
             return true;
         }
         if (i + 1 < attempts) {
@@ -23,6 +37,7 @@ bool tryWithRetry(Op op, int attempts = 8, int delayMs = 250)
             loop.exec(QEventLoop::ExcludeUserInputEvents);
         }
     }
+    report(false, attempts);
     return false;
 }
 
