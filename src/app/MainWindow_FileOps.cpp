@@ -916,12 +916,23 @@ void MainWindow::onDeleteCurrentFolder()
     }
 
     // Cíl navigace po smazání se musí zjistit PŘED smazáním — potřebuje ještě
-    // existující adresářovou strukturu (sourozence i rodiče).
-    FolderNavResult next = FolderNavigator::siblingAfter(folderToDelete);
+    // existující adresářovou strukturu (sourozence i rodiče). Čte rodičovskou
+    // složku jednou pro oba směry.
+    const QString parentPath = QFileInfo(folderToDelete).absolutePath();
+    const QStringList parentNames = FolderNavigator::subfolderNames(parentPath);
+    const FolderNavSiblings sib =
+        FolderNavigator::siblingsFromParentListing(folderToDelete, parentNames);
+    FolderNavResult next = sib.after;
     if (!next.available) {
-        next = FolderNavigator::siblingBefore(folderToDelete);
+        next = sib.before;
     }
-    if (!next.available) {
+    if (next.available) {
+        // next je soused ve STEJNÉM rodiči, jehož seznam jmen jsme právě
+        // přečetli — nabídnout ho jako mezipaměť pro refreshFolderNavData()
+        // uvnitř loadFolder() níž, ať se na síti stejná složka nečte podruhé.
+        m_cachedSiblingsParent = parentPath;
+        m_cachedParentSubfolderNames = parentNames;
+    } else {
         next = FolderNavigator::parentFolder(folderToDelete);
     }
 

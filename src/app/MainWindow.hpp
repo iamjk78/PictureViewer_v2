@@ -279,6 +279,21 @@ private:
     QPushButton *m_folderNavUpButton = nullptr;
     QPushButton *m_folderNavDownButton = nullptr;
 
+    // Jednorázová mezipaměť: klik na ◀/▶ i smazání celé složky (padne-li
+    // volba na souseda) čtou obsah rodičovské složky PŘED přechodem na cíl a
+    // loadFolder() na cíli hned poté spustí refreshFolderNavData() se
+    // STEJNÝM rodičem — bez téhle mezipaměti by se na síťovém disku stejná
+    // složka četla dvakrát. Ukládá se jen SEZNAM JMEN (výsledek I/O), NIKDY
+    // hotový "před/po" výsledek — ten závisí na POZICI konkrétní složky
+    // v seznamu, která se po přechodu na jiného souseda liší (viz
+    // FolderNavigator::siblingsFromParentListing()). Platí jen do
+    // nejbližšího refreshFolderNavData() (ten ji vždy spotřebuje/zneplatní);
+    // m_cachedSiblingsParent prázdné = žádná platná mezipaměť. Neplatí jako
+    // obecný zdroj pravdy — tím zůstává vždy čerstvé čtení při skutečném
+    // kliknutí (viz onFolderNavClicked()).
+    QString m_cachedSiblingsParent;
+    QStringList m_cachedParentSubfolderNames;
+
     ImageMetadataReader m_imageMetadataReader;
     QStringList m_imagePaths;     // obrázky po filtrování (pokud je filtr aktivní)
     QStringList m_unfilteredImagePaths;  // všechny obrázky bez filtru

@@ -10,6 +10,7 @@
 #include "core/FolderNavigator.hpp"
 
 #include <QAction>
+#include <QFileInfo>
 #include <QIcon>
 #include <QLabel>
 #include <QToolBar>
@@ -119,8 +120,26 @@ void MainWindow::refreshFolderNavData()
     // znatelně trvá (naměřeno přes 20 s) — siblings() čte rodičovskou složku
     // jen JEDNOU pro oba směry (doleva i doprava), místo dvou samostatných
     // výpisů stejné složky.
-    const FolderNavSiblings sib = FolderNavigator::siblings(m_currentFolder);
-    const FolderNavResult down  = FolderNavigator::firstSubfolder(m_currentFolder);
+    //
+    // Pokud volající (klik ◀/▶ nebo smazání celé složky, viz onFolderNavClicked
+    // a onDeleteCurrentFolder) tuhle rodičovskou složku už čerstvě přečetl
+    // těsně před přechodem sem, nabídne SEZNAM JMEN přes m_cachedSiblingsParent
+    // — ať se stejný adresář na síti nečte podruhé. Pozici aktuální složky
+    // v tom seznamu (a tedy před/po) je ale nutné dopočítat vždy znovu —
+    // závisí na TÉTO konkrétní složce, ne na tom, že je rodič stejný jako
+    // u předchozího volání. Mezipaměť se vždy spotřebuje (zneplatní) tímto
+    // voláním, ať už se využila, nebo ne.
+    const QString parentPath = QFileInfo(m_currentFolder).absolutePath();
+    const bool hasCachedNames = !m_cachedSiblingsParent.isEmpty()
+        && m_cachedSiblingsParent == parentPath;
+    const QStringList parentNames = hasCachedNames
+        ? m_cachedParentSubfolderNames
+        : FolderNavigator::subfolderNames(parentPath);
+    const FolderNavSiblings sib =
+        FolderNavigator::siblingsFromParentListing(m_currentFolder, parentNames);
+    m_cachedSiblingsParent.clear();
+
+    const FolderNavResult down = FolderNavigator::firstSubfolder(m_currentFolder);
     updateFolderNavButton(m_folderNavLeftButton,  QStringLiteral("◀"), sib.before, false);
     updateFolderNavButton(m_folderNavRightButton, QStringLiteral("▶"), sib.after, false);
     updateFolderNavButton(m_folderNavDownButton,  QStringLiteral("▼"), down, false);
@@ -138,8 +157,25 @@ void MainWindow::onFolderNavClicked(FolderNavDirection direction)
     // složka byla mezitím smazána).
     FolderNavResult fresh;
     switch (direction) {
-    case FolderNavDirection::Left:  fresh = FolderNavigator::siblingBefore(m_currentFolder); break;
-    case FolderNavDirection::Right: fresh = FolderNavigator::siblingAfter(m_currentFolder);  break;
+    case FolderNavDirection::Left:
+    case FolderNavDirection::Right: {
+        // Přečte rodičovskou složku JEDNOU pro oba směry. Nová aktuální
+        // složka po přechodu bude mít TOHOTO STEJNÉHO rodiče, takže se
+        // seznam jmen (ne hotový výsledek — ten je vázaný na POZICI téhle
+        // konkrétní složky, viz FolderNavigator.hpp) nabídne jako mezipaměť
+        // pro refreshFolderNavData() uvnitř loadFolder() níž — jinak by na
+        // síti četla stejný adresář znovu.
+        const QString parentPath = QFileInfo(m_currentFolder).absolutePath();
+        const QStringList parentNames = FolderNavigator::subfolderNames(parentPath);
+        const FolderNavSiblings sib =
+            FolderNavigator::siblingsFromParentListing(m_currentFolder, parentNames);
+        fresh = (direction == FolderNavDirection::Left) ? sib.before : sib.after;
+        if (fresh.available) {
+            m_cachedSiblingsParent = parentPath;
+            m_cachedParentSubfolderNames = parentNames;
+        }
+        break;
+    }
     case FolderNavDirection::Up:    fresh = FolderNavigator::parentFolder(m_currentFolder);  break;
     case FolderNavDirection::Down:  fresh = FolderNavigator::firstSubfolder(m_currentFolder); break;
     }

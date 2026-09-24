@@ -32,13 +32,17 @@ QStringList sortedSubfolders(const QDir &dir)
 
 namespace pictureviewer {
 
-FolderNavSiblings FolderNavigator::siblings(const QString &currentFolder)
+QStringList FolderNavigator::subfolderNames(const QString &parentFolder)
+{
+    return sortedSubfolders(QDir(parentFolder));
+}
+
+FolderNavSiblings FolderNavigator::siblingsFromParentListing(const QString &currentFolder,
+                                                              const QStringList &parentSubfolderNames)
 {
     const QFileInfo info(currentFolder);
-    QDir parentDir = info.dir();
-
-    const QStringList names = sortedSubfolders(parentDir);
-    const int idx = names.indexOf(info.fileName());
+    const QDir parentDir = info.dir();
+    const int idx = parentSubfolderNames.indexOf(info.fileName());
 
     FolderNavSiblings result;
     if (idx < 0) {
@@ -47,18 +51,24 @@ FolderNavSiblings FolderNavigator::siblings(const QString &currentFolder)
 
     result.before.count = idx;   // počet sourozenců před aktuální složkou
     if (idx > 0) {
-        result.before.name = names.at(idx - 1);
+        result.before.name = parentSubfolderNames.at(idx - 1);
         result.before.path = parentDir.absoluteFilePath(result.before.name);
         result.before.available = true;
     }
 
-    result.after.count = names.size() - idx - 1;   // počet sourozenců za aktuální složkou
-    if (idx + 1 < names.size()) {
-        result.after.name = names.at(idx + 1);
+    result.after.count = parentSubfolderNames.size() - idx - 1;   // počet sourozenců za aktuální složkou
+    if (idx + 1 < parentSubfolderNames.size()) {
+        result.after.name = parentSubfolderNames.at(idx + 1);
         result.after.path = parentDir.absoluteFilePath(result.after.name);
         result.after.available = true;
     }
     return result;
+}
+
+FolderNavSiblings FolderNavigator::siblings(const QString &currentFolder)
+{
+    const QString parentPath = QFileInfo(currentFolder).absolutePath();
+    return siblingsFromParentListing(currentFolder, subfolderNames(parentPath));
 }
 
 FolderNavResult FolderNavigator::siblingBefore(const QString &currentFolder)

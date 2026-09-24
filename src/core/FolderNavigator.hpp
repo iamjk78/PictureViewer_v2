@@ -38,6 +38,22 @@ public:
     // volané zvlášť ji čtou dvakrát; na síťovém disku to zdvojnásobí latenci.
     // Použij, když potřebuješ oba směry současně (viz refreshFolderNavData()).
     static FolderNavSiblings siblings(const QString &currentFolder);
+
+    // Seřazené podsložky dané složky (bez "Delete") — čistě I/O čtení, bez
+    // vztahu ke konkrétní "aktuální" složce. Použij spolu se
+    // siblingsFromParentListing(), když chceš sdílet JEDEN výpis rodiče mezi
+    // více voláními (např. před přechodem na souseda i po něm — POZOR: který
+    // je "před" a "který "po" závisí na POZICI KONKRÉTNÍ složky v tomto
+    // seznamu, ne jen na tom, že je rodič stejný — nikdy si tedy neukládej
+    // hotový FolderNavSiblings výsledek pro pozdější použití u JINÉ složky,
+    // jen tenhle seznam jmen).
+    static QStringList subfolderNames(const QString &parentFolder);
+
+    // Sourozenci dané složky, POKUD UŽ MÁŠ seřazený seznam podsložek jejího
+    // rodiče (ze subfolderNames() pro STEJNÉHO rodiče) — žádné další čtení
+    // z disku, jen vyhledání pozice v seznamu.
+    static FolderNavSiblings siblingsFromParentListing(const QString &currentFolder,
+                                                        const QStringList &parentSubfolderNames);
     // Abecedně první podsložka; count = celkový počet podsložek (bez "Delete").
     static FolderNavResult firstSubfolder(const QString &currentFolder);
     // Rodičovská složka; count je vždy 0 (na kořeni disku) nebo 1.

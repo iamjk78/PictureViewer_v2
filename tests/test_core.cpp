@@ -367,6 +367,41 @@ private slots:
         QCOMPARE(sib.after.name, QStringLiteral("Gama"));
     }
 
+    // siblingsFromParentListing() musí spočítat před/po ze SPRÁVNÉ POZICE
+    // dané složky v seznamu, ne z pozice nějaké jiné — sdílený seznam jmen
+    // (přečtený jednou pro celou složku) se v MainWindow mezipaměti nabízí
+    // pro RŮZNÉ aktuální složky se stejným rodičem, a pro každou z nich musí
+    // vrátit JEJÍ VLASTNÍ sousedy, ne sousedy toho, pro koho se seznam
+    // původně četl.
+    void folderNavigator_siblingsFromParentListing_usesCorrectPosition()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(QDir(dir.path()).mkdir("Alfa"));
+        QVERIFY(QDir(dir.path()).mkdir("Beta"));
+        QVERIFY(QDir(dir.path()).mkdir("Gama"));
+        QVERIFY(QDir(dir.path()).mkdir("Delta"));
+
+        const QStringList names = FolderNavigator::subfolderNames(dir.path());
+        QCOMPARE(names, (QStringList{"Alfa", "Beta", "Delta", "Gama"}));
+
+        // Stejný seznam (jeden výpis), ale dvě RŮZNÉ "aktuální" složky —
+        // Beta a Delta musí dostat každá SVÉ sousedy, ne ty samé.
+        const FolderNavSiblings forBeta =
+            FolderNavigator::siblingsFromParentListing(dir.filePath("Beta"), names);
+        QCOMPARE(forBeta.before.name, QStringLiteral("Alfa"));
+        QCOMPARE(forBeta.after.name, QStringLiteral("Delta"));
+
+        const FolderNavSiblings forDelta =
+            FolderNavigator::siblingsFromParentListing(dir.filePath("Delta"), names);
+        QCOMPARE(forDelta.before.name, QStringLiteral("Beta"));
+        QCOMPARE(forDelta.after.name, QStringLiteral("Gama"));
+
+        // Výsledek pro Delta se nesmí shodovat s výsledkem pro Beta (to byla
+        // přesně ta chyba — "po" u Delty ukazovalo na Deltu samotnou).
+        QVERIFY(forDelta.after.name != forBeta.after.name);
+    }
+
     void folderNavigator_edgesHaveNoSibling()
     {
         QTemporaryDir dir;
