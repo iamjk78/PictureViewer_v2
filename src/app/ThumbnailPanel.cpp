@@ -248,6 +248,13 @@ void ThumbnailPanel::keyPressEvent(QKeyEvent *event)
         event->ignore();
         return;
     }
+    // D / Delete mažou (i výběr více náhledů) — obsluhuje je MainWindow. Po
+    // Ctrl/Shift+kliku má fokus tento panel, takže QListWidget nesmí klávesu
+    // pohltit vyhledáváním podle písmene.
+    if (event->key() == Qt::Key_D || event->key() == Qt::Key_Delete) {
+        event->ignore();
+        return;
+    }
     QListWidget::keyPressEvent(event);
 }
 

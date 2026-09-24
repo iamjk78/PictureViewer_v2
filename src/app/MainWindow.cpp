@@ -888,17 +888,23 @@ void MainWindow::stopSlideshowIfRunning()
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 }
 
-bool MainWindow::showDeleteConfirmationDialog()
+bool MainWindow::showDeleteConfirmationDialog(int count)
 {
     QString title;
     QString message;
 
+    // České skloňování: 1 soubor, 2–4 soubory, 5+ souborů.
+    const QString files = count >= 5 ? tr("%1 souborů").arg(count)
+                                     : tr("%1 soubory").arg(count);
+
     if (m_settingsManager->enableDeleteImage()) {
-        title = tr("Smazat obrázek");
-        message = tr("Opravdu chceš smazat tento obrázek?");
+        title = count > 1 ? tr("Smazat soubory") : tr("Smazat obrázek");
+        message = count > 1 ? tr("Opravdu chceš smazat %1?").arg(files)
+                            : tr("Opravdu chceš smazat tento obrázek?");
     } else if (m_settingsManager->enableMoveToDelete()) {
-        title = tr("Přesunout obrázek");
-        message = tr("Opravdu chceš přesunout tento obrázek do Delete?");
+        title = count > 1 ? tr("Přesunout soubory") : tr("Přesunout obrázek");
+        message = count > 1 ? tr("Opravdu chceš přesunout %1 do Delete?").arg(files)
+                            : tr("Opravdu chceš přesunout tento obrázek do Delete?");
     } else {
         return false;
     }

@@ -94,8 +94,8 @@ private slots:
     void toggleSlideshow();
     void toggleFullscreen();
     void deleteOrMoveCurrentImage();
-    void deleteImageToTrash();
-    void moveImageToDeleteFolder();
+    void deleteImageToTrash(const QStringList &activeFiles);
+    void moveImageToDeleteFolder(const QStringList &activeFiles);
     void renameCurrentImage();
     void onDeleteFolder();
     // Smaže CELOU aktuálně otevřenou složku (do koše) — jiná akce než
@@ -152,7 +152,12 @@ private:
     // zůstat úplně vpravo). Používat pro veškerý dynamicky přestavovaný obsah
     // toolbarů — přímé addWidget() by ho přilepilo až za špendlík.
     QAction *addToolbarContent(QToolBar *toolbar, QWidget *widget);
-    bool showDeleteConfirmationDialog();
+    // count = kolik souborů se maže — dialog u hromadného mazání musí říct
+    // počet, jinak by tvrdil "tento obrázek" a uživatel by netušil, že jde o výběr.
+    bool showDeleteConfirmationDialog(int count = 1);
+    // Soubory, na které se akce (smazat / přesunout) vztahuje: výběr 2+ náhledů,
+    // jinak aktuálně zobrazený soubor.
+    QStringList selectedOrCurrentFiles() const;
     // Odebere soubor ze seznamu i panelu náhledů. showNext=false odloží
     // zobrazení dalšího souboru na volajícího (hromadné operace tak nedekódují
     // obrázek po každém odebrání) — volající pak zavolá showCurrentAfterRemoval().

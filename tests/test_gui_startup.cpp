@@ -1,4 +1,4 @@
-// Smoke test spuštění aplikace.
+// Smoke test spuštění aplikace + end-to-end test mazání výběru náhledů.
 //
 // Běží s QT_QPA_PLATFORM=offscreen (nastaveno v CMakeLists.txt), takže funguje
 // i na CI bez displeje — na macOS i na Windows.
@@ -25,10 +25,49 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 #include "app/MainWindow.hpp"
+#include "app/ThumbnailPanel.hpp"
 
 using namespace pictureviewer;
+
+namespace {
+
+void writeConfigForDelete()
+{
+    const QString cfgDir =
+        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    const QString profileCfg = cfgDir + "/profiles/Výchozí/config.ini";
+    QDir().mkpath(QFileInfo(profileCfg).absolutePath());
+    QSettings s(profileCfg, QSettings::IniFormat);
+    s.setValue("FileHandling/enable_delete_image", false);
+    s.setValue("FileHandling/enable_move_to_delete", true);
+    s.setValue("FileHandling/ask_confirmation_delete", false);
+    s.setValue("FileHandling/move_companion_files", false);
+    s.setValue("Processing/enable_images", true);
+    s.sync();
+}
+
+QStringList makeImages(const QString &dir, int count)
+{
+    QStringList names;
+    for (int i = 1; i <= count; ++i) {
+        const QString name = QStringLiteral("img_%1.jpg").arg(i);
+        QImage img(16, 16, QImage::Format_RGB32);
+        img.fill(Qt::blue);
+        img.save(QDir(dir).filePath(name), "JPEG");
+        names.append(name);
+    }
+    return names;
+}
+
+QStringList jpgNames(const QString &dir)
+{
+    return QDir(dir).entryList({QStringLiteral("*.jpg")}, QDir::Files, QDir::Name);
+}
+
+} // namespace
 
 class TestGuiStartup : public QObject
 {
@@ -91,6 +130,73 @@ private slots:
             QDir(dir).removeRecursively();
         }
     }
+    // ── Hromadné mazání výběru náhledů ───────────────────────────────────────
+    // Skutečné MainWindow nad složkou s obrázky. Režim "přesun do složky Delete"
+    // místo koše — test tak nesahá do uživatelova koše a jde přesně ověřit,
+    // kam soubory přistály. Klávesa jde na panel náhledů (tam má fokus po
+    // Ctrl/Shift+kliku) — ověřuje tedy i to, že ji panel nepohltí.
+
+    void deleteKeyRemovesAllSelectedThumbnails()
+    {
+        writeConfigForDelete();
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 6);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_1.jpg"));
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 6, 5000);
+
+        // Označit náhledy 2, 3 a 4 (indexy 1–3) — aktuální zůstává první.
+        panel->clearSelection();
+        for (int row : {1, 2, 3}) {
+            panel->item(row)->setSelected(true);
+        }
+        QCOMPARE(panel->selectedIndices().size(), 3);
+
+        QTest::keyClick(panel, Qt::Key_Delete);
+
+        // Zbývají 1, 5, 6 — označené 2, 3, 4 odešly do složky Delete.
+        QTRY_COMPARE_WITH_TIMEOUT(jpgNames(dir.path()),
+                                  (QStringList{"img_1.jpg", "img_5.jpg", "img_6.jpg"}), 5000);
+        QCOMPARE(jpgNames(QDir(dir.path()).filePath("Delete")),
+                 (QStringList{"img_2.jpg", "img_3.jpg", "img_4.jpg"}));
+        QCOMPARE(panel->count(), 3);
+
+        window.close();
+    }
+
+    void deleteKeyWithoutSelectionRemovesOnlyCurrent()
+    {
+        writeConfigForDelete();
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 4);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_1.jpg"));
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 4, 5000);
+
+        // Žádný vícenásobný výběr — smaže se jen zobrazený soubor (img_1),
+        // ostatní zůstanou, ať je výběr jakýkoli.
+        panel->clearSelection();
+        QTest::keyClick(&window, Qt::Key_D);
+
+        QTRY_COMPARE_WITH_TIMEOUT(jpgNames(dir.path()),
+                                  (QStringList{"img_2.jpg", "img_3.jpg", "img_4.jpg"}), 5000);
+        QCOMPARE(jpgNames(QDir(dir.path()).filePath("Delete")), (QStringList{"img_1.jpg"}));
+
+        window.close();
+    }
+
 };
 
 QTEST_MAIN(TestGuiStartup)

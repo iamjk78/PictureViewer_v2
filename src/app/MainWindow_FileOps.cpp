@@ -548,6 +548,28 @@ void MainWindow::updateStatus(const QString &path)
     }
 }
 
+QStringList MainWindow::selectedOrCurrentFiles() const
+{
+    // Výběr 2+ náhledů (Ctrl/Shift+klik) má přednost — ta nenavigují, takže
+    // výběr může obsahovat jiné soubory než ten zobrazený. Jinak jen aktuální.
+    const QList<int> selected = m_thumbnailPanel->selectedIndices();
+    QStringList files;
+    if (selected.size() > 1) {
+        for (int idx : selected) {
+            if (idx >= 0 && idx < m_imagePaths.size()) {
+                files.append(m_imagePaths.at(idx));
+            }
+        }
+    }
+    if (files.size() < 2) {
+        files.clear();
+        if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+            files.append(m_imagePaths.at(m_currentIndex));
+        }
+    }
+    return files;
+}
+
 void MainWindow::deleteOrMoveCurrentImage()
 {
     if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
@@ -568,102 +590,126 @@ void MainWindow::deleteOrMoveCurrentImage()
         return;
     }
 
+    // Seznam se určí PŘED potvrzením a předá se dál — dialog i samotné mazání
+    // tak pracují s přesně stejnou sadou souborů.
+    const QStringList files = selectedOrCurrentFiles();
+    if (files.isEmpty()) {
+        return;
+    }
+
     // Na Windows se video drží v paměti — zastavit jej PŘED pokusem o přesunutí/smazání
     // aby se soubor odemčil a dal se manipulovat.
     stopVideoIfPlaying();
 
     bool shouldAskConfirmation = m_settingsManager->askConfirmationDelete();
     if (shouldAskConfirmation) {
-        if (!showDeleteConfirmationDialog()) {
+        if (!showDeleteConfirmationDialog(static_cast<int>(files.size()))) {
             return;
         }
     }
 
     if (deleteEnabled) {
-        deleteImageToTrash();
+        deleteImageToTrash(files);
     } else if (moveEnabled) {
-        moveImageToDeleteFolder();
+        moveImageToDeleteFolder(files);
     }
 }
 
-void MainWindow::deleteImageToTrash()
+void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
-        return;
-    }
-
-    const QString currentPath = m_imagePaths.at(m_currentIndex);
-
-    bool cancelled = false;
-    const QStringList filesToDelete = resolveCompanionSet(currentPath, tr("smazat"), cancelled);
-    if (cancelled) {
+    if (activeFiles.isEmpty()) {
         return;
     }
 
     // Koš nemá undo (jako dosud) — jen smazat každý soubor sady.
     const int anchorIndex = m_currentIndex;
+    // Po hromadném smazání se zobrazí soubor, který následoval za aktuálním —
+    // smazané soubory PŘED aktuálním posouvají indexy, takže se počítají.
+    const QSet<QString> beforeAnchor(m_imagePaths.begin(),
+                                     m_imagePaths.begin() + qMin(anchorIndex, static_cast<int>(m_imagePaths.size())));
+    int removedBeforeAnchor = 0;
+    int deletedCount = 0;
+    int failedCount = 0;
     bool removedAny = false;
     // Na síťových discích bez podpory koše (viz stejný důvod u onDeleteCurrentFolder())
     // moveToTrash spolehlivě selže pro každý soubor skupiny — zeptat se na trvalé
-    // smazání jen jednou a rozhodnutí uplatnit i na zbylé companion soubory.
+    // smazání jen jednou (za celou dávku) a rozhodnutí uplatnit i na zbytek.
     bool permanentDeleteAsked = false;
     bool permanentDeleteAllowed = false;
-    for (const QString &filePath : filesToDelete) {
-        if (!QFile::exists(filePath)) {
+    // Soubor už smazaný jako pár předchozího souboru přeskočit, je-li i ve výběru.
+    QSet<QString> handled;
+
+    for (const QString &activeFile : activeFiles) {
+        if (handled.contains(activeFile)) {
             continue;
         }
-        // Zastavit i video případně auto-přehrané předchozím odebráním —
-        // jinak by na Windows zůstalo zamčené a moveToTrash by selhal.
-        stopVideoIfPlaying();
-        bool removed = tryWithRetry([&] { return QFile::moveToTrash(filePath); });
-        if (!removed) {
-            if (!permanentDeleteAsked) {
-                permanentDeleteAsked = true;
-                permanentDeleteAllowed = QMessageBox::question(
-                    this, QString(),
-                    tr("Soubor se nepodařilo přesunout do koše (síťový disk košem "
-                       "nedisponuje). Smazat trvale, bez možnosti obnovy?"),
-                    QMessageBox::Yes | QMessageBox::No,
-                    QMessageBox::No) == QMessageBox::Yes;
-            }
-            if (permanentDeleteAllowed) {
-                removed = QFile::remove(filePath);
-            }
+        bool cancelled = false;
+        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled);
+        if (cancelled) {
+            handled.insert(activeFile);   // storno pro tento soubor
+            continue;
         }
-        if (removed) {
-            if (m_categoryManager) {
-                m_categoryManager->unassignAll(filePath);
+
+        for (const QString &filePath : filesToDelete) {
+            handled.insert(filePath);
+            if (!QFile::exists(filePath)) {
+                continue;
             }
-            const int idx = m_imagePaths.indexOf(filePath);
-            if (idx >= 0) {
-                removeImageFromList(idx, /*showNext=*/false);
-                removedAny = true;
+            // Zastavit i video případně auto-přehrané předchozím odebráním —
+            // jinak by na Windows zůstalo zamčené a moveToTrash by selhal.
+            stopVideoIfPlaying();
+            bool removed = tryWithRetry([&] { return QFile::moveToTrash(filePath); });
+            if (!removed) {
+                if (!permanentDeleteAsked) {
+                    permanentDeleteAsked = true;
+                    permanentDeleteAllowed = QMessageBox::question(
+                        this, QString(),
+                        tr("Soubor se nepodařilo přesunout do koše (síťový disk košem "
+                           "nedisponuje). Smazat trvale, bez možnosti obnovy?"),
+                        QMessageBox::Yes | QMessageBox::No,
+                        QMessageBox::No) == QMessageBox::Yes;
+                }
+                if (permanentDeleteAllowed) {
+                    removed = QFile::remove(filePath);
+                }
             }
-        } else {
-            m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(filePath));
+            if (removed) {
+                ++deletedCount;
+                if (m_categoryManager) {
+                    m_categoryManager->unassignAll(filePath);
+                }
+                const int idx = m_imagePaths.indexOf(filePath);
+                if (idx >= 0) {
+                    if (beforeAnchor.contains(filePath)) {
+                        ++removedBeforeAnchor;
+                    }
+                    removeImageFromList(idx, /*showNext=*/false);
+                    removedAny = true;
+                }
+            } else {
+                ++failedCount;
+                m_statusLabel->setText(tr("Nepodařilo se odstranit obrázek: %1").arg(filePath));
+            }
         }
     }
     if (removedAny) {
-        showCurrentAfterRemoval(anchorIndex);
+        showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
+    }
+    if (activeFiles.size() > 1) {
+        m_statusLabel->setText(failedCount > 0
+            ? tr("Smazáno %1 souborů, %2 se nepodařilo smazat.").arg(deletedCount).arg(failedCount)
+            : tr("Smazáno %1 souborů.").arg(deletedCount));
     }
 }
 
-void MainWindow::moveImageToDeleteFolder()
+void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+    if (activeFiles.isEmpty()) {
         return;
     }
 
-    const QString currentPath = m_imagePaths.at(m_currentIndex);
-
-    bool cancelled = false;
-    const QStringList filesToDelete = resolveCompanionSet(currentPath, tr("smazat"), cancelled);
-    if (cancelled) {
-        return;
-    }
-
-    // Všechny soubory sady jsou ve stejné složce → stejná složka Delete.
-    const QString folderPath = QFileInfo(currentPath).absolutePath();
+    // Všechny soubory (i páry) jsou ve stejné složce → stejná složka Delete.
+    const QString folderPath = QFileInfo(activeFiles.first()).absolutePath();
     const QString deleteFolderPath = folderPath + QDir::separator() + QStringLiteral("Delete");
 
     QDir deleteFolder(deleteFolderPath);
@@ -674,50 +720,82 @@ void MainWindow::moveImageToDeleteFolder()
         }
     }
 
+    // JEDNA skupina za celou uživatelskou akci — undo (♻) pak vrátí celou
+    // dávku najednou, ne po jednom souboru.
     MoveGroup group;
     const int anchorIndex = m_currentIndex;
+    const QSet<QString> beforeAnchor(m_imagePaths.begin(),
+                                     m_imagePaths.begin() + qMin(anchorIndex, static_cast<int>(m_imagePaths.size())));
+    int removedBeforeAnchor = 0;
+    int movedCount = 0;
+    int failedCount = 0;
     bool removedAny = false;
-    for (const QString &filePath : filesToDelete) {
-        if (!QFile::exists(filePath)) {
+    QSet<QString> handled;
+
+    for (const QString &activeFile : activeFiles) {
+        if (handled.contains(activeFile)) {
             continue;
         }
-        const QString newPath = deleteFolderPath + QDir::separator() + QFileInfo(filePath).fileName();
+        bool cancelled = false;
+        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled);
+        if (cancelled) {
+            handled.insert(activeFile);   // storno pro tento soubor
+            continue;
+        }
 
-        // Zastavit i video případně auto-přehrané předchozím odebráním —
-        // jinak by na Windows zůstalo zamčené a rename by selhal.
-        stopVideoIfPlaying();
-        if (tryWithRetry([&] { return QFile::rename(filePath, newPath); })) {
-            if (m_categoryManager) {
-                m_categoryManager->renameImagePath(filePath, newPath);
-            }
-            group.append({newPath, filePath});
-            const int idx = m_imagePaths.indexOf(filePath);
-            if (idx >= 0) {
-                removeImageFromList(idx, /*showNext=*/false);
-                removedAny = true;
-            }
-        } else {
-            // Diagnostika: co se stalo?
-            QString reason;
+        for (const QString &filePath : filesToDelete) {
+            handled.insert(filePath);
             if (!QFile::exists(filePath)) {
-                reason = tr("soubor již neexistuje");
-            } else if (QFile::exists(newPath)) {
-                reason = tr("cílové umístění už existuje — zkuste ručně smazat Delete složku");
-            } else if (!QFileInfo(folderPath).isWritable()) {
-                reason = tr("složka nemá práva pro zápis");
-            } else {
-                reason = tr("soubor je stále zamčený — zkuste zavřít video a zkusit znovu");
+                continue;
             }
-            m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete: %1").arg(reason));
+            const QString newPath = deleteFolderPath + QDir::separator() + QFileInfo(filePath).fileName();
+
+            // Zastavit i video případně auto-přehrané předchozím odebráním —
+            // jinak by na Windows zůstalo zamčené a rename by selhal.
+            stopVideoIfPlaying();
+            if (tryWithRetry([&] { return QFile::rename(filePath, newPath); })) {
+                ++movedCount;
+                if (m_categoryManager) {
+                    m_categoryManager->renameImagePath(filePath, newPath);
+                }
+                group.append({newPath, filePath});
+                const int idx = m_imagePaths.indexOf(filePath);
+                if (idx >= 0) {
+                    if (beforeAnchor.contains(filePath)) {
+                        ++removedBeforeAnchor;
+                    }
+                    removeImageFromList(idx, /*showNext=*/false);
+                    removedAny = true;
+                }
+            } else {
+                ++failedCount;
+                // Diagnostika: co se stalo?
+                QString reason;
+                if (!QFile::exists(filePath)) {
+                    reason = tr("soubor již neexistuje");
+                } else if (QFile::exists(newPath)) {
+                    reason = tr("cílové umístění už existuje — zkuste ručně smazat Delete složku");
+                } else if (!QFileInfo(folderPath).isWritable()) {
+                    reason = tr("složka nemá práva pro zápis");
+                } else {
+                    reason = tr("soubor je stále zamčený — zkuste zavřít video a zkusit znovu");
+                }
+                m_statusLabel->setText(tr("Nepodařilo se přesunout obrázek do Delete: %1").arg(reason));
+            }
         }
     }
 
     if (removedAny) {
-        showCurrentAfterRemoval(anchorIndex);
+        showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
     }
     if (!group.isEmpty()) {
         appendToHistory(m_deleteHistory, group);
         updateRecycleButtonState();
+    }
+    if (activeFiles.size() > 1) {
+        m_statusLabel->setText(failedCount > 0
+            ? tr("Přesunuto do Delete %1 souborů, %2 se nepodařilo přesunout.").arg(movedCount).arg(failedCount)
+            : tr("Přesunuto do Delete %1 souborů.").arg(movedCount));
     }
 }
 

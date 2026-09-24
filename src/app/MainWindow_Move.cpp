@@ -405,17 +405,7 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
         return;
     }
 
-    const QList<int> selected = m_thumbnailPanel->selectedIndices();
-    QStringList filesToMove;
-    if (selected.size() > 1) {
-        for (int idx : selected) {
-            if (idx >= 0 && idx < m_imagePaths.size()) {
-                filesToMove.append(m_imagePaths.at(idx));
-            }
-        }
-    } else {
-        filesToMove.append(m_imagePaths.at(m_currentIndex));
-    }
+    const QStringList filesToMove = selectedOrCurrentFiles();
 
     int movedCount = 0;
     const int anchorIndex = m_currentIndex;
