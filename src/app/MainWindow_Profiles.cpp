@@ -122,6 +122,7 @@ void MainWindow::switchProfile(const QString &profileName)
         disconnect(m_folderScanWorker, nullptr, this, nullptr);
         m_folderScanWorker = nullptr;
     }
+    m_scanRunning = false;
 
     // Zastavit případné přehrávání videa — starý profil končí a VideoPlayer
     // nesmí zůstat aktivním widgetem nad daty nového profilu.

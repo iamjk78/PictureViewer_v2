@@ -74,6 +74,9 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   nečte všechno najednou. Po chvíli klidu se zbytek pomalu uloží do cache na
   pozadí (miniatury videí až po dlouhém klidu) a ustupuje tomu, co právě
   prohlížíš
+- **Hromadné operace ukazují průběh** — mazání nebo přesun mnoha souborů
+  najednou zobrazí okno s průběhem a Zrušit a upozorní, když se složka ještě
+  načítá
 - **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;
   přehrávání v nekonečné smyčce; zoom (+/-), posun myší, fullscreen, posun šipkami,
   hlasitost, buffer overlay; metadata (velikost, rozlišení, délka, datový tok) i

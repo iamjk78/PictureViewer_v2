@@ -2,6 +2,7 @@
 
 #include "app/ProfileManager.hpp"
 #include "app/ToolbarStyle.hpp"
+#include "core/CompanionFinder.hpp"
 #include "core/ContentState.hpp"
 #include "core/FolderNavigator.hpp"
 #include "core/ImageCatalog.hpp"
@@ -265,8 +266,19 @@ private:
     // se kterými se má akce provést (aktivní první + zvolené páry). cancelled=true,
     // pokud uživatel u 2+ párů zvolil Storno. Když je volba vypnutá nebo 0 párů,
     // vrátí jen {activeFile}. verb = "přesunout" / "smazat" pro text dialogu.
+    // index: hotový index párů z paměti (viz CompanionIndex) — hromadné operace
+    // ho sestaví jednou pro celou dávku. Bez něj se index sestaví z aktuálního
+    // seznamu, je-li důvěryhodně úplný, jinak se páry hledají na disku.
     QStringList resolveCompanionSet(const QString &activeFile, const QString &verb,
-                                    bool &cancelled);
+                                    bool &cancelled, const CompanionIndex *index = nullptr);
+    // Seznam souborů v aplikaci je úplný a aktuální natolik, že se z něj dají
+    // brát páry bez dotazů na úložiště (viz CompanionIndex).
+    bool companionListIsComplete(const QString &file) const;
+    // Složka se ještě načítá — hromadná operace poběží nad neúplným seznamem a
+    // soupeří se skenem o stejné spojení. Zeptá se, jestli přesto pokračovat.
+    bool confirmBatchWhileLoading(const QString &verb, int count);
+    static QString filesPhrase(int count);   // "5 souborů" / "3 soubory"
+    bool m_scanRunning = false;              // sken složky ještě neskončil
     void onMoveCompanionToggled(bool checked);
 
     // Vrátí poslední skupinu z dané undo historie zpět na původní umístění

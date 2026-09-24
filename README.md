@@ -81,6 +81,8 @@ A fast, no-nonsense image and PDF viewer written in C++20 / Qt6 for **macOS** an
   network storage doesn't read them all at once. After a moment of idle time the
   rest are cached slowly in the background (video thumbnails only after a long
   idle), and the background work yields to whatever you're viewing
+- **Batch operations show progress** — deleting or moving many files at once
+  shows a progress dialog with Cancel, and warns if the folder is still loading
 - **Inline video player** (Qt Multimedia) — MP4, MKV, MOV, WebM and more, played
   in the app window; loops until stopped; zoom (+/-), mouse pan, fullscreen,
   arrow-key seeking, volume, buffering overlay; metadata (size, resolution,

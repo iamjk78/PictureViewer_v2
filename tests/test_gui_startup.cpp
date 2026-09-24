@@ -25,6 +25,9 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QImage>
+#include <QAbstractButton>
+#include <QMessageBox>
+#include <QProgressDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QScopeGuard>
@@ -35,6 +38,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "app/BatchProgress.hpp"
 #include "app/MainWindow.hpp"
 #include "app/ThumbnailPanel.hpp"
 
@@ -123,6 +127,54 @@ int cachedThumbFiles(const QString &cacheDir)
         ++n;
     }
     return n;
+}
+
+// Za chvíli klikne v modálním QMessageBoxu na tlačítko s daným textem.
+void clickMessageBoxButtonSoon(const QString &text, int delayMs)
+{
+    QTimer::singleShot(delayMs, [text] {
+        for (QWidget *w : QApplication::topLevelWidgets()) {
+            if (auto *box = qobject_cast<QMessageBox *>(w)) {
+                for (QAbstractButton *b : box->buttons()) {
+                    if (b->text() == text) {
+                        b->click();
+                        return;
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Za chvíli zruší otevřený QProgressDialog (jako klik na Zrušit).
+void cancelProgressDialogSoon(int delayMs)
+{
+    QTimer::singleShot(delayMs, [] {
+        for (QWidget *w : QApplication::topLevelWidgets()) {
+            if (auto *pd = qobject_cast<QProgressDialog *>(w)) {
+                pd->cancel();
+                return;
+            }
+        }
+    });
+}
+
+void writeConfigForBatch(bool companions)
+{
+    const QString cfgDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    const QString profileCfg = cfgDir + "/profiles/Výchozí/config.ini";
+    QDir().mkpath(QFileInfo(profileCfg).absolutePath());
+    QSettings s(profileCfg, QSettings::IniFormat);
+    s.setValue("General/remember_last_folder", false);
+    s.setValue("FileHandling/enable_delete_image", false);
+    s.setValue("FileHandling/enable_move_to_delete", true);
+    s.setValue("FileHandling/ask_confirmation_delete", false);
+    s.setValue("FileHandling/move_companion_files", companions);
+    s.setValue("Processing/enable_images", true);
+    s.setValue("Processing/enable_videos", true);
+    s.setValue("Sort/key", 0);
+    s.setValue("Sort/ascending", true);
+    s.sync();
 }
 
 int loadedThumbnails(const ThumbnailPanel &panel)
@@ -219,6 +271,8 @@ private slots:
         auto *panel = window.findChild<ThumbnailPanel *>();
         QVERIFY(panel != nullptr);
         QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 6, 5000);
+        // Sken musí skončit — hromadné mazání za jeho běhu se ptá na potvrzení.
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
 
         // Označit náhledy 2, 3 a 4 (indexy 1–3) — aktuální zůstává první.
         panel->clearSelection();
@@ -253,6 +307,7 @@ private slots:
         auto *panel = window.findChild<ThumbnailPanel *>();
         QVERIFY(panel != nullptr);
         QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 4, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
 
         // Žádný vícenásobný výběr — smaže se jen zobrazený soubor (img_1),
         // ostatní zůstanou, ať je výběr jakýkoli.
@@ -603,6 +658,126 @@ private slots:
         QCOMPARE(cachedThumbFiles(cache.path()), 60);
         // …a viditelné video je v popředí (jedno), vzdálené v ocasu.
         QCOMPARE(spy.last().at(2).toInt(), 1);
+    }
+    // ── Hromadné operace: páry z paměti, průběh se zrušením, varování ─────────
+    void batch_deleteMovesPairsTogether()
+    {
+        writeConfigForBatch(/*companions*/ true);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // 30 samotných obrázků nahoře (a_*) a 6 dvojic obrázek+video dole (z_*),
+        // ať videa nejsou vidět a nespouští generátor miniatur.
+        for (int i = 1; i <= 30; ++i) {
+            QImage img(16, 16, QImage::Format_RGB32);
+            img.fill(Qt::red);
+            img.save(QDir(dir.path()).filePath(QStringLiteral("a_%1.jpg").arg(i, 2, 10, QLatin1Char('0'))), "JPEG");
+        }
+        for (int i = 1; i <= 6; ++i) {
+            QImage img(16, 16, QImage::Format_RGB32);
+            img.fill(Qt::blue);
+            img.save(QDir(dir.path()).filePath(QStringLiteral("z_%1.jpg").arg(i)), "JPEG");
+            QFile f(QDir(dir.path()).filePath(QStringLiteral("z_%1.mp4").arg(i)));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        }
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("a_01.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 42, 8000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+
+        // Označit tři z dvojic (jejich .jpg) — s nimi se musí přesunout i videa.
+        panel->clearSelection();
+        int selected = 0;
+        for (int row = 0; row < panel->count(); ++row) {
+            const QString name = QFileInfo(panel->item(row)->data(Qt::UserRole).toString()).fileName();
+            if (name == "z_1.jpg" || name == "z_2.jpg" || name == "z_3.jpg") {
+                panel->item(row)->setSelected(true);
+                ++selected;
+            }
+        }
+        QCOMPARE(selected, 3);
+        QTest::keyClick(panel, Qt::Key_Delete);
+
+        const QString deleted = QDir(dir.path()).filePath("Delete");
+        QTRY_COMPARE_WITH_TIMEOUT(QDir(deleted).entryList(QDir::Files, QDir::Name),
+            (QStringList{"z_1.jpg", "z_1.mp4", "z_2.jpg", "z_2.mp4", "z_3.jpg", "z_3.mp4"}), 8000);
+        // ostatní dvojice zůstaly
+        QVERIFY(QFile::exists(QDir(dir.path()).filePath("z_4.mp4")));
+        QVERIFY(QFile::exists(QDir(dir.path()).filePath("z_4.jpg")));
+        window.close();
+    }
+
+    void batch_cancelStopsTheOperationHalfway()
+    {
+        writeConfigForBatch(false);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 40);
+        auto reset = qScopeGuard([] { BatchProgress::setStepDelayForTesting(0); });
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 40, 8000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+
+        panel->clearSelection();
+        for (int row = 0; row < 30; ++row) {
+            panel->item(row)->setSelected(true);
+        }
+        BatchProgress::setStepDelayForTesting(120);   // pomalé úložiště
+        cancelProgressDialogSoon(700);                // uživatel klikne na Zrušit
+        QTest::keyClick(panel, Qt::Key_Delete);
+
+        const QString deleted = QDir(dir.path()).filePath("Delete");
+        const int moved = QDir(deleted).entryList(QDir::Files).size();
+        QVERIFY2(moved > 0 && moved < 30,
+                 qPrintable(QStringLiteral("přesunuto %1 z 30").arg(moved)));
+        QCOMPARE(QDir(dir.path()).entryList({"*.jpg"}, QDir::Files).size(), 40 - moved);
+        QVERIFY(statusMentions(window, QStringLiteral("Přerušeno")));
+        window.close();
+    }
+
+    // Důkaz, že se páry berou ze seznamu v aplikaci, ne z disku (na síťovém
+    // úložišti stál dotaz na disk ~30 síťových volání na soubor): video, které
+    // se na disku objevilo AŽ PO dokončení načtení, seznam nezná, takže se s
+    // obrázkem nepřesune. Je to vědomý kompromis — F5 seznam obnoví.
+    void batch_pairsComeFromTheListNotFromTheDisk()
+    {
+        writeConfigForBatch(/*companions*/ true);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImagePaths(dir.path(), 5);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_0001.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 5, 8000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+
+        // "Nové" video k img_0001 přibude na disk až teď.
+        QFile late(QDir(dir.path()).filePath("img_0001.mp4"));
+        QVERIFY(late.open(QIODevice::WriteOnly));
+        late.close();
+
+        QMetaObject::invokeMethod(panel, "imageSelected", Q_ARG(int, 0));
+        panel->clearSelection();
+        panel->item(0)->setSelected(true);
+        panel->item(1)->setSelected(true);
+        QTest::keyClick(panel, Qt::Key_Delete);
+
+        const QString deleted = QDir(dir.path()).filePath("Delete");
+        QTRY_COMPARE_WITH_TIMEOUT(QDir(deleted).entryList(QDir::Files, QDir::Name),
+                                  (QStringList{"img_0001.jpg", "img_0002.jpg"}), 5000);
+        QVERIFY(QFile::exists(QDir(dir.path()).filePath("img_0001.mp4")));   // pár z disku se nehledal
+        window.close();
     }
 };
 

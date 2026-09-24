@@ -1579,6 +1579,63 @@ private slots:
             QCOMPARE(deriveActionStates(st).save, expected);
         }
     }
+    // ── CompanionIndex: párování z paměti ────────────────────────────────────
+    // Musí dávat přesně to, co findCompanions() nad diskem — jen bez dotazů na úložiště.
+
+    static QStringList listAllFiles(const QString &dir)
+    {
+        QStringList out;
+        const QFileInfoList entries = QDir(dir).entryInfoList(QDir::Files);
+        for (const QFileInfo &e : entries) {
+            out.append(e.absoluteFilePath());
+        }
+        return out;
+    }
+
+    void companionIndex_matchesDiskLookup()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        for (const char *name : {"123.jpg", "123.mp4", "123.png", "999.jpg", "abc.mkv", "abc.jpg",
+                                 "solo.jpg", "doc.jpg", "doc.pdf", "Photo.jpg", "photo.mp4", "note.txt"}) {
+            QVERIFY(writeFileOfSize(dir.filePath(QString::fromLatin1(name)), 1));
+        }
+        const QStringList all = listAllFiles(dir.path());
+        const CompanionIndex index = CompanionIndex::build(all);
+
+        for (const QString &file : all) {
+            QCOMPARE(index.companionsOf(file), CompanionFinder::findCompanions(file));
+        }
+        // a pár konkrétních, ať test nestojí jen na shodě dvou prázdných výsledků
+        QCOMPARE(companionNames(index.companionsOf(dir.filePath("123.jpg"))),
+                 (QStringList{QStringLiteral("123.mp4"), QStringLiteral("123.png")}));
+        QVERIFY(index.companionsOf(dir.filePath("doc.jpg")).isEmpty());   // PDF se nepáruje
+        QVERIFY(index.companionsOf(dir.filePath("doc.pdf")).isEmpty());
+        QVERIFY(index.companionsOf(dir.filePath("solo.jpg")).isEmpty());
+    }
+
+    void companionIndex_doesOnlyKnowWhatItWasGiven()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("x.jpg"), 1));
+        QVERIFY(writeFileOfSize(dir.filePath("x.mp4"), 1));
+        // Index sestavený BEZ x.mp4: nesáhne na disk, takže pár nenajde —
+        // právě proto se používá jen nad kompletním seznamem.
+        const CompanionIndex index = CompanionIndex::build({dir.filePath("x.jpg")});
+        QVERIFY(index.companionsOf(dir.filePath("x.jpg")).isEmpty());
+        QCOMPARE(CompanionFinder::findCompanions(dir.filePath("x.jpg")).size(), 1);
+    }
+
+    void companionIndex_neverPairsAcrossFolders()
+    {
+        QTemporaryDir a, b;
+        QVERIFY(a.isValid() && b.isValid());
+        const QString one = a.filePath("same.jpg");
+        const QString other = b.filePath("same.mp4");
+        const CompanionIndex index = CompanionIndex::build({one, other});
+        QVERIFY(index.companionsOf(one).isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCore)

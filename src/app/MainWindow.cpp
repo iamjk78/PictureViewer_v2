@@ -904,14 +904,38 @@ void MainWindow::stopSlideshowIfRunning()
     m_toggleSlideshowAction->setToolTip(tr("Spustit slideshow (S)"));
 }
 
+QString MainWindow::filesPhrase(int count)
+{
+    // České skloňování: 1 soubor, 2–4 soubory, 5+ souborů.
+    if (count == 1) {
+        return tr("1 soubor");
+    }
+    return count >= 5 ? tr("%1 souborů").arg(count) : tr("%1 soubory").arg(count);
+}
+
+bool MainWindow::confirmBatchWhileLoading(const QString &verb, int count)
+{
+    if (!m_scanRunning) {
+        return true;
+    }
+    QMessageBox box(QMessageBox::Warning, tr("Složka se ještě načítá"),
+                    tr("Složka se ještě načítá — seznam souborů není úplný a na pomalém "
+                       "úložišti bude tato operace výrazně pomalejší.\n\n"
+                       "Opravdu chceš teď %1 %2?").arg(verb, filesPhrase(count)),
+                    QMessageBox::NoButton, this);
+    QPushButton *proceed = box.addButton(tr("Pokračovat"), QMessageBox::AcceptRole);
+    QPushButton *cancel = box.addButton(tr("Zrušit"), QMessageBox::RejectRole);
+    box.setDefaultButton(cancel);
+    box.exec();
+    return box.clickedButton() == proceed;
+}
+
 bool MainWindow::showDeleteConfirmationDialog(int count)
 {
     QString title;
     QString message;
 
-    // České skloňování: 1 soubor, 2–4 soubory, 5+ souborů.
-    const QString files = count >= 5 ? tr("%1 souborů").arg(count)
-                                     : tr("%1 soubory").arg(count);
+    const QString files = filesPhrase(count);
 
     if (m_settingsManager->enableDeleteImage()) {
         title = count > 1 ? tr("Smazat soubory") : tr("Smazat obrázek");

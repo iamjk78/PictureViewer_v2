@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
+#include "app/BatchProgress.hpp"
 #include "app/CategoryManager.hpp"
 #include "app/FileRetry.hpp"
 #include "app/MoveDialogs.hpp"
@@ -29,6 +30,8 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QSet>
+
+#include <optional>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -340,8 +343,19 @@ bool MainWindow::performSingleMove(const QString &filePath, const QString &targe
     return false;
 }
 
+bool MainWindow::companionListIsComplete(const QString &file) const
+{
+    // Bez dotazů na úložiště: jen porovnání textů cest.
+    return !m_scanRunning
+        && m_categoryFilterIds.isEmpty()              // filtr štítků = seznam je jen podmnožina
+        && m_settingsManager->enableImages()
+        && m_settingsManager->enableVideos()          // jinak by v seznamu chyběly páry-videa
+        && !m_currentFolder.isEmpty()
+        && QFileInfo(file).absolutePath() == QDir(m_currentFolder).absolutePath();
+}
+
 QStringList MainWindow::resolveCompanionSet(const QString &activeFile, const QString &verb,
-                                            bool &cancelled)
+                                            bool &cancelled, const CompanionIndex *index)
 {
     cancelled = false;
     QStringList result;
@@ -351,7 +365,16 @@ QStringList MainWindow::resolveCompanionSet(const QString &activeFile, const QSt
         return result;   // funkce vypnutá — jen aktivní soubor
     }
 
-    const QStringList companions = CompanionFinder::findCompanions(activeFile);
+    QStringList companions;
+    if (index != nullptr) {
+        companions = index->companionsOf(activeFile);
+    } else if (companionListIsComplete(activeFile)) {
+        // Nulové dotazy na úložiště — na síťovém disku stojí findCompanions()
+        // desítky síťových dotazů na soubor.
+        companions = CompanionIndex::build(m_imagePaths).companionsOf(activeFile);
+    } else {
+        companions = CompanionFinder::findCompanions(activeFile);
+    }
     if (companions.isEmpty()) {
         return result;                       // 0 párů → jen aktivní
     }
@@ -406,13 +429,26 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     }
 
     const QStringList filesToMove = selectedOrCurrentFiles();
+    if (filesToMove.size() > 1 && !confirmBatchWhileLoading(tr("přesunout"), static_cast<int>(filesToMove.size()))) {
+        return;
+    }
 
     int movedCount = 0;
     const int anchorIndex = m_currentIndex;
     bool removedAny = false;
     // Soubor, který už byl přesunut jako pár, přeskočit, pokud je i ve výběru.
     QSet<QString> handled;
+    // Páry z paměti, sestavené jednou pro celou dávku (viz CompanionIndex).
+    std::optional<CompanionIndex> companionIndex;
+    if (!filesToMove.isEmpty() && companionListIsComplete(filesToMove.first())) {
+        companionIndex = CompanionIndex::build(m_imagePaths);
+    }
+    BatchProgress progress(this, tr("Přesun do složky"), static_cast<int>(filesToMove.size()));
+    int stepNumber = 0;
     for (const QString &activeFile : filesToMove) {
+        if (!progress.step(stepNumber++, QFileInfo(activeFile).fileName())) {
+            break;   // uživatel zrušil — co už je přesunuté, zůstává
+        }
         if (handled.contains(activeFile)) {
             continue;
         }
@@ -422,7 +458,8 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
         }
 
         bool cancelled = false;
-        const QStringList filesInAction = resolveCompanionSet(activeFile, tr("přesunout"), cancelled);
+        const QStringList filesInAction = resolveCompanionSet(activeFile, tr("přesunout"), cancelled,
+                                                                  companionIndex ? &*companionIndex : nullptr);
         if (cancelled) {
             handled.insert(activeFile);   // storno pro tento soubor
             continue;
@@ -474,8 +511,12 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
         showCurrentAfterRemoval(anchorIndex);
     }
     updateMoveUndoButtonState();
-    if (movedCount > 1) {
-        m_statusLabel->setText(tr("Přesunuto %1 souborů do '%2'.").arg(movedCount).arg(button.name));
+    if (movedCount > 1 || progress.canceled()) {
+        QString message = tr("Přesunuto %1 souborů do '%2'.").arg(movedCount).arg(button.name);
+        if (progress.canceled()) {
+            message += tr(" Přerušeno uživatelem.");
+        }
+        m_statusLabel->setText(message);
     }
 }
 

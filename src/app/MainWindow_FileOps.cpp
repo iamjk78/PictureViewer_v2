@@ -4,6 +4,7 @@
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
+#include "app/BatchProgress.hpp"
 #include "app/CategoryManager.hpp"
 #include "app/FileRetry.hpp"
 #include "app/FolderDeleteDialog.hpp"
@@ -48,6 +49,8 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+
+#include <optional>
 #include <QtConcurrent>
 
 #ifdef Q_OS_MACOS
@@ -195,6 +198,7 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     if (m_shuttingDown || generation != m_scanGeneration) {
         return;
     }
+    m_scanRunning = false;
 
     // Sken obnovené poslední složky doběhl v limitu — watchdog už není třeba.
     if (generation == m_restoreScanGeneration) {
@@ -267,6 +271,7 @@ void MainWindow::onScanError(int generation, const QString &error)
             m_restoreWatchdog->stop();
             m_restoreScanGeneration = -1;
         }
+        m_scanRunning = false;
         m_statusLabel->setText(tr("Chyba při skenování: %1").arg(error));
     }
 }
@@ -297,6 +302,7 @@ void MainWindow::loadFolder(const QString &folderPath)
         return;
     }
 
+    m_scanRunning = true;
     m_currentFolder = folderPath;
     ++m_scanGeneration;
     if (m_reloadFolderAction) m_reloadFolderAction->setEnabled(true);
@@ -411,6 +417,7 @@ void MainWindow::onRestoreTimeout()
         }
         m_currentFolder.clear();
         m_requestedFile.clear();
+        m_scanRunning = false;
         if (m_reloadFolderAction) {
             m_reloadFolderAction->setEnabled(false);
         }
@@ -712,6 +719,11 @@ void MainWindow::deleteOrMoveCurrentImage()
         return;
     }
 
+    // Hromadná operace nad ještě nedokončeným načítáním složky: upozornit.
+    if (files.size() > 1 && !confirmBatchWhileLoading(tr("smazat"), static_cast<int>(files.size()))) {
+        return;
+    }
+
     // Na Windows se video drží v paměti — zastavit jej PŘED pokusem o přesunutí/smazání
     // aby se soubor odemčil a dal se manipulovat.
     stopVideoIfPlaying();
@@ -753,13 +765,24 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
     bool permanentDeleteAllowed = false;
     // Soubor už smazaný jako pár předchozího souboru přeskočit, je-li i ve výběru.
     QSet<QString> handled;
+    // Páry z paměti, sestavené jednou pro celou dávku (viz CompanionIndex).
+    std::optional<CompanionIndex> companionIndex;
+    if (companionListIsComplete(activeFiles.first())) {
+        companionIndex = CompanionIndex::build(m_imagePaths);
+    }
+    BatchProgress progress(this, tr("Mazání souborů"), static_cast<int>(activeFiles.size()));
+    int stepNumber = 0;
 
     for (const QString &activeFile : activeFiles) {
+        if (!progress.step(stepNumber++, QFileInfo(activeFile).fileName())) {
+            break;   // uživatel zrušil — co už je hotové, zůstává
+        }
         if (handled.contains(activeFile)) {
             continue;
         }
         bool cancelled = false;
-        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled);
+        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled,
+                                                              companionIndex ? &*companionIndex : nullptr);
         if (cancelled) {
             handled.insert(activeFile);   // storno pro tento soubor
             continue;
@@ -811,9 +834,13 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
         showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
     }
     if (activeFiles.size() > 1) {
-        m_statusLabel->setText(failedCount > 0
+        QString message = failedCount > 0
             ? tr("Smazáno %1 souborů, %2 se nepodařilo smazat.").arg(deletedCount).arg(failedCount)
-            : tr("Smazáno %1 souborů.").arg(deletedCount));
+            : tr("Smazáno %1 souborů.").arg(deletedCount);
+        if (progress.canceled()) {
+            message += tr(" Přerušeno uživatelem.");
+        }
+        m_statusLabel->setText(message);
     }
 }
 
@@ -846,13 +873,24 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
     int failedCount = 0;
     bool removedAny = false;
     QSet<QString> handled;
+    // Páry z paměti, sestavené jednou pro celou dávku (viz CompanionIndex).
+    std::optional<CompanionIndex> companionIndex;
+    if (companionListIsComplete(activeFiles.first())) {
+        companionIndex = CompanionIndex::build(m_imagePaths);
+    }
+    BatchProgress progress(this, tr("Přesun do složky Delete"), static_cast<int>(activeFiles.size()));
+    int stepNumber = 0;
 
     for (const QString &activeFile : activeFiles) {
+        if (!progress.step(stepNumber++, QFileInfo(activeFile).fileName())) {
+            break;   // uživatel zrušil — co už je hotové, zůstává
+        }
         if (handled.contains(activeFile)) {
             continue;
         }
         bool cancelled = false;
-        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled);
+        const QStringList filesToDelete = resolveCompanionSet(activeFile, tr("smazat"), cancelled,
+                                                              companionIndex ? &*companionIndex : nullptr);
         if (cancelled) {
             handled.insert(activeFile);   // storno pro tento soubor
             continue;
@@ -908,9 +946,13 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
         updateRecycleButtonState();
     }
     if (activeFiles.size() > 1) {
-        m_statusLabel->setText(failedCount > 0
+        QString message = failedCount > 0
             ? tr("Přesunuto do Delete %1 souborů, %2 se nepodařilo přesunout.").arg(movedCount).arg(failedCount)
-            : tr("Přesunuto do Delete %1 souborů.").arg(movedCount));
+            : tr("Přesunuto do Delete %1 souborů.").arg(movedCount);
+        if (progress.canceled()) {
+            message += tr(" Přerušeno uživatelem.");
+        }
+        m_statusLabel->setText(message);
     }
 }
 
