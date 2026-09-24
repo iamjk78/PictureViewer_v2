@@ -226,18 +226,11 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
 
     m_thumbnailPanel->loadImages(m_imagePaths);
 
-    // Spustit extrakci video miniatur (asynchronně, na hlavním vlákně přes QMediaPlayer)
+    // Miniatury videí se negenerují pro všechna videa najednou — panel náhledů
+    // si po načtení seznamu sám řekne o ta viditelná (videoThumbnailsWanted).
+    // Tady jen zahodit případnou práci nad předchozím seznamem.
     if (m_videoThumbnailWorker) {
         m_videoThumbnailWorker->cancel();
-        QStringList videoPaths;
-        for (const QString &p : m_imagePaths) {
-            if (isVideoFile(QStringLiteral(".") + QFileInfo(p).suffix())) {
-                videoPaths.append(p);
-            }
-        }
-        if (!videoPaths.isEmpty()) {
-            m_videoThumbnailWorker->enqueue(videoPaths, m_thumbnailPanel->generation());
-        }
     }
 
     int index = 0;

@@ -4,6 +4,7 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
@@ -31,6 +32,20 @@ void ThumbnailWorker::cancel()
     m_cancelled.store(true);
 }
 
+void ThumbnailWorker::setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int throttleMs)
+{
+    m_cacheOnly = true;
+    m_claims = std::move(claims);
+    m_throttleMs = throttleMs;
+}
+
+void ThumbnailWorker::sleepInterruptible(int ms) const
+{
+    for (int slept = 0; slept < ms && !m_cancelled.load(); slept += 25) {
+        QThread::msleep(static_cast<unsigned long>(qMin(25, ms - slept)));
+    }
+}
+
 void ThumbnailWorker::run()
 {
     for (int batchStart = 0; batchStart < m_paths.size(); batchStart += BatchSize) {
@@ -41,12 +56,34 @@ void ThumbnailWorker::run()
 
         const int batchEnd = std::min(batchStart + BatchSize, static_cast<int>(m_paths.size()));
         for (int index = batchStart; index < batchEnd; ++index) {
+            // Pozastavený worker čeká (uživatel právě listuje / posouvá).
+            while (m_paused.load() && !m_cancelled.load()) {
+                QThread::msleep(100);
+            }
             if (m_cancelled.load()) {
                 emit workerFinished(m_generation);
                 return;
             }
 
             const QString &path = m_paths.at(index);
+
+            if (m_cacheOnly) {
+                // Popředí už tuhle miniaturu má (nebo ji právě dělá).
+                if (m_claims && m_claims->contains(path)) {
+                    continue;
+                }
+                bool generated = false;
+                try {
+                    generated = warmOne(path);
+                } catch (...) {
+                    generated = false;
+                }
+                if (generated) {
+                    sleepInterruptible(m_throttleMs);
+                }
+                continue;
+            }
+
             // Jeden vadný soubor (např. std::bad_alloc u obřího rastru) nesmí
             // shodit celé vlákno z fondu — výjimka z QRunnable::run() nemá kdo
             // zachytit a skončila by v std::terminate. Miniatura se přeskočí.
@@ -101,6 +138,24 @@ QImage ThumbnailWorker::loadThumbnail(const QString &path) const
     }
 
     return thumbnail;
+}
+
+bool ThumbnailWorker::warmOne(const QString &path) const
+{
+    if (!m_diskCacheEnabled || m_diskCacheDir.isEmpty()) {
+        return false;   // nemá se kam ukládat — zahřívání by nemělo smysl
+    }
+    const QString cacheFile = cacheFilePath(path);
+    if (QFile::exists(cacheFile)) {
+        return false;
+    }
+    const QImage thumbnail = generateThumbnail(path);
+    if (thumbnail.isNull()) {
+        return false;
+    }
+    QDir().mkpath(QFileInfo(cacheFile).absolutePath());
+    thumbnail.save(cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
+    return true;
 }
 
 QImage ThumbnailWorker::generateThumbnail(const QString &path) const

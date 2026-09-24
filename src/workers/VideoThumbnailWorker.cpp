@@ -24,6 +24,14 @@ VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCa
     m_timeoutTimer->setSingleShot(true);
     m_timeoutTimer->setInterval(15000);
     connect(m_timeoutTimer, &QTimer::timeout, this, &VideoThumbnailWorker::onTimeout);
+
+    m_tailPauseTimer = new QTimer(this);
+    m_tailPauseTimer->setSingleShot(true);
+    m_tailPauseTimer->setInterval(kTailPauseMs);
+    connect(m_tailPauseTimer, &QTimer::timeout, this, [this] {
+        m_tailPauseActive = false;
+        processNextIfIdle();
+    });
 }
 
 VideoThumbnailWorker::~VideoThumbnailWorker() = default;
@@ -40,11 +48,50 @@ void VideoThumbnailWorker::setupPlayer()
             this, &VideoThumbnailWorker::onVideoFrameChanged);
 }
 
-void VideoThumbnailWorker::enqueue(const QStringList &paths, int generation)
+void VideoThumbnailWorker::retarget(const QStringList &paths, int generation, int foregroundCount)
 {
+    if (generation != m_generation) {
+        m_attempted.clear();   // nový seznam souborů — dosavadní paměť neplatí
+        m_tailPauseActive = false;
+        m_tailPauseTimer->stop();
+    }
     m_cancelled = false;   // reset po cancel() – bez toho processNext() hned vrátí
     m_generation = generation;
-    m_queue.append(paths);
+
+    m_foreground.clear();
+    for (int i = 0; i < qMin(foregroundCount, static_cast<int>(paths.size())); ++i) {
+        m_foreground.insert(paths.at(i));
+    }
+
+    // Rozdělané video z ocasu, které nový seznam už nechce (uživatel se začal
+    // něčím zabývat), se zruší — dojíždět ho by zbytečně zatěžovalo síť.
+    if (m_state != State::Idle && m_currentIsTail && !paths.contains(m_currentPath)) {
+        abortCurrent();
+    }
+
+    m_queue.clear();
+    for (const QString &path : paths) {
+        if (path != m_currentPath && !m_attempted.contains(path)) {
+            m_queue.append(path);
+        }
+    }
+    if (m_state == State::Idle) {
+        processNext();
+    }
+}
+
+void VideoThumbnailWorker::abortCurrent()
+{
+    m_timeoutTimer->stop();
+    m_attempted.remove(m_currentPath);   // zkusí se znovu, až bude klid
+    m_currentPath.clear();
+    m_currentIsTail = false;
+    m_state = State::Idle;
+    discardPlayer();
+}
+
+void VideoThumbnailWorker::processNextIfIdle()
+{
     if (m_state == State::Idle) {
         processNext();
     }
@@ -54,7 +101,10 @@ void VideoThumbnailWorker::cancel()
 {
     m_cancelled = true;
     m_timeoutTimer->stop();
+    m_tailPauseTimer->stop();
+    m_tailPauseActive = false;
     m_queue.clear();
+    m_attempted.clear();
     m_currentPath.clear();
     if (m_state != State::Idle) {
         m_state = State::Idle;
@@ -67,7 +117,7 @@ void VideoThumbnailWorker::discardPlayer()
     // Zahodit CELÝ přehrávač a video sink, ne jen stop()/setSource(prázdné url).
     // AVFoundation backend doručuje videoFrameChanged asynchronně přes
     // CVDisplayLink na hlavní vlákno i PO stop()/setSource() — starý frame
-    // tak může dorazit AŽ PO startu dalšího videa (enqueue() zavolané hned
+    // tak může dorazit AŽ PO startu dalšího videa (retarget() zavolané hned
     // po cancel()) a mylně se přiřadit k m_currentPath/m_generation už
     // NOVÉHO videa (stejné m_state hodnoty se cyklicky opakují pro každé
     // video, takže je nelze rozlišit jinak).
@@ -95,6 +145,7 @@ void VideoThumbnailWorker::suspend()
 
     // Rozpracované video vrátit na začátek fronty — po resume() se dogeneruje.
     if (!m_currentPath.isEmpty()) {
+        m_attempted.remove(m_currentPath);   // nedokončené — po resume() se zkusí znovu
         m_queue.prepend(m_currentPath);
         m_currentPath.clear();
     }
@@ -140,6 +191,7 @@ void VideoThumbnailWorker::processNext()
     const QImage cached = loadFromCache(m_queue.first());
     if (!cached.isNull()) {
         const QString path = m_queue.takeFirst();
+        m_attempted.insert(path);
         emit thumbnailReady(m_generation, path, cached);
         QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
                                   Qt::QueuedConnection);
@@ -153,7 +205,17 @@ void VideoThumbnailWorker::processNext()
         return;
     }
 
+    // Po vygenerované miniatuře z ocasu (zahřívání cache) pauza — video se čte
+    // po síti celé a nechceme zahltit spojení jedním za druhým. Videa z
+    // popředí (viditelná) pauzu nemají.
+    if (m_tailPauseActive && !m_foreground.contains(m_queue.first())) {
+        m_state = State::Idle;
+        return;
+    }
+
     m_currentPath = m_queue.takeFirst();
+    m_currentIsTail = !m_foreground.contains(m_currentPath);
+    m_attempted.insert(m_currentPath);
     m_state = State::Loading;
     m_player->setSource(QUrl::fromLocalFile(m_currentPath));
     m_player->play();
@@ -230,6 +292,11 @@ void VideoThumbnailWorker::finishCurrent(const QImage &image)
         emit thumbnailReady(m_generation, m_currentPath, image);
     }
     m_currentPath.clear();
+    if (m_currentIsTail) {
+        m_currentIsTail = false;
+        m_tailPauseActive = true;
+        m_tailPauseTimer->start();
+    }
     QMetaObject::invokeMethod(this, &VideoThumbnailWorker::processNext,
                               Qt::QueuedConnection);
 }

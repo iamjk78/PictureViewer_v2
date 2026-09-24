@@ -81,7 +81,11 @@ void ImageLoader::shutdown()
 
 void ImageLoader::startDecode(const QString &path)
 {
+    const bool wasIdle = m_inFlight.isEmpty();
     m_inFlight.insert(path);
+    if (wasIdle) {
+        emit busyChanged(true);
+    }
 
     auto *watcher = new QFutureWatcher<QImage>(nullptr);
     m_watchers.append(watcher);
@@ -96,6 +100,9 @@ void ImageLoader::startDecode(const QString &path)
         }
 
         m_inFlight.remove(path);
+        if (m_inFlight.isEmpty()) {
+            emit busyChanged(false);
+        }
         const QImage image = watcher->result();
 
         if (!image.isNull()) {

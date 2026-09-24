@@ -50,6 +50,11 @@ public:
 
 signals:
     void imageReady(const QString &path, const QImage &image);
+    // true = právě běží (nebo přibylo) dekódování; false = žádné neběží.
+    // Slouží k tomu, aby práce na pozadí (zahřívání cache miniatur) ustoupila,
+    // dokud se prohlížený obrázek načítá — na pomalém úložišti by jinak
+    // soupeřila o stejné spojení.
+    void busyChanged(bool busy);
 
 private:
     void startDecode(const QString &path);

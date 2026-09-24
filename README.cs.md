@@ -69,6 +69,11 @@ Multiplatformní prohlížeč obrázků a PDF napsaný v C++20 / Qt6. Aktuální
   (toolbary i nastavení) obnoví přesně podle aktivního profilu
 - 5 přepínatelných rozložení UI (Klasický, Filmový pás, Imerzivní, Galerie, Pro)
 - Asynchronní načítání obrázků s RAM cache + disková cache náhledů (auto-úklid)
+- **Miniatury na požádání** — generují se jen viditelné (a půl obrazovky kolem),
+  takže otevření složky s tisíci soubory na pomalém nebo síťovém úložišti
+  nečte všechno najednou. Po chvíli klidu se zbytek pomalu uloží do cache na
+  pozadí (miniatury videí až po dlouhém klidu) a ustupuje tomu, co právě
+  prohlížíš
 - **Inline přehrávač videa** (Qt Multimedia) — MP4, MKV, MOV, WebM a další přímo v okně aplikace;
   přehrávání v nekonečné smyčce; zoom (+/-), posun myší, fullscreen, posun šipkami,
   hlasitost, buffer overlay; metadata (velikost, rozlišení, délka, datový tok) i

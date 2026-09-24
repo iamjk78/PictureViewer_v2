@@ -16,7 +16,10 @@
 #include <QStyledItemDelegate>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QScrollBar>
+#include <QShowEvent>
 #include <QThreadPool>
+#include <QTimer>
 #include <algorithm>
 
 namespace {
@@ -72,7 +75,6 @@ namespace pictureviewer {
 
 ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     : QListWidget(parent)
-    , m_currentWorker(nullptr)
     , m_generation(0)
 {
     setIconSize(QSize(kThumbnailSize, kThumbnailSize));
@@ -88,6 +90,36 @@ ThumbnailPanel::ThumbnailPanel(QWidget *parent)
     );
     setDisplayMode(DisplayMode::Vertical);
     connect(this, &QListWidget::itemClicked, this, &ThumbnailPanel::onItemClicked);
+
+    m_thumbPool.setMaxThreadCount(kThumbnailThreads);
+    m_claims = QSharedPointer<ThumbnailClaims>::create();
+
+    // Zahřívání cache: jedno vlákno, nízká priorita, ať nebere výkon ani
+    // pásmo tomu, co uživatel právě dělá.
+    m_warmPool.setMaxThreadCount(1);
+    m_warmPool.setThreadPriority(QThread::LowPriority);
+    m_idleTimer = new QTimer(this);
+    m_idleTimer->setSingleShot(true);
+    connect(m_idleTimer, &QTimer::timeout, this, [this] {
+        m_idleReady = true;
+        maybeStartWarmup();
+    });
+    m_videoIdleTimer = new QTimer(this);
+    m_videoIdleTimer->setSingleShot(true);
+    connect(m_videoIdleTimer, &QTimer::timeout, this, [this] {
+        m_videoIdleReady = true;
+        maybeStartVideoWarmup();
+    });
+
+    // Přepočet potřebných miniatur se pouští s krátkým zpožděním a nejvýše
+    // jednou za interval (viz scheduleThumbnailUpdate()) — při plynulém
+    // posouvání tak vzniká práce průběžně, ale ne při každém pixelu.
+    m_updateTimer = new QTimer(this);
+    m_updateTimer->setSingleShot(true);
+    m_updateTimer->setInterval(100);
+    connect(m_updateTimer, &QTimer::timeout, this, &ThumbnailPanel::updateWantedThumbnails);
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this] { scheduleThumbnailUpdate(); });
+    connect(horizontalScrollBar(), &QScrollBar::valueChanged, this, [this] { scheduleThumbnailUpdate(); });
 }
 
 void ThumbnailPanel::setDiskCache(bool enabled, const QString &cacheDir)
@@ -146,16 +178,31 @@ ThumbnailPanel::~ThumbnailPanel()
 void ThumbnailPanel::shutdown()
 {
     m_shuttingDown = true;
+    m_updateTimer->stop();
+    m_idleTimer->stop();
+    m_videoIdleTimer->stop();
+    m_pendingThumbs.clear();
+    cancelActiveWorkers();
+}
 
-    if (m_currentWorker == nullptr) {
-        return;
+void ThumbnailPanel::cancelActiveWorkers()
+{
+    for (ThumbnailWorker *worker : std::as_const(m_activeWorkers)) {
+        worker->cancel();
+        // Odpojit každý signál workeru do tohoto widgetu, ať se po návratu
+        // nemůže dovolat zpět (worker ještě chvíli běží ve vlákně z fondu,
+        // dokud majitel nezavolá waitForDone()). Připojení deleteLater()
+        // worker→worker zůstává.
+        disconnect(worker, nullptr, this, nullptr);
     }
-    m_currentWorker->cancel();
-    // Sever every signal from the worker to this widget so it cannot call
-    // back into us after we return (the worker may still be running in the
-    // thread pool until waitForDone() is called by the owner).
-    disconnect(m_currentWorker, nullptr, this, nullptr);
-    m_currentWorker = nullptr;
+    m_activeWorkers.clear();
+
+    if (m_warmWorker != nullptr) {
+        m_warmWorker->cancel();
+        disconnect(m_warmWorker, nullptr, this, nullptr);
+        m_warmWorker = nullptr;
+    }
+    m_videoWarmupActive = false;
 }
 
 void ThumbnailPanel::loadImages(const QStringList &paths)
@@ -164,17 +211,21 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         return;
     }
 
-    if (m_currentWorker != nullptr) {
-        m_currentWorker->cancel();
-        disconnect(m_currentWorker, nullptr, this, nullptr);
-        m_currentWorker = nullptr;
-    }
+    cancelActiveWorkers();
+    m_pendingThumbs.clear();
+    m_claims = QSharedPointer<ThumbnailClaims>::create();   // nový seznam = nová evidence
+    m_lastWantedVideos.clear();
+    m_visibleVideos.clear();
+    m_warmVideoTail.clear();
+    m_warmPrepared = false;
+    m_idleReady = false;
+    m_videoIdleReady = false;
+    m_videoTailPrepared = false;
 
     ++m_generation;
     clear();
     m_pathToIndex.clear();
 
-    QStringList imagePaths;
     for (const QString &path : paths) {
         auto *item = new QListWidgetItem();
         item->setToolTip(path.section('/', -1));
@@ -186,15 +237,283 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
         if (isVideoFile(suffix)) {
             // Video placeholder: standardní ikona přehrávání
             item->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-        } else {
-            imagePaths.append(path);
         }
 
         addItem(item);
         m_pathToIndex[path] = QPersistentModelIndex(indexFromItem(item));
     }
 
-    startThumbnailLoader(imagePaths);
+    // Miniatury nejsou potřeba hned pro všechny — jen pro viditelné (viz
+    // updateWantedThumbnails()). Rozložení se ustálí až v event loopě, proto
+    // odloženě.
+    scheduleThumbnailUpdate();
+}
+
+void ThumbnailPanel::scheduleThumbnailUpdate()
+{
+    if (m_shuttingDown || m_updateTimer == nullptr) {
+        return;
+    }
+    noteActivity();
+    // Nerestartovat běžící timer: při souvislém posouvání se přepočet pustí
+    // pravidelně každých ~100 ms, a poslední událost tak vždy dostane svůj
+    // vlastní přepočet.
+    if (!m_updateTimer->isActive()) {
+        m_updateTimer->start();
+    }
+}
+
+void ThumbnailPanel::updateWantedThumbnails()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+
+    struct Candidate {
+        int row;
+        bool visible;
+    };
+    QList<Candidate> images;
+    QList<Candidate> videos;
+
+    // Skrytý panel (dock zavřený, Galerie zrovna ukazuje obrázek…) nic
+    // nepotřebuje — miniatury se dogenerují, až se zase zobrazí (showEvent).
+    if (viewport()->isVisible() && count() > 0) {
+        const QRect vp = viewport()->rect();
+        // Okolí jen ve směru posouvání: ve sloupci/mřížce nahoru a dolů, ve
+        // filmovém pásu doleva a doprava. Půl obrazovky stačí, aby při
+        // pomalém posunu bylo co ukázat, a zbytečně se nečte víc.
+        const bool horizontalStrip = displayMode() == DisplayMode::Horizontal;
+        const QRect area = horizontalStrip
+            ? vp.adjusted(-vp.width() / 2, 0, vp.width() / 2, 0)
+            : vp.adjusted(0, -vp.height() / 2, 0, vp.height() / 2);
+
+        for (int row = 0; row < count(); ++row) {
+            QListWidgetItem *it = item(row);
+            const QRect r = visualItemRect(it);
+            if (!r.intersects(area)) {
+                continue;
+            }
+            const QString path = it->data(Qt::UserRole).toString();
+            const bool isVideo = isVideoFile(QStringLiteral(".") + QFileInfo(path).suffix());
+            (isVideo ? videos : images).append({row, r.intersects(vp)});
+        }
+    }
+
+    // Střed viditelné oblasti — od něj se řadí priorita (nejdřív to, na co se
+    // uživatel právě dívá).
+    int minVisible = -1;
+    int maxVisible = -1;
+    for (const QList<Candidate> *list : {&images, &videos}) {
+        for (const Candidate &c : *list) {
+            if (c.visible) {
+                minVisible = minVisible < 0 ? c.row : qMin(minVisible, c.row);
+                maxVisible = qMax(maxVisible, c.row);
+            }
+        }
+    }
+    const int centerRow = minVisible >= 0 ? (minVisible + maxVisible) / 2 : currentRow();
+    m_centerRow = qMax(0, centerRow);
+
+    auto byPriority = [centerRow](const Candidate &a, const Candidate &b) {
+        if (a.visible != b.visible) {
+            return a.visible;   // viditelné před okolím
+        }
+        return qAbs(a.row - centerRow) < qAbs(b.row - centerRow);
+    };
+    std::sort(images.begin(), images.end(), byPriority);
+    std::sort(videos.begin(), videos.end(), byPriority);
+
+    m_pendingThumbs.clear();
+    int wantedImages = 0;
+    for (const Candidate &c : images) {
+        ++wantedImages;
+        const QString path = item(c.row)->data(Qt::UserRole).toString();
+        if (!m_claims->contains(path)) {
+            m_pendingThumbs.append(path);
+        }
+    }
+
+    QStringList wantedVideos;
+    for (const Candidate &c : videos) {
+        wantedVideos.append(item(c.row)->data(Qt::UserRole).toString());
+    }
+    m_visibleVideos = wantedVideos;
+    emitWantedVideos();
+
+    dispatchThumbnails();
+}
+
+void ThumbnailPanel::dispatchThumbnails()
+{
+    while (!m_shuttingDown && m_activeWorkers.size() < kThumbnailThreads
+           && !m_pendingThumbs.isEmpty()) {
+        const QString path = m_pendingThumbs.takeFirst();
+        if (itemForPath(path) == nullptr || !m_claims->claim(path)) {
+            continue;   // mezitím smazáno, nebo už zpracováno
+        }
+
+        // Parent musí být nullptr — objekt spravuje fond vláken (smaže se
+        // přes deleteLater po workerFinished). Qt parent by vytvořil druhou
+        // cestu mazání a způsobil double-free.
+        auto *worker = new ThumbnailWorker(QStringList{path}, m_generation,
+                                           m_diskCacheEnabled, m_diskCacheDir, nullptr);
+        connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
+        connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
+        connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
+            m_activeWorkers.remove(worker);
+            if (generation != m_generation) {
+                return;
+            }
+            dispatchThumbnails();
+            maybeStartWarmup();   // popředí dojelo — případně navázat zahříváním
+        });
+        m_activeWorkers.insert(worker);
+        m_thumbPool.start(worker);
+    }
+}
+
+void ThumbnailPanel::setWarmupTimingForTesting(int idleMs, int throttleMs, int videoIdleMs)
+{
+    m_warmupIdleMs = idleMs;
+    m_warmupThrottleMs = throttleMs;
+    m_videoWarmupIdleMs = videoIdleMs >= 0 ? videoIdleMs : idleMs;
+}
+
+void ThumbnailPanel::setViewerBusy(bool busy)
+{
+    m_viewerBusy = busy;
+    // Ať busy začíná, nebo končí, doba klidu se odměřuje znovu od teď.
+    noteActivity();
+}
+
+void ThumbnailPanel::noteActivity()
+{
+    // Cokoli, co uživatel dělá, má přednost před zahříváním: pozastavit worker
+    // na pozadí a videa vrátit jen na viditelná (rozdělané video z ocasu se
+    // zruší). Klid se odměřuje znovu.
+    if (m_idleTimer == nullptr || m_videoIdleTimer == nullptr) {
+        return;
+    }
+    m_idleReady = false;
+    m_videoIdleReady = false;
+    if (m_warmWorker != nullptr) {
+        m_warmWorker->setPaused(true);
+    }
+    if (m_videoWarmupActive) {
+        m_videoWarmupActive = false;
+        emitWantedVideos();
+    }
+    m_idleTimer->start(m_warmupIdleMs);
+    m_videoIdleTimer->start(m_videoWarmupIdleMs);
+}
+
+void ThumbnailPanel::maybeStartWarmup()
+{
+    if (m_shuttingDown || !m_idleReady || m_viewerBusy || count() == 0) {
+        return;
+    }
+    // Popředí (viditelné miniatury) má přednost — zahřívání navazuje, až dojede.
+    if (!m_activeWorkers.isEmpty() || !m_pendingThumbs.isEmpty()) {
+        return;
+    }
+
+    if (m_warmPrepared) {
+        // Už sestaveno dřív a přerušeno aktivitou uživatele — jen navázat.
+        if (m_warmWorker != nullptr) {
+            m_warmWorker->setPaused(false);
+        }
+        return;
+    }
+    m_warmPrepared = true;
+
+    // Bez použitelné diskové cache by zahřívání nemělo smysl (nic by se
+    // neuložilo) a jen zbytečně četlo ze sítě.
+    if (!m_diskCacheEnabled || m_diskCacheDir.isEmpty()) {
+        return;
+    }
+
+    // Od středu (kde uživatel je) směrem k okrajům. Viditelné obrázky už má
+    // popředí (claims).
+    QList<QPair<int, QString>> images;
+    for (int row = 0; row < count(); ++row) {
+        const QString path = item(row)->data(Qt::UserRole).toString();
+        if (!isVideoFile(QStringLiteral(".") + QFileInfo(path).suffix()) && !m_claims->contains(path)) {
+            images.append({qAbs(row - m_centerRow), path});
+        }
+    }
+    std::sort(images.begin(), images.end(),
+              [](const QPair<int, QString> &a, const QPair<int, QString> &b) { return a.first < b.first; });
+    QStringList remaining;
+    for (const auto &entry : std::as_const(images)) {
+        remaining.append(entry.second);
+    }
+    if (remaining.isEmpty()) {
+        maybeStartVideoWarmup();   // není co zahřívat u obrázků — případně rovnou videa
+        return;
+    }
+
+    auto *worker = new ThumbnailWorker(remaining, m_generation, m_diskCacheEnabled, m_diskCacheDir, nullptr);
+    worker->setCacheOnly(m_claims, m_warmupThrottleMs);
+    connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
+    connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
+        if (worker == m_warmWorker && generation == m_generation) {
+            m_warmWorker = nullptr;
+            maybeStartVideoWarmup();   // obrázky hotové — na řadě videa (pokud je klid)
+        }
+    });
+    m_warmWorker = worker;
+    m_warmPool.start(worker);
+}
+
+void ThumbnailPanel::maybeStartVideoWarmup()
+{
+    // Videa jsou zdaleka nejtěžší (desítky MB po síti na jednu miniaturu), proto
+    // jen v PLNÉM klidu a až po obrázcích: klid ≥ kVideoWarmupIdleMs, nic
+    // se nenačítá, popředí nemá práci a zahřívání obrázků skončilo.
+    if (m_shuttingDown || !m_videoIdleReady || m_viewerBusy || count() == 0
+        || m_videoWarmupActive) {
+        return;
+    }
+    if (!m_activeWorkers.isEmpty() || !m_pendingThumbs.isEmpty() || m_warmWorker != nullptr) {
+        return;
+    }
+    if (!m_diskCacheEnabled || m_diskCacheDir.isEmpty()) {
+        return;   // bez cache by generování videí nemělo smysl
+    }
+
+    if (!m_videoTailPrepared) {
+        m_videoTailPrepared = true;
+        QList<QPair<int, QString>> videos;
+        for (int row = 0; row < count(); ++row) {
+            const QString path = item(row)->data(Qt::UserRole).toString();
+            if (isVideoFile(QStringLiteral(".") + QFileInfo(path).suffix())
+                && !m_visibleVideos.contains(path)) {
+                videos.append({qAbs(row - m_centerRow), path});
+            }
+        }
+        std::sort(videos.begin(), videos.end(),
+                  [](const QPair<int, QString> &a, const QPair<int, QString> &b) { return a.first < b.first; });
+        m_warmVideoTail.clear();
+        for (const auto &entry : std::as_const(videos)) {
+            m_warmVideoTail.append(entry.second);
+        }
+    }
+    m_videoWarmupActive = true;
+    emitWantedVideos();
+}
+
+void ThumbnailPanel::emitWantedVideos()
+{
+    QStringList wanted = m_visibleVideos;
+    const int foreground = static_cast<int>(wanted.size());
+    if (m_videoWarmupActive) {
+        wanted += m_warmVideoTail;   // nízká priorita: až za viditelnými
+    }
+    if (wanted != m_lastWantedVideos) {
+        m_lastWantedVideos = wanted;
+        emit videoThumbnailsWanted(m_generation, wanted, foreground);
+    }
 }
 
 QListWidgetItem *ThumbnailPanel::itemForPath(const QString &path) const
@@ -209,6 +528,7 @@ QListWidgetItem *ThumbnailPanel::itemForPath(const QString &path) const
 void ThumbnailPanel::setCurrentIndex(int index)
 {
     if (index >= 0 && index < count()) {
+        scheduleThumbnailUpdate();   // uživatel listuje — zahřívání ustoupí
         setCurrentRow(index);
         scrollToItem(item(index));
     }
@@ -227,6 +547,7 @@ void ThumbnailPanel::removeImage(int index)
     if (index >= 0 && index < count()) {
         const QString path = item(index)->data(Qt::UserRole).toString();
         m_pathToIndex.remove(path);
+        m_claims->release(path);
         delete takeItem(index);
     }
 }
@@ -237,6 +558,8 @@ void ThumbnailPanel::updateImagePath(const QString &oldPath, const QString &newP
         target->setData(Qt::UserRole, newPath);
         target->setToolTip(newPath.section('/', -1));
         m_pathToIndex[newPath] = m_pathToIndex.take(oldPath);
+        // Miniatura (nebo pokus o ni) patří k souboru, ne k jeho starému názvu.
+        m_claims->rename(oldPath, newPath);
     }
 }
 
@@ -289,15 +612,6 @@ void ThumbnailPanel::onThumbnailReady(int generation, const QString &path, const
     }
 }
 
-void ThumbnailPanel::onThumbnailsFinished(int generation)
-{
-    if (generation != m_generation || m_currentWorker == nullptr) {
-        return;
-    }
-
-    m_currentWorker = nullptr;
-}
-
 void ThumbnailPanel::setVideoThumbnail(int generation, const QString &path, const QImage &image)
 {
     if (generation != m_generation || image.isNull()) {
@@ -306,29 +620,6 @@ void ThumbnailPanel::setVideoThumbnail(int generation, const QString &path, cons
     if (QListWidgetItem *target = itemForPath(path)) {
         target->setIcon(QIcon(QPixmap::fromImage(image)));
     }
-}
-
-void ThumbnailPanel::startThumbnailLoader(const QStringList &paths)
-{
-    if (m_shuttingDown) {
-        return;
-    }
-
-    // Parent must be nullptr — this object is managed by the thread pool
-    // (deleted via deleteLater on workerFinished). A Qt parent would create a
-    // second deletion path and cause a double-free crash.
-    auto *worker = new ThumbnailWorker(paths, m_generation,
-                                       m_diskCacheEnabled, m_diskCacheDir, nullptr);
-    connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
-    connect(worker, &ThumbnailWorker::workerFinished, this, &ThumbnailPanel::onThumbnailsFinished);
-    connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-    connect(worker, &ThumbnailWorker::workerError, this, [this](int generation, const QString &error) {
-        if (generation == m_generation && count() > 0) {
-            item(0)->setToolTip(error);
-        }
-    });
-    m_currentWorker = worker;
-    QThreadPool::globalInstance()->start(worker);
 }
 
 void ThumbnailPanel::applyThumbSize(int size)
@@ -349,6 +640,13 @@ void ThumbnailPanel::resizeEvent(QResizeEvent *event)
             applyThumbSize(newSize);
         }
     }
+    scheduleThumbnailUpdate();   // jiná velikost = jiná sada viditelných položek
+}
+
+void ThumbnailPanel::showEvent(QShowEvent *event)
+{
+    QListWidget::showEvent(event);
+    scheduleThumbnailUpdate();   // panel byl skrytý — dogenerovat, co je teď vidět
 }
 
 QSize ThumbnailPanel::sizeHint() const

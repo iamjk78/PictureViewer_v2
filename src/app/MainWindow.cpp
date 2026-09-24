@@ -257,9 +257,20 @@ MainWindow::MainWindow(QWidget *parent)
         this);
     connect(m_videoThumbnailWorker, &VideoThumbnailWorker::thumbnailReady,
             m_thumbnailPanel, &ThumbnailPanel::setVideoThumbnail);
+    // Miniatury videí se generují jen pro to, co panel právě potřebuje
+    // (viditelná videa a okolí). Přes this->m_videoThumbnailWorker, ne přes
+    // zachycený ukazatel — worker se při přepnutí profilu vyrábí znovu.
+    connect(m_thumbnailPanel, &ThumbnailPanel::videoThumbnailsWanted,
+            this, [this](int generation, const QStringList &paths, int foregroundCount) {
+                if (m_videoThumbnailWorker != nullptr) {
+                    m_videoThumbnailWorker->retarget(paths, generation, foregroundCount);
+                }
+            });
 
     m_imageLoader = new ImageLoader(this);
     connect(m_imageLoader, &ImageLoader::imageReady, this, &MainWindow::onImageDecoded);
+    // Dokud se načítá prohlížený obrázek, zahřívání cache miniatur stojí.
+    connect(m_imageLoader, &ImageLoader::busyChanged, m_thumbnailPanel, &ThumbnailPanel::setViewerBusy);
     connect(m_imageView, &ImageView::contextMenuRequested, this, &MainWindow::showImageContextMenu);
 
     m_thumbnailPanel->setDiskCache(m_settingsManager->thumbnailCacheEnabled(),
