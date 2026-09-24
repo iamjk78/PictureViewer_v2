@@ -44,6 +44,7 @@
 #include "ExifTestData.hpp"
 #include "app/BatchProgress.hpp"
 #include "app/ImageLoader.hpp"
+#include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "core/FileStampIndex.hpp"
@@ -983,6 +984,48 @@ private slots:
 
         panel.noteVideoHandled(panel.generation(), paths.at(6));
         QTRY_VERIFY_WITH_TIMEOUT(!last.visible, 3000);   // všechno hotovo → schová se
+    }
+
+    // Přizpůsobení obrázku oknu se nesmí zacyklit: změna zobrazení posuvníků mění
+    // viewport → resizeEvent → nové přizpůsobení → posuvníky… Při určité
+    // kombinaci velikosti okna a obrázku to dřív držel UI vlákno na 100 % CPU.
+    void imageView_fitDoesNotLoopForAnyWindowSize()
+    {
+        QStringList bad;
+        // Kombinace, která smyčku spustila při vývoji (4080×2296 v okně 1443×807).
+        {
+            QImage img(4080, 2296, QImage::Format_RGB32);
+            img.fill(Qt::gray);
+            pictureviewer::ImageView view;
+            view.resize(1443, 807);
+            view.show();
+            QSignalSpy zoom(&view, &pictureviewer::ImageView::zoomChanged);
+            view.setImage(img);
+            QTest::qWait(300);
+            QVERIFY2(zoom.count() < 20, qPrintable(QStringLiteral("%1 změn").arg(zoom.count())));
+        }
+        const QList<QSize> images = {{2256, 4000}, {4000, 2256}, {4080, 2296}, {1404, 1384}, {2944, 2208}, {900, 900}};
+        for (const QSize &imageSize : images) {
+            QImage img(imageSize, QImage::Format_RGB32);
+            img.fill(Qt::gray);
+            for (int width = 500; width <= 1500; width += 101) {
+                for (int height = 400; height <= 1000; height += 67) {
+                    pictureviewer::ImageView view;
+                    view.resize(width, height);
+                    view.show();
+                    QSignalSpy zoom(&view, &pictureviewer::ImageView::zoomChanged);
+                    view.setImage(img);
+                    QTest::qWait(15);
+                    const int afterSettle = zoom.count();
+                    QTest::qWait(30);
+                    if (zoom.count() - afterSettle > 3 || afterSettle > 40) {
+                        bad << QStringLiteral("%1x%2 v okně %3x%4: %5 změn").arg(imageSize.width()).arg(imageSize.height())
+                                   .arg(width).arg(height).arg(zoom.count());
+                    }
+                }
+            }
+        }
+        QVERIFY2(bad.isEmpty(), qPrintable(bad.mid(0, 10).join("; ")));
     }
 
     void imageLoader_prefetchWaitsWhilePaused()

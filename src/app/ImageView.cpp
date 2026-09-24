@@ -218,7 +218,11 @@ void ImageView::applyInitialFit()
     }
 
     const QRectF pixmapRect = m_pixmapItem->boundingRect();
-    const QSize viewportSize = viewport()->size();
+    // Velikost BEZ posuvníků: viewport()->size() závisí na tom, jestli se právě
+    // posuvníky zobrazují, a ty zase závisí na zvoleném měřítku — na hraně (obrázek
+    // se do okna "jen tak" nevejde) to vedlo k nekonečné smyčce resize ↔ posuvníky
+    // ↔ přizpůsobení a UI vlákno se zaseklo na 100 % CPU.
+    const QSize viewportSize = maximumViewportSize();
     if (pixmapRect.isEmpty() || viewportSize.isEmpty()) {
         fitToWindow();
         return;
