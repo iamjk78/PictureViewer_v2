@@ -2,6 +2,7 @@
 // přes vlastní tlačítka v toolbaru (viz CLAUDE.md / plán funkce "Přesun").
 // QPushButton must be included BEFORE MainWindow.hpp to satisfy the
 // elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
+#include "core/DiagLog.hpp"
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
@@ -511,6 +512,9 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
         showCurrentAfterRemoval(anchorIndex);
     }
     updateMoveUndoButtonState();
+    diag::log(QStringLiteral("přesun do '%1': hotovo — přesunuto %2%3")
+                  .arg(button.name).arg(movedCount)
+                  .arg(progress.canceled() ? QStringLiteral(", přerušeno uživatelem") : QString()));
     if (movedCount > 1 || progress.canceled()) {
         QString message = tr("Přesunuto %1 souborů do '%2'.").arg(movedCount).arg(button.name);
         if (progress.canceled()) {
@@ -535,6 +539,7 @@ void MainWindow::undoLastGroup(QList<MoveGroup> &history, const QString &notFoun
     }
 
     const MoveGroup group = history.last();
+    diag::log(QStringLiteral("undoLastGroup: %1 souborů").arg(group.size()));
 
     // Nejdřív ověřit, že žádné z původních umístění není obsazené — jinak by
     // skupina zůstala rozpůlená. Chybějící cíle (smazané externě) přeskočíme.

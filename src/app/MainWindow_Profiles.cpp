@@ -10,6 +10,7 @@
 #include "app/ImageView.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
+#include "core/DiagLog.hpp"
 #include "app/VideoPlayer.hpp"
 #include "workers/FolderScanWorker.hpp"
 #include "workers/VideoThumbnailWorker.hpp"
@@ -107,6 +108,7 @@ void MainWindow::switchProfile(const QString &profileName)
     if (profileName == m_profileManager->activeProfile()) {
         return;
     }
+    diag::log(QStringLiteral("switchProfile: %1 → %2").arg(m_profileManager->activeProfile(), profileName));
 
     // Uložit stav okna aktuálního profilu.
     m_settingsManager->setWindowGeometry(saveGeometry());

@@ -52,6 +52,8 @@ void VideoThumbnailWorker::setupPlayer()
 
 void VideoThumbnailWorker::retarget(const QStringList &paths, int generation, int foregroundCount)
 {
+    diag::log(QStringLiteral("video miniatury: retarget — %1 cest, popředí %2, generace %3→%4")
+                  .arg(paths.size()).arg(foregroundCount).arg(m_generation).arg(generation));
     if (generation != m_generation) {
         m_attempted.clear();   // nový seznam souborů — dosavadní paměť neplatí
         m_tailPauseActive = false;
@@ -101,6 +103,8 @@ void VideoThumbnailWorker::processNextIfIdle()
 
 void VideoThumbnailWorker::cancel()
 {
+    diag::log(QStringLiteral("video miniatury: cancel (fronta %1, rozpracováno: %2)")
+                  .arg(m_queue.size()).arg(m_currentPath.isEmpty() ? QStringLiteral("ne") : QFileInfo(m_currentPath).fileName()));
     m_cancelled = true;
     m_timeoutTimer->stop();
     m_tailPauseTimer->stop();
@@ -139,6 +143,9 @@ void VideoThumbnailWorker::suspend()
     if (m_suspended) {
         return;
     }
+    diag::log(QStringLiteral("video miniatury: suspend (stav %1, rozpracováno: %2)")
+                  .arg(static_cast<int>(m_state))
+                  .arg(m_currentPath.isEmpty() ? QStringLiteral("ne") : QFileInfo(m_currentPath).fileName()));
     m_suspended = true;
 
     if (m_state == State::Idle) {
@@ -169,6 +176,7 @@ void VideoThumbnailWorker::resume()
     if (!m_suspended) {
         return;
     }
+    diag::log(QStringLiteral("video miniatury: resume (fronta %1)").arg(m_queue.size()));
     m_suspended = false;
 
     if (!m_cancelled && m_state == State::Idle && !m_queue.isEmpty()) {

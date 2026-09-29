@@ -92,6 +92,7 @@ void ThumbnailWorker::run()
                 try {
                     generated = warmOne(path);
                 } catch (...) {
+                    diag::log(QStringLiteral("zahřátí cache: VÝJIMKA při generování %1").arg(QFileInfo(path).fileName()));
                     generated = false;
                 }
                 ++warmProcessed;
@@ -115,6 +116,7 @@ void ThumbnailWorker::run()
             try {
                 thumbnail = loadThumbnail(path);
             } catch (...) {
+                diag::log(QStringLiteral("miniatura: VÝJIMKA při generování %1").arg(QFileInfo(path).fileName()));
                 thumbnail = QImage();
             }
             emit thumbnailReady(m_generation, path, thumbnail);

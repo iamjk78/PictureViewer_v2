@@ -515,6 +515,7 @@ void MainWindow::loadFolder(const QString &folderPath)
 
 void MainWindow::restoreLastFolder()
 {
+    diag::log(QStringLiteral("restoreLastFolder: start"));
     // Nový pokus zneplatní případný předchozí (přepnutí profilu za běhu).
     const int token = ++m_restoreToken;
     m_restoreProbePending = false;
@@ -522,11 +523,13 @@ void MainWindow::restoreLastFolder()
     m_restoreWatchdog->stop();
 
     if (!m_settingsManager->rememberLastFolder()) {
+        diag::log(QStringLiteral("restoreLastFolder: vypnuto v nastavení"));
         return;
     }
 
     const QString lastFolder = m_settingsManager->lastFolder();
     if (lastFolder.isEmpty()) {
+        diag::log(QStringLiteral("restoreLastFolder: žádná uložená složka"));
         return;
     }
 
@@ -579,6 +582,8 @@ void MainWindow::startRestoreLoad(const QString &folder)
 
 void MainWindow::onRestoreTimeout()
 {
+    diag::log(QStringLiteral("restoreLastFolder: VYPRŠEL časový limit (sonda čeká: %1)")
+                  .arg(m_restoreProbePending ? QStringLiteral("ano") : QStringLiteral("ne")));
     if (m_shuttingDown) {
         return;
     }
@@ -884,7 +889,9 @@ void MainWindow::updateStatus(const QString &path)
     watcher->setFuture(QtConcurrent::run([path]() -> std::optional<ImageInfo> {
         try {
             return ImageMetadataReader().read(path);
-        } catch (...) {
+        } catch (const std::exception &e) {
+            diag::log(QStringLiteral("metadata: nepodařilo se přečíst %1: %2")
+                          .arg(QFileInfo(path).fileName(), QString::fromUtf8(e.what())));
             return std::nullopt;
         }
     }));
@@ -1054,6 +1061,9 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
     if (removedAny) {
         showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
     }
+    diag::log(QStringLiteral("mazání do koše: hotovo — smazáno %1, selhalo %2%3")
+                  .arg(deletedCount).arg(failedCount)
+                  .arg(progress.canceled() ? QStringLiteral(", přerušeno uživatelem") : QString()));
     if (activeFiles.size() > 1) {
         QString message = failedCount > 0
             ? tr("Smazáno %1 souborů, %2 se nepodařilo smazat.").arg(deletedCount).arg(failedCount)
@@ -1167,6 +1177,9 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
         appendToHistory(m_deleteHistory, group);
         updateRecycleButtonState();
     }
+    diag::log(QStringLiteral("přesun do Delete: hotovo — přesunuto %1, selhalo %2%3")
+                  .arg(movedCount).arg(failedCount)
+                  .arg(progress.canceled() ? QStringLiteral(", přerušeno uživatelem") : QString()));
     if (activeFiles.size() > 1) {
         QString message = failedCount > 0
             ? tr("Přesunuto do Delete %1 souborů, %2 se nepodařilo přesunout.").arg(movedCount).arg(failedCount)

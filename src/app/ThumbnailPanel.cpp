@@ -191,12 +191,18 @@ void ThumbnailPanel::shutdown()
 
 void ThumbnailPanel::cancelActiveWorkers()
 {
+    if (!m_activeWorkers.isEmpty() || m_warmWorker != nullptr) {
+        diag::log(QStringLiteral("ThumbnailPanel: ruším workery — popředí %1, zahřívání %2")
+                      .arg(m_activeWorkers.size())
+                      .arg(m_warmWorker != nullptr ? QStringLiteral("běží") : QStringLiteral("neběží")));
+    }
     for (ThumbnailWorker *worker : std::as_const(m_activeWorkers)) {
         worker->cancel();
-        // Odpojit každý signál workeru do tohoto widgetu, ať se po návratu
-        // nemůže dovolat zpět (worker ještě chvíli běží ve vlákně z fondu,
-        // dokud majitel nezavolá waitForDone()). Připojení deleteLater()
-        // worker→worker zůstává.
+        // Odpojit signál workeru do tohoto widgetu — worker ještě chvíli běží
+        // ve vlákně z fondu (dokud majitel nezavolá waitForDone()). POZOR:
+        // disconnect() nestáhne zprávu, kterou worker MEZITÍM už stihl poslat
+        // (zařazenou frontou událostí) — ta se doručí i tak. Zpětná volání
+        // proto MUSÍ počítat s tím, že mohou přijít i po zrušení.
         disconnect(worker, nullptr, this, nullptr);
     }
     m_activeWorkers.clear();
@@ -214,6 +220,10 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     if (m_shuttingDown) {
         return;
     }
+
+    diag::log(QStringLiteral("ThumbnailPanel::loadImages: %1 položek (dosavadní generace %2, popředí %3, zahřívání %4)")
+                  .arg(paths.size()).arg(m_generation).arg(m_activeWorkers.size())
+                  .arg(m_warmWorker != nullptr ? QStringLiteral("běží") : QStringLiteral("neběží")));
 
     cancelActiveWorkers();
     m_pendingThumbs.clear();
@@ -453,9 +463,18 @@ void ThumbnailPanel::dispatchThumbnails()
         auto *worker = new ThumbnailWorker(QStringList{path}, m_generation,
                                            m_diskCacheEnabled, m_diskCacheDir, nullptr);
         worker->setFileStamps(m_stamps);
+        diag::log(QStringLiteral("miniatura popředí START worker=%1 %2 (generace %3)")
+                      .arg(reinterpret_cast<quintptr>(worker), 0, 16)
+                      .arg(QFileInfo(path).fileName()).arg(m_generation));
         connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
         connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-        connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
+        connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker, path](int generation) {
+            // Doručeno i po případném zrušení (viz komentář v cancelActiveWorkers) —
+            // proto se loguje i to, jestli je položka v panelu ještě vůbec platná.
+            diag::log(QStringLiteral("miniatura popředí HOTOVO worker=%1 %2 (generace volání %3, aktuální %4, položka v panelu: %5)")
+                          .arg(reinterpret_cast<quintptr>(worker), 0, 16)
+                          .arg(QFileInfo(path).fileName()).arg(generation).arg(m_generation)
+                          .arg(itemForPath(path) != nullptr ? QStringLiteral("ano") : QStringLiteral("NE")));
             m_activeWorkers.remove(worker);
             if (generation != m_generation) {
                 return;
@@ -563,6 +582,8 @@ void ThumbnailPanel::maybeStartWarmup()
     worker->setFileStamps(m_stamps);
     connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
     connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
+        diag::log(QStringLiteral("zahřívání: dokončení dávky doručeno v UI, worker=%1 (generace volání %2, aktuální %3)")
+                      .arg(reinterpret_cast<quintptr>(worker), 0, 16).arg(generation).arg(m_generation));
         if (worker == m_warmWorker && generation == m_generation) {
             m_warmWorker = nullptr;
             updateWarmupProgress();
@@ -658,6 +679,10 @@ void ThumbnailPanel::removeImage(int index)
 {
     if (index >= 0 && index < count()) {
         const QString path = item(index)->data(Qt::UserRole).toString();
+        diag::log(QStringLiteral("ThumbnailPanel::removeImage: %1 (index %2, zabráno workerem: %3, čeká ve frontě: %4)")
+                      .arg(QFileInfo(path).fileName()).arg(index)
+                      .arg(m_claims->contains(path) ? QStringLiteral("ano") : QStringLiteral("ne"))
+                      .arg(m_pendingThumbs.contains(path) ? QStringLiteral("ano") : QStringLiteral("ne")));
         countItem(path, -1);
         m_pathToIndex.remove(path);
         m_claims->release(path);

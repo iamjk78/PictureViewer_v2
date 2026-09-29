@@ -461,6 +461,7 @@ void MainWindow::cancelAllWorkers()
 // By the time exec() returns, the thread pool is completely idle.
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    diag::log(QStringLiteral("closeEvent: zavírám okno"));
     // Viditelnost toolbarů (Oblíbené/Štítky/Přesun/Navigace) se ukládá ihned
     // při přepnutí tlačítka (viz jednotlivé toggle handlery) — není potřeba
     // ji ukládat znovu tady.
@@ -476,9 +477,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
     // Vlákno zaseknuté v čtení ze sítě nejde přerušit; déle než pár sekund se
     // na něj nečeká (viz shutdownTimedOut()).
     m_shutdownTimedOut = !QThreadPool::globalInstance()->waitForDone(3000);
-    if (m_shutdownTimedOut) {
-        diag::log(QStringLiteral("ukončení: vlákna na pozadí se do 3 s nezastavila (čtení ze sítě)"));
-    }
+    diag::log(m_shutdownTimedOut
+                  ? QStringLiteral("ukončení: vlákna na pozadí se do 3 s nezastavila (čtení ze sítě)")
+                  : QStringLiteral("ukončení: vlákna na pozadí doběhla, zavírám čistě"));
     // NOTE: processEvents() is intentionally omitted here.
     // cancelAllWorkers() sets m_shuttingDown=true so any stale queued signals
     // that processEvents() would have delivered are dropped at their own entry
@@ -496,11 +497,14 @@ void MainWindow::closeEvent(QCloseEvent *event)
 // Child QObjects are still alive here; Qt destroys them after this body returns.
 MainWindow::~MainWindow()
 {
+    diag::log(QStringLiteral("~MainWindow: start"));
     cancelAllWorkers();
     if (m_shutdownTimedOut) {
+        diag::log(QStringLiteral("~MainWindow: přeskakuji waitForDone (timeout již nastal), vlákna doběhnou sama"));
         return;   // vlákna ještě běží; proces se ukončí natvrdo v Application::run()
     }
     QThreadPool::globalInstance()->waitForDone();
+    diag::log(QStringLiteral("~MainWindow: vlákna doběhla"));
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
