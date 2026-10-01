@@ -468,16 +468,24 @@ void ThumbnailPanel::dispatchThumbnails()
                       .arg(QFileInfo(path).fileName()).arg(m_generation));
         connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
         connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-        connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker, path](int generation) {
-            // Doručeno i po případném zrušení (viz komentář v cancelActiveWorkers) —
-            // proto se loguje i to, jestli je položka v panelu ještě vůbec platná.
-            diag::log(QStringLiteral("miniatura popředí HOTOVO worker=%1 %2 (generace volání %3, aktuální %4, položka v panelu: %5)")
-                          .arg(reinterpret_cast<quintptr>(worker), 0, 16)
-                          .arg(QFileInfo(path).fileName()).arg(generation).arg(m_generation)
-                          .arg(itemForPath(path) != nullptr ? QStringLiteral("ano") : QStringLiteral("NE")));
-            m_activeWorkers.remove(worker);
+        // POZOR: worker SE NEZACHYTÁVÁ pro identifikaci v tomto callbacku — mezi
+        // doručením zpráv může být worker už smazán (deleteLater) a jeho adresu
+        // znovu použít JINÝ, čerstvě vytvořený worker (log to opakovaně ukázal:
+        // stejná adresa se v rychlém sledu objeví pro dva různé soubory). Použít
+        // zachycený ukazatel k porovnání/odebrání by pak mohlo zasáhnout cizí,
+        // stále běžící objekt. sender() vrátí vždy SKUTEČNÉHO odesílatele této
+        // konkrétní zprávy, bez ohledu na znovupoužití paměti.
+        connect(worker, &ThumbnailWorker::workerFinished, this, [this, path](int generation) {
             if (generation != m_generation) {
-                return;
+                return;   // zastaralé volání (zrušená/nahrazená generace) — nic dalšího se nečte
+            }
+            auto *finishedWorker = qobject_cast<ThumbnailWorker *>(sender());
+            diag::log(QStringLiteral("miniatura popředí HOTOVO worker=%1 %2 (generace %3, položka v panelu: %4)")
+                          .arg(reinterpret_cast<quintptr>(finishedWorker), 0, 16)
+                          .arg(QFileInfo(path).fileName()).arg(generation)
+                          .arg(itemForPath(path) != nullptr ? QStringLiteral("ano") : QStringLiteral("NE")));
+            if (finishedWorker != nullptr) {
+                m_activeWorkers.remove(finishedWorker);
             }
             ++m_doneCount;
             dispatchThumbnails();
@@ -581,10 +589,13 @@ void ThumbnailPanel::maybeStartWarmup()
     worker->setCacheOnly(m_claims, m_warmupThrottleMs);
     worker->setFileStamps(m_stamps);
     connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-    connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
+    // Stejný důvod jako u popředí (viz komentář v dispatchThumbnails) — identita
+    // workeru se ověřuje přes sender(), ne přes zachycený ukazatel.
+    connect(worker, &ThumbnailWorker::workerFinished, this, [this](int generation) {
+        auto *finishedWorker = qobject_cast<ThumbnailWorker *>(sender());
         diag::log(QStringLiteral("zahřívání: dokončení dávky doručeno v UI, worker=%1 (generace volání %2, aktuální %3)")
-                      .arg(reinterpret_cast<quintptr>(worker), 0, 16).arg(generation).arg(m_generation));
-        if (worker == m_warmWorker && generation == m_generation) {
+                      .arg(reinterpret_cast<quintptr>(finishedWorker), 0, 16).arg(generation).arg(m_generation));
+        if (finishedWorker != nullptr && finishedWorker == m_warmWorker && generation == m_generation) {
             m_warmWorker = nullptr;
             updateWarmupProgress();
             maybeStartVideoWarmup();   // obrázky hotové — na řadě videa (pokud je klid)
