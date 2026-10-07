@@ -191,26 +191,20 @@ void ThumbnailPanel::shutdown()
 
 void ThumbnailPanel::cancelActiveWorkers()
 {
-    if (!m_activeWorkers.isEmpty() || m_warmWorker != nullptr) {
+    if (m_activeCount > 0 || m_warmControl) {
         diag::log(QStringLiteral("ThumbnailPanel: ruším workery — popředí %1, zahřívání %2")
-                      .arg(m_activeWorkers.size())
-                      .arg(m_warmWorker != nullptr ? QStringLiteral("běží") : QStringLiteral("neběží")));
+                      .arg(m_activeCount)
+                      .arg(m_warmControl ? QStringLiteral("běží") : QStringLiteral("neběží")));
     }
-    for (ThumbnailWorker *worker : std::as_const(m_activeWorkers)) {
-        worker->cancel();
-        // Odpojit signál workeru do tohoto widgetu — worker ještě chvíli běží
-        // ve vlákně z fondu (dokud majitel nezavolá waitForDone()). POZOR:
-        // disconnect() nestáhne zprávu, kterou worker MEZITÍM už stihl poslat
-        // (zařazenou frontou událostí) — ta se doručí i tak. Zpětná volání
-        // proto MUSÍ počítat s tím, že mohou přijít i po zrušení.
-        disconnect(worker, nullptr, this, nullptr);
-    }
-    m_activeWorkers.clear();
-
-    if (m_warmWorker != nullptr) {
-        m_warmWorker->cancel();
-        disconnect(m_warmWorker, nullptr, this, nullptr);
-        m_warmWorker = nullptr;
+    // Workery se nijak neodpojují ani neukazují — jen se jim přes sdílené řízení
+    // řekne, ať skončí. Jejich případná pozdní zpětná volání se v UI zahodí
+    // podle generace (viz onForegroundWorkerFinished / onWarmWorkerFinished).
+    m_foregroundControl->cancelled = true;
+    m_foregroundControl = QSharedPointer<WorkerControl>::create();
+    m_activeCount = 0;
+    if (m_warmControl) {
+        m_warmControl->cancelled = true;
+        m_warmControl.reset();
     }
     m_videoWarmupActive = false;
 }
@@ -222,8 +216,8 @@ void ThumbnailPanel::loadImages(const QStringList &paths)
     }
 
     diag::log(QStringLiteral("ThumbnailPanel::loadImages: %1 položek (dosavadní generace %2, popředí %3, zahřívání %4)")
-                  .arg(paths.size()).arg(m_generation).arg(m_activeWorkers.size())
-                  .arg(m_warmWorker != nullptr ? QStringLiteral("běží") : QStringLiteral("neběží")));
+                  .arg(paths.size()).arg(m_generation).arg(m_activeCount)
+                  .arg(m_warmControl ? QStringLiteral("běží") : QStringLiteral("neběží")));
 
     cancelActiveWorkers();
     m_pendingThumbs.clear();
@@ -311,10 +305,10 @@ void ThumbnailPanel::updateWarmupProgress()
     WarmupProgress p;
     const bool cacheOn = m_diskCacheEnabled && !m_diskCacheDir.isEmpty();
     if (cacheOn && count() > 0 && !m_shuttingDown) {
-        p.imagesActive = m_warmWorker != nullptr;
+        p.imagesActive = !m_warmControl.isNull();
         p.imagesTotal = m_imageItemCount;
         if (p.imagesActive) {
-            p.imagesDone = qMin(p.imagesTotal, m_warmSkipped + m_warmWorker->processedCount());
+            p.imagesDone = qMin(p.imagesTotal, m_warmSkipped + m_warmControl->processed.load());
         }
         p.videosTotal = m_videoItemCount;
         p.videosDone = qMin(p.videosTotal, static_cast<int>(m_videosHandled.size()));
@@ -450,52 +444,79 @@ void ThumbnailPanel::updateWantedThumbnails()
 
 void ThumbnailPanel::dispatchThumbnails()
 {
-    while (!m_shuttingDown && m_activeWorkers.size() < kThumbnailThreads
-           && !m_pendingThumbs.isEmpty()) {
+    while (!m_shuttingDown && m_activeCount < kThumbnailThreads && !m_pendingThumbs.isEmpty()) {
         const QString path = m_pendingThumbs.takeFirst();
         if (itemForPath(path) == nullptr || !m_claims->claim(path)) {
             continue;   // mezitím smazáno, nebo už zpracováno
         }
 
-        // Parent musí být nullptr — objekt spravuje fond vláken (smaže se
-        // přes deleteLater po workerFinished). Qt parent by vytvořil druhou
-        // cestu mazání a způsobil double-free.
-        auto *worker = new ThumbnailWorker(QStringList{path}, m_generation,
-                                           m_diskCacheEnabled, m_diskCacheDir, nullptr);
+        const int generation = m_generation;
+        const quint64 workerId = ++m_nextWorkerId;
+        // Worker je obyčejný QRunnable (pool ho sám smaže) a nic o něm si panel
+        // nepamatuje — ani ukazatel, ani spojení. Výsledky vrací zpětnými
+        // voláními z vlákna workeru, která je jen předají do UI vlákna;
+        // QPointer zajistí, že se po zničení panelu nic nedoručí.
+        auto *worker = new ThumbnailWorker(QStringList{path}, m_diskCacheEnabled, m_diskCacheDir,
+                                           m_foregroundControl);
         worker->setFileStamps(m_stamps);
-        diag::log(QStringLiteral("miniatura popředí START worker=%1 %2 (generace %3)")
-                      .arg(reinterpret_cast<quintptr>(worker), 0, 16)
-                      .arg(QFileInfo(path).fileName()).arg(m_generation));
-        connect(worker, &ThumbnailWorker::thumbnailReady, this, &ThumbnailPanel::onThumbnailReady);
-        connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-        connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker, path](int generation) {
-            diag::log(QStringLiteral("miniatura popředí HOTOVO worker=%1 %2 (generace volání %3, aktuální %4, položka v panelu: %5)")
-                          .arg(reinterpret_cast<quintptr>(worker), 0, 16)
-                          .arg(QFileInfo(path).fileName()).arg(generation).arg(m_generation)
-                          .arg(itemForPath(path) != nullptr ? QStringLiteral("ano") : QStringLiteral("NE")));
-            // worker se smí použít k odebrání z m_activeWorkers, i když může být
-            // v tuto chvíli už smazaný (deleteLater je připojen jako PRVNÍ, takže
-            // se typicky zpracuje dřív než tohle volání) — QSet::remove jen
-            // porovnává ADRESU, nic nedereferencuje. MUSÍ se to udělat VŽDY,
-            // bez ohledu na shodu generace — jinak by po neshodě zůstal v
-            // m_activeWorkers zapomenutý (dangling) ukazatel a příští
-            // cancelActiveWorkers() by na něj spadl při disconnect(). (Toto byl
-            // skutečný pád 2026-10-01 — dřívější verze s sender() tuhle
-            // podmínku porušovala, protože sender() po smazání objektu vrací
-            // nullptr a odebrání se tak přeskočilo.)
-            m_activeWorkers.remove(worker);
-            if (generation != m_generation) {
-                return;
-            }
-            ++m_doneCount;
-            dispatchThumbnails();
-            if (m_activeWorkers.isEmpty() && m_pendingThumbs.isEmpty()) {
-                diag::log(diag::thumbSummary(m_doneCount, m_statsTimer.elapsed()));
-            }
-            maybeStartWarmup();   // popředí dojelo — případně navázat zahříváním
-        });
-        m_activeWorkers.insert(worker);
+        QPointer<ThumbnailPanel> self(this);
+        worker->setCallbacks(
+            [self, generation](const QString &thumbPath, const QImage &image) {
+                if (!self) {
+                    return;
+                }
+                QMetaObject::invokeMethod(self.data(), [self, generation, thumbPath, image] {
+                    if (self) {
+                        self->onThumbnailReady(generation, thumbPath, image);
+                    }
+                }, Qt::QueuedConnection);
+            },
+            [self, generation, workerId, path] {
+                if (!self) {
+                    return;
+                }
+                QMetaObject::invokeMethod(self.data(), [self, generation, workerId, path] {
+                    if (self) {
+                        self->onForegroundWorkerFinished(generation, workerId, path);
+                    }
+                }, Qt::QueuedConnection);
+            });
+        diag::log(QStringLiteral("miniatura popředí START #%1 %2 (generace %3)")
+                      .arg(workerId).arg(QFileInfo(path).fileName()).arg(generation));
+        ++m_activeCount;
         m_thumbPool.start(worker);
+    }
+}
+
+void ThumbnailPanel::onForegroundWorkerFinished(int generation, quint64 workerId, const QString &path)
+{
+    diag::log(QStringLiteral("miniatura popředí HOTOVO #%1 %2 (generace volání %3, aktuální %4, položka v panelu: %5)")
+                  .arg(workerId).arg(QFileInfo(path).fileName()).arg(generation).arg(m_generation)
+                  .arg(itemForPath(path) != nullptr ? QStringLiteral("ano") : QStringLiteral("NE")));
+    // Zpráva ze zrušené/nahrazené generace: počítadlo se při zrušení vynulovalo
+    // (cancelActiveWorkers), takže se nic nesnižuje ani nedispatchuje.
+    if (generation != m_generation) {
+        return;
+    }
+    if (m_activeCount > 0) {
+        --m_activeCount;
+    }
+    ++m_doneCount;
+    dispatchThumbnails();
+    if (m_activeCount == 0 && m_pendingThumbs.isEmpty()) {
+        diag::log(diag::thumbSummary(m_doneCount, m_statsTimer.elapsed()));
+    }
+    maybeStartWarmup();   // popředí dojelo — případně navázat zahříváním
+}
+
+void ThumbnailPanel::onWarmWorkerFinished(int generation, const QSharedPointer<WorkerControl> &control)
+{
+    diag::log(QStringLiteral("zahřívání: dokončení dávky doručeno v UI (generace volání %1, aktuální %2)")
+                  .arg(generation).arg(m_generation));
+    if (control == m_warmControl && generation == m_generation) {
+        m_warmControl.reset();
+        updateWarmupProgress();
+        maybeStartVideoWarmup();   // obrázky hotové — na řadě videa (pokud je klid)
     }
 }
 
@@ -529,8 +550,8 @@ void ThumbnailPanel::noteActivity()
     }
     m_idleReady = false;
     m_videoIdleReady = false;
-    if (m_warmWorker != nullptr) {
-        m_warmWorker->setPaused(true);
+    if (m_warmControl) {
+        m_warmControl->paused = true;
     }
     if (m_videoWarmupActive) {
         m_videoWarmupActive = false;
@@ -546,14 +567,14 @@ void ThumbnailPanel::maybeStartWarmup()
         return;
     }
     // Popředí (viditelné miniatury) má přednost — zahřívání navazuje, až dojede.
-    if (!m_activeWorkers.isEmpty() || !m_pendingThumbs.isEmpty()) {
+    if (m_activeCount != 0 || !m_pendingThumbs.isEmpty()) {
         return;
     }
 
     if (m_warmPrepared) {
         // Už sestaveno dřív a přerušeno aktivitou uživatele — jen navázat.
-        if (m_warmWorker != nullptr) {
-            m_warmWorker->setPaused(false);
+        if (m_warmControl) {
+            m_warmControl->paused = false;
         }
         return;
     }
@@ -585,22 +606,23 @@ void ThumbnailPanel::maybeStartWarmup()
         return;
     }
 
-    auto *worker = new ThumbnailWorker(remaining, m_generation, m_diskCacheEnabled, m_diskCacheDir, nullptr);
+    m_warmControl = QSharedPointer<WorkerControl>::create();
+    const QSharedPointer<WorkerControl> control = m_warmControl;
+    auto *worker = new ThumbnailWorker(remaining, m_diskCacheEnabled, m_diskCacheDir, control);
     worker->setCacheOnly(m_claims, m_warmupThrottleMs);
     worker->setFileStamps(m_stamps);
-    connect(worker, &ThumbnailWorker::workerFinished, worker, &ThumbnailWorker::deleteLater);
-    connect(worker, &ThumbnailWorker::workerFinished, this, [this, worker](int generation) {
-        diag::log(QStringLiteral("zahřívání: dokončení dávky doručeno v UI, worker=%1 (generace volání %2, aktuální %3)")
-                      .arg(reinterpret_cast<quintptr>(worker), 0, 16).arg(generation).arg(m_generation));
-        // Stejně jako u popředí: worker se tu jen POROVNÁVÁ (adresa), nikdy
-        // nedereferencuje — bezpečné, i kdyby byl mezitím smazaný.
-        if (worker == m_warmWorker && generation == m_generation) {
-            m_warmWorker = nullptr;
-            updateWarmupProgress();
-            maybeStartVideoWarmup();   // obrázky hotové — na řadě videa (pokud je klid)
+    const int generation = m_generation;
+    QPointer<ThumbnailPanel> self(this);
+    worker->setCallbacks({}, [self, generation, control] {
+        if (!self) {
+            return;
         }
+        QMetaObject::invokeMethod(self.data(), [self, generation, control] {
+            if (self) {
+                self->onWarmWorkerFinished(generation, control);
+            }
+        }, Qt::QueuedConnection);
     });
-    m_warmWorker = worker;
     m_warmSkipped = m_imageItemCount - static_cast<int>(remaining.size());
     m_warmPool.start(worker);
     m_progressTimer->start(m_progressIntervalMs);
@@ -616,7 +638,7 @@ void ThumbnailPanel::maybeStartVideoWarmup()
         || m_videoWarmupActive) {
         return;
     }
-    if (!m_activeWorkers.isEmpty() || !m_pendingThumbs.isEmpty() || m_warmWorker != nullptr) {
+    if (m_activeCount != 0 || !m_pendingThumbs.isEmpty() || !m_warmControl.isNull()) {
         return;
     }
     if (!m_diskCacheEnabled || m_diskCacheDir.isEmpty()) {

@@ -3,15 +3,14 @@
 #include "core/FileStampIndex.hpp"
 #include <QMutex>
 #include <QMutexLocker>
-#include <QObject>
+#include <QImage>
 #include <QRunnable>
 #include <QSet>
 #include <QSharedPointer>
 #include <QStringList>
 
 #include <atomic>
-
-class QImage;
+#include <functional>
 
 namespace pictureviewer {
 
@@ -53,22 +52,43 @@ private:
     QSet<QString> m_paths;
 };
 
-class ThumbnailWorker : public QObject, public QRunnable
+// Sdílené řízení workeru (zrušení, pozastavení, počítadlo). Drží ho panel i
+// worker přes QSharedPointer, takže panel nikdy nedrží ukazatel na už smazaný
+// objekt. (Dřívější verze si pamatovaly raw ukazatele na QObject workery a
+// spoléhaly na disconnect()+deleteLater() — to vedlo k opakovaným pádům, když
+// se zpráva "hotovo" doručila po smazání workeru.)
+struct WorkerControl
 {
-    Q_OBJECT
+    std::atomic_bool cancelled{false};
+    std::atomic_bool paused{false};
+    std::atomic_int processed{0};
+};
 
+// Plain QRunnable (ne QObject) — pool ho po doběhnutí sám smaže (autoDelete).
+// Výsledky se NEvydávají signály, ale zpětnými voláními, která volají z vlákna
+// workeru; panel v nich výsledek jen předá do UI vlákna (invokeMethod).
+class ThumbnailWorker : public QRunnable
+{
 public:
     // Náhledy se generují a cachují ve 192 px (2× zobrazovaná velikost 96 px
     // v panelu) — na Retina displejích jsou tak ostré a stačí pro mřížku Galerie.
     static constexpr int ThumbnailSize = 192;
     static constexpr int BatchSize = 5;
 
-    ThumbnailWorker(QStringList paths, int generation,
-                    bool diskCacheEnabled, QString diskCacheDir,
-                    QObject *parent = nullptr);
+    using ThumbnailCallback = std::function<void(const QString &path, const QImage &image)>;
+    using FinishedCallback = std::function<void()>;
 
-    void cancel();
+    ThumbnailWorker(QStringList paths, bool diskCacheEnabled, QString diskCacheDir,
+                    QSharedPointer<WorkerControl> control);
+
     void run() override;
+
+    // Zpětná volání se volají z vlákna workeru (a jen jednou pro finished).
+    void setCallbacks(ThumbnailCallback onThumbnail, FinishedCallback onFinished)
+    {
+        m_onThumbnail = std::move(onThumbnail);
+        m_onFinished = std::move(onFinished);
+    }
 
     // Režim "zahřátí cache" (worker na pozadí): miniatury se jen zapíšou do
     // diskové cache, žádná se nevydává (panel tak nedrží ikony celé složky
@@ -79,38 +99,28 @@ public:
     void setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int throttleMs);
     // Otisky souborů z výpisu složky — klíč cache pak nepotřebuje stat().
     void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
-    // Kolik souborů zahřívací worker už prošel (vygenerované i přeskočené) —
-    // pro ukazatel průběhu. Bezpečné volat z jiného vlákna.
-    int processedCount() const { return m_processed.load(); }
-    // Pozastaví/obnoví zpracování (worker čeká mezi soubory, nezahazuje frontu).
-    void setPaused(bool paused) { m_paused.store(paused); }
-
-signals:
-    void thumbnailReady(int generation, const QString &path, const QImage &image);
-    void workerFinished(int generation);
-    void workerError(int generation, const QString &error);
 
 private:
     QImage loadThumbnail(const QString &path) const;
     // Zahřátí cache pro jeden soubor; vrací true, pokud se miniatura skutečně
     // generovala (false = už v cache / cache nedostupná).
     bool warmOne(const QString &path) const;
-    // Spí po částech, aby šlo cancel() poznat hned.
+    // Spí po částech, aby šlo zrušení poznat hned.
     void sleepInterruptible(int ms) const;
     QImage generateThumbnail(const QString &path) const;
     QString cacheFilePath(const QString &path) const;
+    void finish() { if (m_onFinished) m_onFinished(); }
 
     QStringList m_paths;
-    int m_generation;
-    std::atomic_bool m_cancelled;
-    std::atomic_bool m_paused{false};
-    std::atomic_int m_processed{0};
+    QSharedPointer<WorkerControl> m_control;
     bool m_cacheOnly = false;
     int m_throttleMs = 0;
     QSharedPointer<ThumbnailClaims> m_claims;
     QSharedPointer<FileStampIndex> m_stamps;
     bool m_diskCacheEnabled;
     QString m_diskCacheDir;
+    ThumbnailCallback m_onThumbnail;
+    FinishedCallback m_onFinished;
 };
 
 } // namespace pictureviewer

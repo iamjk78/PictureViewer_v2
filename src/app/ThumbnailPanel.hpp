@@ -1,10 +1,12 @@
 #pragma once
 
 #include "core/FileStampIndex.hpp"
+#include "workers/ThumbnailWorker.hpp"
 #include <QElapsedTimer>
 #include <QHash>
 #include <QListWidget>
 #include <QPersistentModelIndex>
+#include <QPointer>
 #include <QSet>
 #include <QSharedPointer>
 #include <QStringList>
@@ -18,7 +20,6 @@ class QTimer;
 namespace pictureviewer {
 
 class ThumbnailClaims;
-class ThumbnailWorker;
 
 class ThumbnailPanel : public QListWidget
 {
@@ -131,6 +132,8 @@ signals:
 private slots:
     void onItemClicked(QListWidgetItem *item);
     void onThumbnailReady(int generation, const QString &path, const QImage &image);
+    void onForegroundWorkerFinished(int generation, quint64 workerId, const QString &path);
+    void onWarmWorkerFinished(int generation, const QSharedPointer<WorkerControl> &control);
 
 private:
     // Naplánuje (s krátkým zpožděním, nejvýše jednou za interval) přepočet
@@ -184,7 +187,10 @@ private:
     int m_warmSkipped = 0;              // obrázky, které worker nedostal (už je měl popředí)
     QSet<QString> m_videosHandled;
     QThreadPool m_warmPool;                         // 1 vlákno, nízká priorita
-    ThumbnailWorker *m_warmWorker = nullptr;
+    // Řízení workeru na pozadí (zrušení / pozastavení / průběh). Sdílený
+    // vlastník s workerem — žádný raw ukazatel na objekt, který by mohl být
+    // už smazaný. Prázdné = zahřívání neběží.
+    QSharedPointer<WorkerControl> m_warmControl;
     QTimer *m_idleTimer = nullptr;
     bool m_idleReady = false;      // uplynula doba klidu
     bool m_warmPrepared = false;   // pro aktuální seznam už byly seznamy sestaveny a worker spuštěn
@@ -195,7 +201,12 @@ private:
 
     static constexpr int kThumbnailThreads = 3;
     QThreadPool m_thumbPool;
-    QSet<ThumbnailWorker *> m_activeWorkers;
+    // Počet právě běžících popředních workerů a sdílené řízení jejich generace.
+    // (Dřív QSet raw ukazatelů + disconnect/deleteLater — viz komentář u
+    // WorkerControl; opakované pády kvůli ukazateli na smazaný worker.)
+    int m_activeCount = 0;
+    QSharedPointer<WorkerControl> m_foregroundControl = QSharedPointer<WorkerControl>::create();
+    quint64 m_nextWorkerId = 0;   // jen pro log
     // Cesty, pro které se už miniatura spustila / vygenerovala v této generaci
     // (včetně neúspěšných — jinak by se vadný soubor zkoušel dokola). Sdílené
     // s workerem na pozadí, ať nedělá znovu, co popředí už udělalo.

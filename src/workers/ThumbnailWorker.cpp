@@ -17,22 +17,14 @@
 
 namespace pictureviewer {
 
-ThumbnailWorker::ThumbnailWorker(QStringList paths, int generation,
-                                 bool diskCacheEnabled, QString diskCacheDir,
-                                 QObject *parent)
-    : QObject(parent)
-    , m_paths(std::move(paths))
-    , m_generation(generation)
-    , m_cancelled(false)
+ThumbnailWorker::ThumbnailWorker(QStringList paths, bool diskCacheEnabled, QString diskCacheDir,
+                                 QSharedPointer<WorkerControl> control)
+    : m_paths(std::move(paths))
+    , m_control(std::move(control))
     , m_diskCacheEnabled(diskCacheEnabled)
     , m_diskCacheDir(std::move(diskCacheDir))
 {
-    setAutoDelete(false);
-}
-
-void ThumbnailWorker::cancel()
-{
-    m_cancelled.store(true);
+    // autoDelete zůstává true: pool worker smaže sám po doběhnutí run().
 }
 
 void ThumbnailWorker::setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int throttleMs)
@@ -44,7 +36,7 @@ void ThumbnailWorker::setCacheOnly(QSharedPointer<ThumbnailClaims> claims, int t
 
 void ThumbnailWorker::sleepInterruptible(int ms) const
 {
-    for (int slept = 0; slept < ms && !m_cancelled.load(); slept += 25) {
+    for (int slept = 0; slept < ms && !m_control->cancelled.load(); slept += 25) {
         QThread::msleep(static_cast<unsigned long>(qMin(25, ms - slept)));
     }
 }
@@ -60,23 +52,23 @@ void ThumbnailWorker::run()
                       .arg(m_paths.size()).arg(m_throttleMs));
     }
     for (int batchStart = 0; batchStart < m_paths.size(); batchStart += BatchSize) {
-        if (m_cancelled.load()) {
+        if (m_control->cancelled.load()) {
             if (m_cacheOnly) {
                 diag::log(QStringLiteral("zahřátí cache: PŘERUŠENO po %1 souborech (vygenerováno %2)")
                               .arg(warmProcessed).arg(warmGenerated));
             }
-            emit workerFinished(m_generation);
+            finish();
             return;
         }
 
         const int batchEnd = std::min(batchStart + BatchSize, static_cast<int>(m_paths.size()));
         for (int index = batchStart; index < batchEnd; ++index) {
             // Pozastavený worker čeká (uživatel právě listuje / posouvá).
-            while (m_paused.load() && !m_cancelled.load()) {
+            while (m_control->paused.load() && !m_control->cancelled.load()) {
                 QThread::msleep(100);
             }
-            if (m_cancelled.load()) {
-                emit workerFinished(m_generation);
+            if (m_control->cancelled.load()) {
+                finish();
                 return;
             }
 
@@ -85,7 +77,7 @@ void ThumbnailWorker::run()
             if (m_cacheOnly) {
                 // Popředí už tuhle miniaturu má (nebo ji právě dělá).
                 if (m_claims && m_claims->contains(path)) {
-                    ++m_processed;
+                    m_control->processed.fetch_add(1);
                     continue;
                 }
                 bool generated = false;
@@ -96,7 +88,7 @@ void ThumbnailWorker::run()
                     generated = false;
                 }
                 ++warmProcessed;
-                ++m_processed;
+                m_control->processed.fetch_add(1);
                 if (generated) {
                     ++warmGenerated;
                     sleepInterruptible(m_throttleMs);
@@ -119,7 +111,9 @@ void ThumbnailWorker::run()
                 diag::log(QStringLiteral("miniatura: VÝJIMKA při generování %1").arg(QFileInfo(path).fileName()));
                 thumbnail = QImage();
             }
-            emit thumbnailReady(m_generation, path, thumbnail);
+            if (m_onThumbnail) {
+                m_onThumbnail(path, thumbnail);
+            }
         }
 
         QThread::yieldCurrentThread();
@@ -129,7 +123,7 @@ void ThumbnailWorker::run()
         diag::log(QStringLiteral("zahřátí cache: HOTOVO, %1 souborů, vygenerováno %2, %3 s")
                       .arg(warmProcessed).arg(warmGenerated).arg(warmTimer.elapsed() / 1000));
     }
-    emit workerFinished(m_generation);
+    finish();
 }
 
 // Cesta cache souboru: <dir>/ab/<sha1>.thumb
