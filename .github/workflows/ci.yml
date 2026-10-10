@@ -37,6 +37,22 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
+      # ctest na Windows výstup Qt testů nezachytí — při selhání je spustit
+      # napřímo a vypsat jen to, co selhalo (FAIL!, Actual/Expected, Loc).
+      - name: Show failing tests
+        if: failure()
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          foreach ($exe in (Get-ChildItem build -Recurse -Filter "picture_viewer_*tests.exe")) {
+            Write-Host "=== $($exe.Name)"
+            & $exe.FullName -o "$($exe.BaseName).txt,txt" | Out-Null
+            Write-Host "exit code: $LASTEXITCODE"
+            if (Test-Path "$($exe.BaseName).txt") {
+              Select-String -Path "$($exe.BaseName).txt" -Pattern "^FAIL|Actual|Expected|Loc:|Totals|QFATAL" | ForEach-Object { $_.Line }
+            } else { Write-Host "(žádný výstup)" }
+          }
+
       # Zkopírovat exe + Qt DLL pomocí windeployqt + MSVC runtime DLL, zabalit do ZIP.
       - name: Package
         shell: pwsh
