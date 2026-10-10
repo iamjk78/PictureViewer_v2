@@ -38,8 +38,8 @@ jobs:
         run: ctest --test-dir build --build-config Release --output-on-failure
 
       # ctest na Windows výstup Qt testů nezachytí — při selhání je spustit
-      # napřímo (BEZ argumentů: MainWindow s argumentem neobnovuje poslední
-      # složku, testy obnovy by pak selhaly jen kvůli tomu) a vypsat jen to,
+      # napřímo (s argumentem -o MainWindow neobnovuje poslední složku, takže
+      # testy restoreLastFolder_*/openFolder_* tu selžou jen kvůli tomu — ignorovat) a vypsat jen to,
       # co selhalo.
       - name: Show failing tests
         if: failure()
@@ -48,9 +48,12 @@ jobs:
           $env:QT_QPA_PLATFORM = "offscreen"
           foreach ($exe in (Get-ChildItem build -Recurse -Filter "picture_viewer_*tests.exe")) {
             Write-Host "=== $($exe.Name)"
-            $out = & $exe.FullName 2>&1 | Out-String
-            Write-Host "exit code: $LASTEXITCODE, výstup: $($out.Length) znaků"
-            $out -split "`n" | Where-Object { $_ -match "^FAIL|Actual|Expected|Loc:|Totals|QFATAL" } | ForEach-Object { $_.TrimEnd() }
+            $report = "$($exe.BaseName).txt"
+            & $exe.FullName -o "$report,txt" | Out-Null
+            Write-Host "exit code: $LASTEXITCODE"
+            if (Test-Path $report) {
+              Select-String -Path $report -Pattern "^FAIL|Actual|Expected|Loc:|Totals|QFATAL" | ForEach-Object { $_.Line }
+            }
           }
 
       # Zkopírovat exe + Qt DLL pomocí windeployqt + MSVC runtime DLL, zabalit do ZIP.
