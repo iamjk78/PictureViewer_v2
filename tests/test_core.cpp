@@ -1641,7 +1641,9 @@ private slots:
         QVERIFY(writeFileOfSize(dir.filePath("a.jpg"), 123));
         QVERIFY(writeFileOfSize(dir.filePath("Ž ěščř.png"), 4567));
         QVERIFY(writeFileOfSize(dir.filePath("empty.gif"), 0));
+#ifndef Q_OS_WIN   // na Windows tečka na začátku názvu soubor neskrývá
         QVERIFY(writeFileOfSize(dir.filePath(".hidden.jpg"), 10));   // skryté se vynechávají
+#endif
         QVERIFY(QDir(dir.path()).mkdir("subdir"));
         QVERIFY(writeFileOfSize(dir.filePath("subdir/inner.jpg"), 10));
 #ifndef Q_OS_WIN   // na Windows QFile::link vyrábí .lnk zástupce, ne symbolické odkazy
@@ -1658,7 +1660,9 @@ private slots:
         QVERIFY(!bulk.contains("dirlink"));
 #endif
         QVERIFY(!bulk.contains("subdir"));
+#ifndef Q_OS_WIN
         QVERIFY(!bulk.contains(".hidden.jpg"));
+#endif
         QCOMPARE(bulk.value("a.jpg").first, qint64(123));
         QCOMPARE(bulk.value("Ž ěščř.png").first, qint64(4567));
         QCOMPARE(bulk.value("empty.gif").first, qint64(0));

@@ -834,7 +834,10 @@ private slots:
         // Vzdálené video se objeví až POTÉ, co jsou v cache všechny obrázky…
         QTRY_VERIFY_WITH_TIMEOUT(
             !spy.isEmpty() && spy.last().at(1).toStringList().join('|').contains("z_clip"), 15000);
-        QCOMPARE(cachedThumbFiles(cache.path()), 60);
+        QVERIFY2(cachedThumbFiles(cache.path()) == 60,
+                 qPrintable(QStringLiteral("v cache %1 z 60; videoThumbnailsWanted vydáno %2×, poslední seznam %3 cest, popředí %4")
+                                .arg(cachedThumbFiles(cache.path())).arg(spy.size())
+                                .arg(spy.last().at(1).toStringList().size()).arg(spy.last().at(2).toInt())));
         // …a viditelné video je v popředí (jedno), vzdálené v ocasu.
         QCOMPARE(spy.last().at(2).toInt(), 1);
     }
