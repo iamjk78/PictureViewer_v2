@@ -52,7 +52,12 @@ jobs:
             & $exe.FullName -o "$report,txt" | Out-Null
             Write-Host "exit code: $LASTEXITCODE"
             if (Test-Path $report) {
-              Select-String -Path $report -Pattern "^FAIL|Actual|Expected|Loc:|Totals|QFATAL" | ForEach-Object { $_.Line }
+              $lines = Get-Content $report
+              $show = $false
+              foreach ($l in $lines) {
+                if ($l -match "^FAIL") { $show = $true } elseif ($l -match "^(PASS|Totals|QWARN)") { $show = $false }
+                if ($show -or $l -match "^Totals") { $l }
+              }
             }
           }
 
