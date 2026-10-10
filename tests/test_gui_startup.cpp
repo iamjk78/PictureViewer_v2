@@ -47,7 +47,6 @@
 #include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
 #include "app/ThumbnailPanel.hpp"
-#include "core/DiagLog.hpp"
 #include "core/FileStampIndex.hpp"
 #include "workers/FolderScanWorker.hpp"
 
@@ -752,10 +751,8 @@ private slots:
     }
     void warmup_addsOtherVideosOnlyWhenIdle()
     {
-        QTemporaryDir dir, cache, logDir;
-        QVERIFY(dir.isValid() && cache.isValid() && logDir.isValid());
-        diag::start(logDir.path(), 3);   // při selhání se vypíše konec logu (diagnostika CI)
-        auto stopLog = qScopeGuard([] { diag::stop(); });
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
         QStringList paths;
         paths << QDir(dir.path()).filePath("a_clip.mp4");
         paths << makeImagePaths(dir.path(), 200);
@@ -837,17 +834,7 @@ private slots:
         // Vzdálené video se objeví až POTÉ, co jsou v cache všechny obrázky…
         QTRY_VERIFY_WITH_TIMEOUT(
             !spy.isEmpty() && spy.last().at(1).toStringList().join('|').contains("z_clip"), 15000);
-        if (cachedThumbFiles(cache.path()) != 60) {
-            QFile log(diag::logFilePath());
-            QString tail;
-            if (log.open(QIODevice::ReadOnly)) {
-                const QStringList lines = QString::fromUtf8(log.readAll()).split('\n');
-                tail = lines.mid(qMax<qsizetype>(0, lines.size() - 45)).join('\n');
-            }
-            QFAIL(qPrintable(QStringLiteral("v cache %1 z 60; videoThumbnailsWanted %2×, poslední seznam %3 cest\n%4")
-                                 .arg(cachedThumbFiles(cache.path())).arg(spy.size())
-                                 .arg(spy.last().at(1).toStringList().size()).arg(tail)));
-        }
+        QCOMPARE(cachedThumbFiles(cache.path()), 60);
         // …a viditelné video je v popředí (jedno), vzdálené v ocasu.
         QCOMPARE(spy.last().at(2).toInt(), 1);
     }

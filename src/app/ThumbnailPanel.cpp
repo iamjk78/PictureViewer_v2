@@ -641,6 +641,14 @@ void ThumbnailPanel::maybeStartVideoWarmup()
     if (m_activeCount != 0 || !m_pendingThumbs.isEmpty() || !m_warmControl.isNull()) {
         return;
     }
+    // Zahřívání obrázků se musí nejdřív vyhodnotit (maybeStartWarmup nastaví
+    // m_warmPrepared) — jinak by videa mohla začít dřív než obrázky, když
+    // časovač klidu videí vyprší před časovačem obrázků (na Windows mají
+    // stejně dlouhé časovače nespolehlivé pořadí) a seznam videí by se sestavil
+    // ještě bez viditelných položek.
+    if (!m_warmPrepared) {
+        return;
+    }
     if (!m_diskCacheEnabled || m_diskCacheDir.isEmpty()) {
         return;   // bez cache by generování videí nemělo smysl
     }
