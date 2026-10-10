@@ -344,6 +344,7 @@ private:
     // ── Postupné načítání složky ─────────────────────────────────────────
     // Řazení podle jména se čte po dávkách (viz FolderScanWorker::scanProgress).
     bool m_scanStreamed = false;        // ukázala se už aspoň jedna dávka
+    QString m_scanAutoShownPath;          // soubor zobrazený automaticky z první (neseřazené) dávky
     bool m_scanRequestedLocated = false;  // požadovaný soubor už je napojený na seznam
     int m_scanStreamedCount = 0;        // kolik souborů zatím přišlo
     QString m_folderBeforeScan;         // pro návrat při zrušení před první dávkou

@@ -352,6 +352,32 @@ private slots:
         window.close();
     }
 
+    // Složka se otevře bez zadaného souboru (např. obnova poslední složky):
+    // po dokončení načítání musí být zobrazený PRVNÍ soubor podle jména, ne ten,
+    // který z úložiště přišel jako první (dávky jdou v pořadí úložiště).
+    void openFolder_showsTheFirstFileByNameNotByStorageOrder()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 40);   // img_1 … img_40 — první podle jména
+        writeConfigForRestore(dir.path(), true);
+        auto reset = qScopeGuard([] {
+            MainWindow::setRestoreHooksForTesting(0, {});
+            writeConfigForRestore(QString(), false);
+        });
+        MainWindow::setRestoreHooksForTesting(0, {});
+        MainWindow window;
+        window.show();
+
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 40, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+        QCOMPARE(panel->item(0)->data(Qt::UserRole).toString().section('/', -1), QStringLiteral("img_1.jpg"));
+        QCOMPARE(panel->currentRow(), 0);
+        window.close();
+    }
+
     void restoreLastFolder_givesUpWhenStorageIsSlow()
     {
         QTemporaryDir dir;

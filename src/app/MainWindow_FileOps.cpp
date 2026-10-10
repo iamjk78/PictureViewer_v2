@@ -287,6 +287,11 @@ void MainWindow::onScanProgress(int generation, const QStringList &batch)
         // Nic zvenku nezadáno — ukázat první nalezený soubor.
         if (firstBatch) {
             showImage(0);
+            // Dávky jdou v pořadí úložiště, ne podle jména — tenhle soubor je jen
+            // náhodný "první nalezený". Po seřazení na něm zůstat NEMÁ smysl,
+            // pokud ho uživatel mezitím nevybral (viz onScanComplete).
+            m_scanAutoShownPath = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()
+                ? m_imagePaths.at(m_currentIndex) : QString();
             return;
         }
     } else if (!m_scanRequestedLocated) {
@@ -353,9 +358,14 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     setScanRunning(false);
     // Při postupném načítání se už nějaký soubor zobrazuje (a uživatel mohl
     // listovat) — po seřazení zůstat na něm, ne skočit na první.
-    if (m_scanStreamed && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+    // Výjimka: zobrazený soubor vybrala sama aplikace jako "první nalezený" z
+    // neseřazené dávky a uživatel od něj neodešel — tehdy se má po seřazení
+    // ukázat skutečně první soubor podle jména, ne ten náhodný.
+    if (m_scanStreamed && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()
+        && m_imagePaths.at(m_currentIndex) != m_scanAutoShownPath) {
         m_requestedFile = m_imagePaths.at(m_currentIndex);
     }
+    m_scanAutoShownPath.clear();
     m_scanStreamed = false;
     m_scanRequestedLocated = false;
     m_scanStreamedCount = 0;
@@ -468,6 +478,7 @@ void MainWindow::loadFolder(const QString &folderPath)
 
     diag::markFolderStart(folderPath);
     m_folderBeforeScan = m_currentFolder;
+    m_scanAutoShownPath.clear();
     m_scanStreamed = false;
     m_scanRequestedLocated = false;
     m_scanStreamedCount = 0;
