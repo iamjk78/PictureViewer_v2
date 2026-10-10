@@ -6,7 +6,37 @@
 #include <QDir>
 #include <QFileInfo>
 
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace pictureviewer {
+
+namespace {
+
+// Skutečný název souboru na disku (velikost písmen). Složka se záměrně
+// nepřekládá — viz komentář u volání.
+QString realFileName(const QFileInfo &candidate)
+{
+#ifdef Q_OS_WIN
+    // Na Windows canonicalFilePath() velikost písmen neopraví; FindFirstFile
+    // vrací název tak, jak je uložený v souborovém systému.
+    WIN32_FIND_DATAW data;
+    const QString native = QDir::toNativeSeparators(candidate.absoluteFilePath());
+    HANDLE handle = FindFirstFileW(reinterpret_cast<const wchar_t *>(native.utf16()), &data);
+    if (handle != INVALID_HANDLE_VALUE) {
+        FindClose(handle);
+        return QString::fromWCharArray(data.cFileName);
+    }
+    return candidate.fileName();
+#else
+    return QFileInfo(candidate.canonicalFilePath()).fileName();
+#endif
+}
+
+} // namespace
+
 
 QStringList CompanionFinder::findCompanions(const QString &filePath)
 {
@@ -46,7 +76,7 @@ QStringList CompanionFinder::findCompanions(const QString &filePath)
             // canonicalFilePath() by přeložil symbolické odkazy (/var →
             // /private/var) a cesta by pak neodpovídala seznamu v aplikaci, takže
             // by se pár nenašel přes m_imagePaths.indexOf().
-            companions.append(dir.absoluteFilePath(QFileInfo(candidate.canonicalFilePath()).fileName()));
+            companions.append(dir.absoluteFilePath(realFileName(candidate)));
         }
     }
 

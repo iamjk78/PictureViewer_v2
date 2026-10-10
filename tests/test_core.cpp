@@ -1644,16 +1644,20 @@ private slots:
         QVERIFY(writeFileOfSize(dir.filePath(".hidden.jpg"), 10));   // skryté se vynechávají
         QVERIFY(QDir(dir.path()).mkdir("subdir"));
         QVERIFY(writeFileOfSize(dir.filePath("subdir/inner.jpg"), 10));
+#ifndef Q_OS_WIN   // na Windows QFile::link vyrábí .lnk zástupce, ne symbolické odkazy
         QVERIFY(QFile::link(dir.filePath("a.jpg"), dir.filePath("link.jpg")));        // odkaz na soubor
         QVERIFY(QFile::link(dir.filePath("subdir"), dir.filePath("dirlink")));        // odkaz na složku
+#endif
 
         const auto bulk = listBulk(dir.path(), false);
         const auto fallback = listBulk(dir.path(), true);
         QCOMPARE(bulk, fallback);
         QVERIFY(bulk.contains("a.jpg"));
+#ifndef Q_OS_WIN
         QVERIFY(bulk.contains("link.jpg"));
-        QVERIFY(!bulk.contains("subdir"));
         QVERIFY(!bulk.contains("dirlink"));
+#endif
+        QVERIFY(!bulk.contains("subdir"));
         QVERIFY(!bulk.contains(".hidden.jpg"));
         QCOMPARE(bulk.value("a.jpg").first, qint64(123));
         QCOMPARE(bulk.value("Ž ěščř.png").first, qint64(4567));
