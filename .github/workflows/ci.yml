@@ -24,15 +24,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # Homebrew Qt (stejný zdroj jako při vývoji, vždy aktuální). Předsestavené
+      # Qt 6.8.1 z aqt na nejnovějším SDK nelinkuje (chybí framework AGL).
       - name: Install Qt
-        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
-        with:
-          version: '6.8.1'
-          modules: 'qtpdf qtmultimedia'
-          cache: true
+        run: brew install qt
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 
       - name: Build
         run: cmake --build build --parallel
