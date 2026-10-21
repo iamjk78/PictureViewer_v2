@@ -49,4 +49,59 @@ QString firstExistingTarget(const QStringList &targetPaths)
     return {};
 }
 
+QString firstExistingTarget(const QStringList &targetPaths, const QStringList &sourcePaths)
+{
+    for (int i = 0; i < targetPaths.size(); ++i) {
+        const QString &path = targetPaths.at(i);
+        if (!QFile::exists(path)) {
+            continue;
+        }
+        if (i < sourcePaths.size() && QFileInfo(sourcePaths.at(i)) == QFileInfo(path)) {
+            continue;   // cíl je tentýž soubor (jen jiná velikost písmen)
+        }
+        return path;
+    }
+    return {};
+}
+
+bool isValidBaseName(const QString &name)
+{
+    if (name.isEmpty() || name == QLatin1String(".") || name == QLatin1String("..")) {
+        return false;
+    }
+    for (const QChar c : name) {
+        if (c == QLatin1Char('/') || c == QLatin1Char('\\') || c == QLatin1Char(':') || c.unicode() < 0x20) {
+            return false;
+        }
+#ifdef Q_OS_WIN
+        if (QStringLiteral("<>\"|?*").contains(c)) {
+            return false;
+        }
+#endif
+    }
+#ifdef Q_OS_WIN
+    if (name.endsWith(QLatin1Char('.')) || name.endsWith(QLatin1Char(' '))) {
+        return false;
+    }
+#endif
+    return true;
+}
+
+bool renameFile(const QString &from, const QString &to)
+{
+    if (from != to && QFileInfo(from) == QFileInfo(to)) {
+        // Jen velikost písmen: oklikou přes dočasný název v téže složce.
+        const QString temp = from + QStringLiteral(".pv-rename-tmp");
+        if (!QFile::rename(from, temp)) {
+            return false;
+        }
+        if (QFile::rename(temp, to)) {
+            return true;
+        }
+        QFile::rename(temp, from);   // vrátit původní stav
+        return false;
+    }
+    return QFile::rename(from, to);
+}
+
 } // namespace pictureviewer::filenaming

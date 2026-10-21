@@ -16,7 +16,11 @@ ImageInfo ImageMetadataReader::read(const QString &path) const
     }
 
     QImageReader reader(path);
-    const QSize size = reader.size();
+    reader.setAutoTransform(true);   // EXIF orientace — fotka na výšku má mít rozměry na výšku
+    QSize size = reader.size();
+    if (size.isValid() && (reader.transformation() & QImageIOHandler::TransformationRotate90)) {
+        size.transpose();
+    }
     if (!size.isValid()) {
         throw std::runtime_error(QString("Nepodařilo se načíst metadata obrázku: %1").arg(path).toStdString());
     }

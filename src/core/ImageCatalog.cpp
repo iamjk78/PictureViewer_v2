@@ -149,7 +149,7 @@ QStringList ImageCatalog::loadFolderStreaming(const QString &folderPath,
 
     // Typ, velikost i čas změny dodá samotný výpis — žádné stat() na soubor.
     const QString dirPath = directory.absolutePath();
-    listFilesBulk(dirPath, [&](const ListedFile &file) {
+    const bool listed = listFilesBulk(dirPath, [&](const ListedFile &file) {
         if (isCancelled && isCancelled()) {
             cancelled = true;
             return false;
@@ -174,6 +174,12 @@ QStringList ImageCatalog::loadFolderStreaming(const QString &folderPath,
     });
     if (cancelled) {
         return {};
+    }
+    if (!listed) {
+        // Nečitelná složka (práva, odpojené úložiště) nebo chyba uprostřed výpisu:
+        // bez výjimky by se zobrazila jako prázdná, resp. neúplná složka.
+        throw std::runtime_error(
+            QString("Složku se nepodařilo přečíst: %1").arg(folderPath).toStdString());
     }
     if (!batch.isEmpty() && onBatch && !(isCancelled && isCancelled())) {
         onBatch(batch);

@@ -1104,6 +1104,47 @@ private slots:
         window.close();
     }
 
+    // Reentrance: BatchProgress::step() mezi soubory volá processEvents(), takže
+    // by se uprostřed hromadného mazání mohla zpracovat další klávesa D. Vnořené
+    // mazání by pracovalo s už zastaralým indexem a smazalo by další, nevybraný
+    // soubor. Za běhu dávky se souborové akce musí ignorovat.
+    void batch_keysPressedDuringTheBatchAreIgnored()
+    {
+        writeConfigForDelete();
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        makeImages(dir.path(), 8);
+        auto reset = qScopeGuard([] { BatchProgress::setStepDelayForTesting(0); });
+        BatchProgress::setStepDelayForTesting(120);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(dir.path()).filePath("img_1.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 8, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+
+        panel->clearSelection();
+        for (int row : {1, 2}) {
+            panel->item(row)->setSelected(true);
+        }
+        // Klávesa D přijde v druhém kroku dávky (v processEvents() uvnitř step()),
+        // kdy z výběru zbyl jediný soubor — vnořené mazání by sáhlo na "aktuální"
+        // (img_1), který vybraný není.
+        QTimer::singleShot(170, &window, [&window] { QTest::keyClick(&window, Qt::Key_D); });
+        QTest::keyClick(panel, Qt::Key_Delete);
+
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 6, 5000);
+        QTest::qWait(300);   // dojedou případné vnořené operace
+        // Přesunuly se právě 2 označené soubory, nic navíc.
+        QCOMPARE(jpgNames(QDir(dir.path()).filePath("Delete")),
+                 (QStringList{"img_2.jpg", "img_3.jpg"}));
+        QCOMPARE(jpgNames(dir.path()),
+                 (QStringList{"img_1.jpg", "img_4.jpg", "img_5.jpg", "img_6.jpg", "img_7.jpg", "img_8.jpg"}));
+        window.close();
+    }
+
     void imageLoader_prefetchWaitsWhilePaused()
     {
         QTemporaryDir dir;

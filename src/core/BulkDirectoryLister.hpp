@@ -22,7 +22,8 @@ struct ListedFile {
 // souborové systémy bez podpory getattrlistbulk) používají QDirIterator,
 // který na Windows metadata dostává s výpisem také.
 //
-// Vrací false, jen když se složku nepodařilo otevřít.
+// Vrací false, když se složku nepodařilo otevřít nebo čtení selhalo (i uprostřed
+// výpisu) — volající pak nesmí výsledek považovat za úplný.
 bool listFilesBulk(const QString &directory,
                    const std::function<bool(const ListedFile &)> &onFile);
 

@@ -113,7 +113,7 @@ void MainWindow::setupToolbar()
 
     m_openFolderAction->setIcon(QIcon(QStringLiteral(":/icons/icon_open_folder.png")));
     m_openFolderAction->setText(QString());
-    m_openFolderAction->setToolTip(tr("Otevřít složku (Ctrl+O)"));
+    m_openFolderAction->setToolTip(tr("Otevřít složku (Ctrl+Shift+O)"));
     toolbar->addAction(m_openFolderAction);
 
     m_reloadFolderAction = new QAction(QIcon(QStringLiteral(":/icons/icon_reload.png")), QString(), this);
@@ -731,7 +731,7 @@ void MainWindow::setupPdfToolbar()
     connect(gotoAction, &QAction::triggered, this, &MainWindow::onPdfGoToPage);
 
     auto *screenshotAction = new QAction(tr("Screenshot"), m_pdfToolbar);
-    screenshotAction->setToolTip(tr("Uložit aktuální stránku jako obrázek (JPEG) — pak použijte Uložit jako"));
+    screenshotAction->setToolTip(tr("Převést aktuální stránku na snímek (dokument se uvolní) — uložit ho lze přes Uložit jako"));
     connect(screenshotAction, &QAction::triggered, this, &MainWindow::onPdfScreenshot);
 
     m_pdfToolbar->addAction(prevAction);

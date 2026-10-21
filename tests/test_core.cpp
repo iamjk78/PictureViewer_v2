@@ -25,6 +25,7 @@
 #include "core/ContentState.hpp"
 #include "core/DiagLog.hpp"
 #include "core/ExifThumbnail.hpp"
+#include "core/ImageMetadataReader.hpp"
 #include "core/ImageSaveFormat.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FileStampIndex.hpp"
@@ -1927,6 +1928,89 @@ private slots:
 
         // Cesta v neexistující složce.
         QVERIFY(!saveImageAtomically(img, dir.filePath("neni/a.jpg"), "jpeg"));
+    }
+
+    // ── Přejmenování: validace názvu, kolize se sebou samým, změna velikosti písmen ──
+    void fileNaming_isValidBaseName()
+    {
+        QVERIFY(filenaming::isValidBaseName("dovolena 2024"));
+        QVERIFY(filenaming::isValidBaseName("a.b.c"));
+        QVERIFY(filenaming::isValidBaseName("Žluťoučký kůň"));
+        QVERIFY(!filenaming::isValidBaseName(""));
+        QVERIFY(!filenaming::isValidBaseName("."));
+        QVERIFY(!filenaming::isValidBaseName(".."));
+        QVERIFY(!filenaming::isValidBaseName("../x"));        // opustilo by složku
+        QVERIFY(!filenaming::isValidBaseName("pod/slozka"));
+        QVERIFY(!filenaming::isValidBaseName("/tmp/x"));      // absolutní cesta
+        QVERIFY(!filenaming::isValidBaseName("a\\b"));
+        QVERIFY(!filenaming::isValidBaseName("c:x"));
+        QVERIFY(!filenaming::isValidBaseName(QStringLiteral("a\nb")));
+    }
+
+    void fileNaming_caseOnlyRenameIsNotACollisionAndWorks()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString from = dir.filePath("photo.jpg");
+        QVERIFY(writeFileOfSize(from, 3));
+        const QString to = dir.filePath("PHOTO.jpg");
+
+        const QStringList sources{from};
+        const QStringList targets{to};
+        QVERIFY(filenaming::firstExistingTarget(targets, sources).isEmpty());   // tentýž soubor ≠ kolize
+
+        QVERIFY(filenaming::renameFile(from, to));
+        const QStringList names = QDir(dir.path()).entryList(QDir::Files);
+        QCOMPARE(names, QStringList{QStringLiteral("PHOTO.jpg")});   // jeden soubor, nové písmo
+        QCOMPARE(QFileInfo(to).size(), qint64(3));
+
+        // Skutečná kolize s JINÝM souborem se pořád hlásí.
+        QVERIFY(writeFileOfSize(dir.filePath("other.jpg"), 1));
+        QCOMPARE(filenaming::firstExistingTarget({dir.filePath("other.jpg")}, {to}), dir.filePath("other.jpg"));
+    }
+
+    // ── Výpis složky: chyby se nesmí tvářit jako prázdná složka ──────────────
+    void catalogStreaming_unreadableFolderThrowsInsteadOfBeingEmpty()
+    {
+#ifndef Q_OS_WIN
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFileOfSize(dir.filePath("a.jpg"), 1));
+        QFile::setPermissions(dir.path(), QFileDevice::Permissions{});   // žádná práva
+        const auto restore = qScopeGuard([&] {
+            QFile::setPermissions(dir.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        });
+        if (QFile(dir.path()).isReadable()) {
+            QSKIP("proces ignoruje práva (např. root)");
+        }
+        ImageCatalog catalog;
+        bool threw = false;
+        try {
+            catalog.loadFolderStreaming(dir.path(), false, true, true, false, [] { return false; }, {});
+        } catch (const std::exception &) {
+            threw = true;
+        }
+        QVERIFY(threw);
+#else
+        QSKIP("práva složky se na Windows takto netestují");
+#endif
+    }
+
+    // ── Metadata: rozměry fotky na výšku (EXIF orientace 6) ─────────────────
+    void metadataReader_respectsExifOrientation()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("portrait.jpg");
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(exiftest::jpegWithExifThumb(exiftest::quadrantImage(640, 480),
+                                            exiftest::quadrantImage(200, 150), 6));
+        f.close();
+
+        const ImageInfo info = ImageMetadataReader().read(path);
+        QCOMPARE(info.width, 480);    // uložených 640×480 otočených o 90° = 480×640 na výšku
+        QCOMPARE(info.height, 640);
     }
 
     void catalogStreaming_descendingReversesTheSortedResult()

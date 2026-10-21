@@ -95,9 +95,9 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     auto *seekFwdBtn  = new QPushButton(QStringLiteral("+10s ⏭"), this);
 
     stopBtn->setToolTip(tr("Zastavit (Esc)"));
-    seekBackBtn->setToolTip(tr("−10 sekund (←)"));
+    seekBackBtn->setToolTip(tr("−10 % délky (←)"));
     m_playPauseBtn->setToolTip(tr("Přehrát / Pauza (Mezerník)"));
-    seekFwdBtn->setToolTip(tr("+10 sekund (→)"));
+    seekFwdBtn->setToolTip(tr("+10 % délky (→)"));
 
     // Seek slider
     m_seekSlider = new QSlider(Qt::Horizontal, this);
@@ -194,6 +194,13 @@ void VideoPlayer::recreatePlayer()
         // emitovat do našich slotů už za nového videa.
         disconnect(m_player, nullptr, this, nullptr);
         m_player->stop();               // jinak by starý dohrával, než ho smaže event loop
+#ifdef Q_OS_WIN
+        // deleteLater() se nevyřídí ve vnořené smyčce událostí (tryWithRetry při
+        // mazání / přesunu), takže by přehrávač do té doby držel soubor otevřený
+        // (a zámek souboru brání rename / smazání). Jen Windows — na macOS se
+        // setSource() na přehrávači před zničením záměrně nedělá (AVFoundation).
+        m_player->setSource(QUrl());
+#endif
         m_player->setVideoOutput(nullptr);
         m_player->deleteLater();
         m_player = nullptr;
@@ -249,7 +256,11 @@ void VideoPlayer::recreatePlayer()
                     m_loadTimeoutTimer->stop();
                     m_bufferOverlay->hide();
                     emit playbackRetryStarted(m_playAttempt, MaxPlayAttempts);
-                    QTimer::singleShot(RetryDelayMs, this, &VideoPlayer::retryPlayFile);
+                    QTimer::singleShot(RetryDelayMs, this, [this, generation = m_playGeneration] {
+                        if (generation == m_playGeneration) {
+                            retryPlayFile();
+                        }
+                    });
                 } else {
                     m_playAttempt = 0;
                     m_loadTimeoutTimer->stop();
@@ -270,6 +281,7 @@ void VideoPlayer::recreatePlayer()
 
 void VideoPlayer::playFile(const QString &path)
 {
+    ++m_playGeneration;
     m_playAttempt = 0;
     m_currentPath  = path;
     m_rotationDeg  = 0;
@@ -290,6 +302,7 @@ void VideoPlayer::playFile(const QString &path)
 
 void VideoPlayer::stopPlayback()
 {
+    ++m_playGeneration;
     m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
     // Přehrávač se zahodí celý — po zastavení nesmí zůstat živá AVFoundation
@@ -301,6 +314,7 @@ void VideoPlayer::stopPlayback()
 
 void VideoPlayer::stopQuietly()
 {
+    ++m_playGeneration;
     m_playAttempt = 0;
     m_loadTimeoutTimer->stop();
     m_stoppingQuietly = true;

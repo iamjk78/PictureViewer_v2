@@ -11,6 +11,7 @@
 
 #include "app/ThumbnailPanel.hpp"
 #include <QHash>
+#include <QSet>
 #include <QKeyEvent>
 #include <QMainWindow>
 #include <QRect>
@@ -49,6 +50,16 @@ class UpdateChecker;
 class VideoPlayer;
 class VideoThumbnailWorker;
 struct MoveButtonInfo;
+
+// Nastaví příznak na dobu platnosti objektu (i při výjimce / předčasném návratu).
+struct ScopedFlag
+{
+    bool &flag;
+    explicit ScopedFlag(bool &f) : flag(f) { flag = true; }
+    ~ScopedFlag() { flag = false; }
+    ScopedFlag(const ScopedFlag &) = delete;
+    ScopedFlag &operator=(const ScopedFlag &) = delete;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -126,6 +137,11 @@ private slots:
     // Tiše zastaví video, pokud právě běží. Vrací true, když běželo —
     // jediné místo pro „uvolni soubor před manipulací" logiku.
     bool stopVideoIfPlaying();
+    // Windows: zobrazené PDF (QPdfDocument) a animovaný GIF (QMovie) drží soubor
+    // otevřený bez FILE_SHARE_DELETE, takže ho nejde smazat, přesunout ani
+    // přejmenovat. Před souborovou operací se proto uvolní. Vrací true, pokud
+    // se zobrazení vyprázdnilo (volající ho po operaci znovu zobrazí).
+    bool releaseDisplayedDocument();
     // Zastaví slideshow, pokud právě běží, a vrátí tlačítko/ikonu do klidového
     // stavu — samotné SlideshowController::stop() ikonu nepřepíná.
     void stopSlideshowIfRunning();
@@ -347,6 +363,8 @@ private:
     QString m_scanAutoShownPath;          // soubor zobrazený automaticky z první (neseřazené) dávky
     bool m_scanRequestedLocated = false;  // požadovaný soubor už je napojený na seznam
     int m_scanStreamedCount = 0;        // kolik souborů zatím přišlo
+    QSet<QString> m_removedDuringScan;            // smazané / přesunuté za běhu skenu
+    QHash<QString, QString> m_renamedDuringScan;  // přejmenované za běhu skenu (starý → nový)
     int m_indexBeforeScan = -1;          // m_currentIndex před displayPathEarly (pro zrušení skenu)
     QString m_folderBeforeScan;         // pro návrat při zrušení před první dávkou
     QWidget *m_scanProgressWidget = nullptr;   // "Načítám složku… N souborů [Zrušit]"
@@ -373,6 +391,12 @@ private:
     QLabel *m_warmupLabel = nullptr;
     QProgressBar *m_warmupBar = nullptr;
     QSharedPointer<FileStampIndex> m_fileStamps;   // otisky souborů z posledního výpisu složky
+    // Právě běží hromadná souborová operace (mazání / přesun). BatchProgress mezi
+    // soubory volá processEvents(), takže by se sem mohly dostat další klávesy
+    // a kliky — vnořená akce by pracovala s už zastaralým indexem a mohla by
+    // zasáhnout jiný než vybraný soubor. Vstupy souborových akcí proto za běhu
+    // dávky nic nedělají.
+    bool m_batchRunning = false;
     bool m_shutdownTimedOut = false;
     int m_statusToken = 0;   // zahazuje opožděná metadata z předchozího souboru
     bool m_isFullscreen = false;

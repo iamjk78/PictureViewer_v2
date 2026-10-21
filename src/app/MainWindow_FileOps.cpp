@@ -354,12 +354,35 @@ void MainWindow::cancelScan()
     m_scanStreamedCount = 0;
 }
 
-void MainWindow::onScanComplete(int generation, const QStringList &paths)
+void MainWindow::onScanComplete(int generation, const QStringList &scannedPaths)
 {
-    diag::ScopedTimer timer(QStringLiteral("onScanComplete: %1 souborů (UI)").arg(paths.size()), 50);
+    diag::ScopedTimer timer(QStringLiteral("onScanComplete: %1 souborů (UI)").arg(scannedPaths.size()), 50);
     if (m_shuttingDown || generation != m_scanGeneration) {
         return;
     }
+
+    // Hromadnou operaci nebo přejmenování lze udělat i za běhu skenu (aplikace se
+    // jen zeptá). Výpis ze skenu je ale starší než ony — smazané / přesunuté
+    // soubory by se v seznamu znovu objevily a přejmenované by měly starý název.
+    QStringList paths = scannedPaths;
+    if (!m_removedDuringScan.isEmpty() || !m_renamedDuringScan.isEmpty()) {
+        QStringList adjusted;
+        adjusted.reserve(paths.size());
+        for (const QString &p : std::as_const(paths)) {
+            if (m_removedDuringScan.contains(p)) {
+                continue;
+            }
+            const auto renamed = m_renamedDuringScan.constFind(p);
+            adjusted.append(renamed != m_renamedDuringScan.cend() ? renamed.value() : p);
+        }
+        paths = adjusted;
+        const auto requestedRenamed = m_renamedDuringScan.constFind(m_requestedFile);
+        if (requestedRenamed != m_renamedDuringScan.cend()) {
+            m_requestedFile = requestedRenamed.value();
+        }
+    }
+    m_removedDuringScan.clear();
+    m_renamedDuringScan.clear();
     hideScanProgress();
     setScanRunning(false);
     // Při postupném načítání se už nějaký soubor zobrazuje (a uživatel mohl
@@ -387,7 +410,12 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_unfilteredImagePaths.clear();
         m_currentIndex = -1;
         m_requestedFile.clear();
-        m_thumbnailPanel->clear();
+        // loadImages({}), ne clear(): clear() nezvýší generaci ani nezruší workery
+        // předchozí složky a v panelu by zůstala zastaralá evidence.
+        m_thumbnailPanel->loadImages({});
+        if (m_videoThumbnailWorker) {
+            m_videoThumbnailWorker->cancel();
+        }
         showEmptyContent(tr("Ve složce nebyly nalezeny žádné obrázky."));
         return;
     }
@@ -399,7 +427,17 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
     }
 
     if (!m_categoryFilterIds.isEmpty()) {
-        m_imagePaths = m_categoryManager->imagePathsWithAllCategories(m_categoryFilterIds);
+        // Filtr štítků vrací cesty z celé databáze (všech složek). Zobrazí se jen
+        // ty, které jsou ve skenované složce, v jejím pořadí — jinak by seznam
+        // obsahoval cizí a už neexistující soubory a ignoroval řazení.
+        const QStringList tagged = m_categoryManager->imagePathsWithAllCategories(m_categoryFilterIds);
+        const QSet<QString> taggedSet(tagged.begin(), tagged.end());
+        m_imagePaths.clear();
+        for (const QString &p : std::as_const(paths)) {
+            if (taggedSet.contains(p)) {
+                m_imagePaths.append(p);
+            }
+        }
     } else {
         m_imagePaths = paths;
     }
@@ -488,13 +526,15 @@ void MainWindow::reloadCurrentFolder()
 
 void MainWindow::loadFolder(const QString &folderPath)
 {
-    if (m_shuttingDown) {
+    if (m_shuttingDown || m_batchRunning) {
         return;
     }
 
     diag::markFolderStart(folderPath);
     m_folderBeforeScan = m_currentFolder;
     m_scanAutoShownPath.clear();
+    m_removedDuringScan.clear();
+    m_renamedDuringScan.clear();
     m_scanStreamed = false;
     m_scanRequestedLocated = false;
     m_scanStreamedCount = 0;
@@ -956,7 +996,13 @@ QStringList MainWindow::selectedOrCurrentFiles() const
 
 void MainWindow::deleteOrMoveCurrentImage()
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0 || m_batchRunning) {
+        return;
+    }
+    // Video spuštěné klávesou G drží procházení zamčené a akce nad souborem jsou
+    // zakázané — klávesy D / Delete ale míří sem mimo QAction. Index by navíc
+    // ukazoval na obrázek, který pod videem není vidět.
+    if (m_browsingLocked) {
         return;
     }
     // Klávesy D / Delete míří sem přes keyPressEvent PŘÍMO, mimo QAction —
@@ -1024,6 +1070,7 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
     // Na síťových discích bez podpory koše (viz stejný důvod u onDeleteCurrentFolder())
     // moveToTrash spolehlivě selže pro každý soubor skupiny — zeptat se na trvalé
     // smazání jen jednou (za celou dávku) a rozhodnutí uplatnit i na zbytek.
+    bool trashUnavailable = false;
     bool permanentDeleteAsked = false;
     bool permanentDeleteAllowed = false;
     // Soubor už smazaný jako pár předchozího souboru přeskočit, je-li i ve výběru.
@@ -1033,6 +1080,8 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
     if (companionListIsComplete(activeFiles.first())) {
         companionIndex = CompanionIndex::build(m_imagePaths);
     }
+    ScopedFlag batchFlag(m_batchRunning);
+    const bool documentReleased = releaseDisplayedDocument();
     BatchProgress progress(this, tr("Mazání souborů"), static_cast<int>(activeFiles.size()));
     int stepNumber = 0;
 
@@ -1059,7 +1108,13 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
             // Zastavit i video případně auto-přehrané předchozím odebráním —
             // jinak by na Windows zůstalo zamčené a moveToTrash by selhal.
             stopVideoIfPlaying();
-            bool removed = tryWithRetry([&] { return QFile::moveToTrash(filePath); });
+            // Úložiště bez koše selže pokaždé — po prvním selhání se další soubory
+            // zkusí jen jednou (8 pokusů po 250 ms = 2 s na soubor navíc).
+            bool removed = tryWithRetry([&] { return QFile::moveToTrash(filePath); },
+                                        trashUnavailable ? 1 : 8);
+            if (!removed) {
+                trashUnavailable = true;
+            }
             if (!removed) {
                 if (!permanentDeleteAsked) {
                     permanentDeleteAsked = true;
@@ -1096,6 +1151,9 @@ void MainWindow::deleteImageToTrash(const QStringList &activeFiles)
     if (removedAny) {
         showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
     }
+    if (documentReleased && !removedAny && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        showImage(m_currentIndex);   // nic se nesmazalo — vrátit zobrazení
+    }
     diag::log(QStringLiteral("mazání do koše: hotovo — smazáno %1, selhalo %2%3")
                   .arg(deletedCount).arg(failedCount)
                   .arg(progress.canceled() ? QStringLiteral(", přerušeno uživatelem") : QString()));
@@ -1119,7 +1177,7 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
 
     // Všechny soubory (i páry) jsou ve stejné složce → stejná složka Delete.
     const QString folderPath = QFileInfo(activeFiles.first()).absolutePath();
-    const QString deleteFolderPath = folderPath + QDir::separator() + QStringLiteral("Delete");
+    const QString deleteFolderPath = folderPath + QLatin1Char('/') + QStringLiteral("Delete");   // '/' i na Windows — cesty v aplikaci a v DB mají lomítka
 
     QDir deleteFolder(deleteFolderPath);
     if (!deleteFolder.exists()) {
@@ -1145,6 +1203,8 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
     if (companionListIsComplete(activeFiles.first())) {
         companionIndex = CompanionIndex::build(m_imagePaths);
     }
+    ScopedFlag batchFlag(m_batchRunning);
+    const bool documentReleased = releaseDisplayedDocument();
     BatchProgress progress(this, tr("Přesun do složky Delete"), static_cast<int>(activeFiles.size()));
     int stepNumber = 0;
 
@@ -1168,7 +1228,7 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
             if (!QFile::exists(filePath)) {
                 continue;
             }
-            const QString newPath = deleteFolderPath + QDir::separator() + QFileInfo(filePath).fileName();
+            const QString newPath = deleteFolderPath + QLatin1Char('/') + QFileInfo(filePath).fileName();
 
             // Zastavit i video případně auto-přehrané předchozím odebráním —
             // jinak by na Windows zůstalo zamčené a rename by selhal.
@@ -1212,6 +1272,9 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
         appendToHistory(m_deleteHistory, group);
         updateRecycleButtonState();
     }
+    if (documentReleased && !removedAny && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        showImage(m_currentIndex);   // nic se nepřesunulo — vrátit zobrazení
+    }
     diag::log(QStringLiteral("přesun do Delete: hotovo — přesunuto %1, selhalo %2%3")
                   .arg(movedCount).arg(failedCount)
                   .arg(progress.canceled() ? QStringLiteral(", přerušeno uživatelem") : QString()));
@@ -1228,7 +1291,7 @@ void MainWindow::moveImageToDeleteFolder(const QStringList &activeFiles)
 
 void MainWindow::renameCurrentImage()
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0 || m_batchRunning || m_browsingLocked) {
         return;
     }
     // Stejná pojistka jako u mazání — klávesa R jde sem mimo QAction.
@@ -1258,6 +1321,11 @@ void MainWindow::renameCurrentImage()
     if (!ok || newBaseName.isEmpty() || newBaseName == baseName) {
         return;
     }
+    if (!filenaming::isValidBaseName(newBaseName)) {
+        QMessageBox::warning(this, tr("Chyba"),
+            tr("Název obsahuje nepovolené znaky (například / \\ : nebo samotné tečky)."));
+        return;
+    }
 
     // Při zapnutém párování (Nastavení → Přesouvat/mazat i párové soubory)
     // musí přejmenování postihnout celou skupinu (obrázek + jeho video se
@@ -1276,7 +1344,7 @@ void MainWindow::renameCurrentImage()
     // aby skupina nezůstala rozpůlená.
     const QStringList targetPaths =
         filenaming::groupTargetPaths(filesToRename, folderPath, newBaseName);
-    const QString collision = filenaming::firstExistingTarget(targetPaths);
+    const QString collision = filenaming::firstExistingTarget(targetPaths, filesToRename);
     if (!collision.isEmpty()) {
         // U aktivního souboru je to prostá kolize jména; u párového souboru
         // (video k obrázku apod.) by bez upřesnění hláška zmínila jinou
@@ -1295,6 +1363,7 @@ void MainWindow::renameCurrentImage()
     // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
     // znovu z nové cesty.
     const bool videoWasPlaying = stopVideoIfPlaying();
+    const bool documentReleased = releaseDisplayedDocument();
 
     bool activeRenamed = false;
     QString activeNewPath;
@@ -1304,13 +1373,16 @@ void MainWindow::renameCurrentImage()
         const QString &oldPath = filesToRename.at(i);
         const QString &newPath = targetPaths.at(i);
 
-        if (tryWithRetry([&] { return QFile::rename(oldPath, newPath); })) {
+        if (tryWithRetry([&] { return filenaming::renameFile(oldPath, newPath); })) {
             if (m_categoryManager) {
                 m_categoryManager->renameImagePath(oldPath, newPath);
             }
             const int idx = m_imagePaths.indexOf(oldPath);
             if (idx >= 0) {
                 m_imagePaths[idx] = newPath;
+            }
+            if (m_scanRunning) {
+                m_renamedDuringScan.insert(oldPath, newPath);
             }
             m_thumbnailPanel->updateImagePath(oldPath, newPath);
             if (oldPath == currentPath) {
@@ -1333,6 +1405,8 @@ void MainWindow::renameCurrentImage()
 
     if (videoWasPlaying) {
         m_videoPlayer->playFile(activeRenamed ? activeNewPath : currentPath);
+    } else if (documentReleased && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        showImage(m_currentIndex);   // znovu zobrazit PDF / GIF (už pod novým názvem)
     }
 }
 
@@ -1410,7 +1484,7 @@ void MainWindow::onDeleteFolder()
 
 void MainWindow::onDeleteCurrentFolder()
 {
-    if (m_currentFolder.isEmpty()) {
+    if (m_currentFolder.isEmpty() || m_batchRunning) {
         return;
     }
 
@@ -1497,12 +1571,30 @@ void MainWindow::onDeleteCurrentFolder()
     m_statusLabel->setText(tr("Složka '%1' byla smazána. Žádná další složka k zobrazení.").arg(deletedName));
 }
 
+bool MainWindow::releaseDisplayedDocument()
+{
+#ifdef Q_OS_WIN
+    if (m_contentKind == contentstate::ContentKind::Pdf
+        || m_contentKind == contentstate::ContentKind::AnimatedGif) {
+        m_imageView->clearImage();
+        return true;
+    }
+#endif
+    return false;
+}
+
 bool MainWindow::stopVideoIfPlaying()
 {
     if (m_centralStack->currentWidget() != m_videoPlayer) {
         return false;
     }
     m_videoPlayer->stopQuietly();
+    // stopQuietly() signál stopped nevyšle, takže zámek procházení po videu
+    // spuštěném klávesou G (viz disableImageBrowsing) by zůstal napořád —
+    // aplikace by se uzamkla (např. po D, snímku obrazovky nebo přepnutí profilu).
+    if (m_browsingLocked) {
+        enableImageBrowsing();
+    }
     return true;
 }
 
@@ -1515,6 +1607,9 @@ void MainWindow::removeImageFromList(int index, bool showNext)
     // Zastavit video, pokud se právě přehrává — aby se video nezastavilo až později
     stopVideoIfPlaying();
 
+    if (m_scanRunning) {
+        m_removedDuringScan.insert(m_imagePaths.at(index));
+    }
     m_imagePaths.removeAt(index);
     m_thumbnailPanel->removeImage(index);
 

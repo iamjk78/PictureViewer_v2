@@ -407,7 +407,7 @@ QStringList MainWindow::resolveCompanionSet(const QString &activeFile, const QSt
 
 void MainWindow::onMoveButtonClicked(int moveButtonId)
 {
-    if (m_imagePaths.isEmpty() || m_currentIndex < 0) {
+    if (m_imagePaths.isEmpty() || m_currentIndex < 0 || m_batchRunning || m_browsingLocked) {
         return;
     }
     // Nad snímkem obrazovky ukazuje index na jiný soubor, než uživatel vidí.
@@ -436,6 +436,12 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
 
     int movedCount = 0;
     const int anchorIndex = m_currentIndex;
+    // Soubory před aktuálním, které se přesunou, posouvají index aktuálního —
+    // stejně jako u mazání (viz deleteImageToTrash) se musí odečíst, jinak se
+    // po hromadném přesunu zobrazí posunutý soubor.
+    const QSet<QString> beforeAnchor(m_imagePaths.begin(),
+                                     m_imagePaths.begin() + qMin(anchorIndex, static_cast<int>(m_imagePaths.size())));
+    int removedBeforeAnchor = 0;
     bool removedAny = false;
     // Soubor, který už byl přesunut jako pár, přeskočit, pokud je i ve výběru.
     QSet<QString> handled;
@@ -444,6 +450,8 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     if (!filesToMove.isEmpty() && companionListIsComplete(filesToMove.first())) {
         companionIndex = CompanionIndex::build(m_imagePaths);
     }
+    ScopedFlag batchFlag(m_batchRunning);
+    const bool documentReleased = releaseDisplayedDocument();
     BatchProgress progress(this, tr("Přesun do složky"), static_cast<int>(filesToMove.size()));
     int stepNumber = 0;
     for (const QString &activeFile : filesToMove) {
@@ -498,6 +506,9 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
                 // (pár mimo filtr se jen přesune na disku).
                 const int idx = m_imagePaths.indexOf(f);
                 if (idx >= 0) {
+                    if (beforeAnchor.contains(f)) {
+                        ++removedBeforeAnchor;
+                    }
                     removeImageFromList(idx, /*showNext=*/false);
                     removedAny = true;
                 }
@@ -509,7 +520,9 @@ void MainWindow::onMoveButtonClicked(int moveButtonId)
     }
 
     if (removedAny) {
-        showCurrentAfterRemoval(anchorIndex);
+        showCurrentAfterRemoval(anchorIndex - removedBeforeAnchor);
+    } else if (documentReleased && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
+        showImage(m_currentIndex);   // nic se nepřesunulo — vrátit zobrazení PDF / GIF
     }
     updateMoveUndoButtonState();
     diag::log(QStringLiteral("přesun do '%1': hotovo — přesunuto %2%3")
@@ -534,7 +547,7 @@ void MainWindow::appendToHistory(QList<MoveGroup> &history, const MoveGroup &gro
 
 void MainWindow::undoLastGroup(QList<MoveGroup> &history, const QString &notFoundMessage)
 {
-    if (history.isEmpty()) {
+    if (history.isEmpty() || m_batchRunning) {
         return;
     }
 

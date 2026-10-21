@@ -40,6 +40,7 @@
 #include <QScreen>
 #include <QCursor>
 #include "core/DiagLog.hpp"
+#include "core/FileNaming.hpp"
 #include <QDesktopServices>
 #include <QElapsedTimer>
 #include <QDirIterator>
@@ -1064,6 +1065,19 @@ QString MainWindow::runSaveAsDialog(const QString &originalPath, const QString &
         const QFileInfo typed(baseName);
         if (typed.suffix().compare(targetExtension, Qt::CaseInsensitive) == 0) {
             baseName = typed.completeBaseName();
+        }
+
+        if (!filenaming::isValidBaseName(baseName)) {
+            QMessageBox::warning(this, tr("Chyba"),
+                tr("Název obsahuje nepovolené znaky (například / \\ : nebo samotné tečky)."));
+            bool again = false;
+            const QString fixed = QInputDialog::getText(
+                this, tr("Přejmenovat"), tr("Nový název:"), QLineEdit::Normal, origBase, &again);
+            if (!again || fixed.trimmed().isEmpty()) {
+                return {};
+            }
+            baseName = fixed.trimmed();
+            continue;
         }
 
         const QString targetName = baseName + QStringLiteral(".") + targetExtension;

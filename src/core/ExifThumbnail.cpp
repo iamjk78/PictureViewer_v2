@@ -72,7 +72,7 @@ bool parseTiff(const uchar *tiff, qsizetype size, ExifInfo *info)
     for (int ifdIndex = 0; ifdIndex < 2 && ifdOffset > 0; ++ifdIndex) {
         const auto count = rd.u16(ifdOffset);
         if (!count) {
-            return ifdIndex > 0;
+            return false;
         }
         for (int i = 0; i < *count; ++i) {
             const qsizetype entry = ifdOffset + 2 + qsizetype(i) * 12;
@@ -133,7 +133,7 @@ QImage extractExifThumbnail(const QByteArray &header, int minSide)
     QSize mainSize;
 
     qsizetype pos = 2;
-    while (pos + 4 <= size && (!haveExif || !mainSize.isValid())) {
+    while (pos + 4 <= size && (!haveExif || mainSize.width() <= 0 || mainSize.height() <= 0)) {
         if (data[pos] != 0xFF) {
             break;
         }
@@ -162,7 +162,7 @@ QImage extractExifThumbnail(const QByteArray &header, int minSide)
         }
         pos += 2 + length;
     }
-    if (!haveExif || !mainSize.isValid()) {
+    if (!haveExif || mainSize.width() <= 0 || mainSize.height() <= 0) {
         return {};
     }
 

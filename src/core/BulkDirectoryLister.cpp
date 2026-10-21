@@ -49,7 +49,7 @@ bool listWithDirIterator(const QString &directory,
 
 #ifdef Q_OS_MACOS
 
-enum class BulkResult { Done, Unsupported, OpenFailed };
+enum class BulkResult { Done, Unsupported, OpenFailed, Error };
 
 BulkResult listWithGetattrlistbulk(const QString &directory,
                                    const std::function<bool(const ListedFile &)> &onFile)
@@ -79,6 +79,7 @@ BulkResult listWithGetattrlistbulk(const QString &directory,
     while (!stop) {
         timer.restart();
         const int count = ::getattrlistbulk(fd, &request, buffer.data(), buffer.size(), 0);
+        const int bulkErrno = errno;   // hned — logování níž errno může změnit
         ++calls;
         // Do logu první volání a každé pomalé — ukáže, jestli se čeká na úložiště.
         if (calls == 1 || timer.elapsed() >= 500) {
@@ -88,8 +89,11 @@ BulkResult listWithGetattrlistbulk(const QString &directory,
         total += qMax(count, 0);
         if (count < 0) {
             // Nepodporuje-li to souborový systém a ještě nic nevrátil, zkusí se záloha.
-            result = (first && (errno == ENOTSUP || errno == EINVAL))
-                ? BulkResult::Unsupported : BulkResult::Done;
+            // Nepodporuje-li to souborový systém a ještě nic nevrátil, zkusí se záloha.
+            // Jakákoli jiná chyba (EIO, ETIMEDOUT na SMB, …) i uprostřed výpisu je
+            // chyba: částečný seznam se nesmí vydávat za úplný.
+            result = (first && (bulkErrno == ENOTSUP || bulkErrno == EINVAL))
+                ? BulkResult::Unsupported : BulkResult::Error;
             break;
         }
         if (count == 0) {
@@ -182,6 +186,7 @@ bool listFilesBulk(const QString &directory,
         case BulkResult::Done:
             return true;
         case BulkResult::OpenFailed:
+        case BulkResult::Error:
             return false;
         case BulkResult::Unsupported:
             break;

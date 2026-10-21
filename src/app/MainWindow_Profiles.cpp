@@ -153,7 +153,11 @@ void MainWindow::switchProfile(const QString &profileName)
     // Move buttons a historie přesunů jsou per-profil (viz SettingsManager) —
     // historie starého profilu už neodpovídá souborům nového profilu.
     m_moveHistory.clear();
+    m_deleteHistory.clear();
     updateMoveUndoButtonState();
+    updateRecycleButtonState();
+    stopSlideshowIfRunning();
+    m_requestedFile.clear();
 
     // Obnovit UI.
     m_imagePaths.clear();
@@ -161,7 +165,8 @@ void MainWindow::switchProfile(const QString &profileName)
     m_categoryFilterIds.clear();
     m_currentIndex = -1;
     m_currentFolder.clear();
-    m_imageView->clearImage();
+    // showEmptyContent místo pouhého clearImage(): uklidí i druh obsahu a stav akcí.
+    showEmptyContent(tr("Vyber složku s obrázky."));
     // loadImages({}) místo pouhého clear() — clear() by smazal položky, ale
     // ponechal by zastaralé ukazatele v interní mapě cesta→položka; loadImages()
     // uklidí obojí konzistentně (a bumpne generaci proti pozdě doručeným miniaturám).
@@ -302,6 +307,13 @@ void MainWindow::manageProfiles()
         if (old.isEmpty()) {
             return;
         }
+        // Aktivní profil má otevřené nastavení i databázi štítků v jeho složce:
+        // na Windows by přejmenování složky selhalo, na macOS by aplikace dál
+        // zapisovala do staré cesty a vznikl by osiřelý profil.
+        if (old == m_profileManager->activeProfile()) {
+            showError(tr("Aktivní profil nelze přejmenovat — nejdřív přepni na jiný profil."));
+            return;
+        }
         bool ok = false;
         const QString name = QInputDialog::getText(
             &dialog, tr("Přejmenovat profil"), tr("Nový název:"),
@@ -349,59 +361,17 @@ void MainWindow::manageProfiles()
         if (reply != QMessageBox::Yes) {
             return;
         }
-        const bool wasActive = (name == m_profileManager->activeProfile());
+        // Aktivní profil má otevřenou databázi štítků i nastavení — smazání jeho
+        // složky by na Windows selhalo (a výsledek se ignoroval) a obnova stavu
+        // po smazání duplikovala switchProfile() a opakovaně na něco zapomínala
+        // (zrušení skenu, cache miniatur). Nejdřív se tedy musí přepnout jinam.
+        if (name == m_profileManager->activeProfile()) {
+            showError(tr("Aktivní profil nelze smazat — nejdřív přepni na jiný profil."));
+            return;
+        }
         if (m_profileManager->deleteProfile(name)) {
             fillList();
             refreshProfileMenu();
-            // Pokud jsme smazali aktivní profil, ProfileManager přepnul na jiný —
-            // přenačíst data pro nově aktivní profil.
-            if (wasActive) {
-                if (stopVideoIfPlaying()) {
-                    m_centralStack->setCurrentWidget(m_imageView);
-                }
-                const QString newActive = m_profileManager->activeProfile();
-                m_settingsManager = std::make_unique<SettingsManager>(
-                    m_profileManager->configPath(newActive), newActive);
-                m_videoPlayer->setSettingsManager(m_settingsManager.get());
-                m_categoryManager = std::make_unique<CategoryManager>(
-                    m_profileManager->dbPath(newActive));
-                m_moveHistory.clear();
-                updateMoveUndoButtonState();
-                m_imagePaths.clear();
-                m_unfilteredImagePaths.clear();
-                m_categoryFilterIds.clear();
-                m_currentIndex = -1;
-                m_currentFolder.clear();
-                m_imageView->clearImage();
-                m_thumbnailPanel->loadImages({});
-                refreshCategoryButtons();
-                updateCategoryFilterButtons();
-                refreshFavoriteButtons();
-                updateFavoritesMenu();
-                refreshMoveButtons();
-                updateSortButtonText();
-                applyUiLayout(profileUiLayoutFromString(m_settingsManager->uiLayout()));
-
-                m_favoritesToolbar->setVisible(m_settingsManager->favoritesToolbarVisible());
-                m_categoriesToolbar->setVisible(m_settingsManager->categoriesToolbarVisible());
-                m_moveToolbar->setVisible(m_settingsManager->moveToolbarVisible());
-                m_folderNavToolbar->setVisible(m_settingsManager->navigationToolbarVisible());
-                if (m_folderNavToolbar->isVisible()) {
-                    refreshFolderNavData();
-                }
-
-                m_rememberLastFolderAction->setChecked(m_settingsManager->rememberLastFolder());
-                m_enableDeleteImageAction->setChecked(m_settingsManager->enableDeleteImage());
-                m_enableMoveToDeleteAction->setChecked(m_settingsManager->enableMoveToDelete());
-                m_askConfirmationAction->setChecked(m_settingsManager->askConfirmationDelete());
-                m_moveCompanionAction->setChecked(m_settingsManager->moveCompanionFiles());
-                updateConfirmationActionState();
-                m_enableImagesAction->setChecked(m_settingsManager->enableImages());
-                m_enableVideosAction->setChecked(m_settingsManager->enableVideos());
-                m_enablePdfProcessingAction->setChecked(m_settingsManager->enablePdfProcessing());
-
-                restoreLastFolder();
-            }
         } else {
             showError(tr("Nelze smazat profil."));
         }

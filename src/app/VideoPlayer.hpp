@@ -130,6 +130,11 @@ private:
 
     // Retry mechanismus pro případ selhání přehrávání
     int m_playAttempt = 0;
+    // Zvyšuje se při každém playFile() / zastavení. Odložený opakovaný pokus si
+    // ji zapamatuje a zahodí se, pokud mezitím uživatel video opustil — jinak by
+    // retryPlayFile() po 250 ms oživil skryté přehrávání (se zvukem, na Windows
+    // se zamčeným souborem) a nakonec hlásil chybu k videu, které už není vidět.
+    int m_playGeneration = 0;
     static constexpr int MaxPlayAttempts = 3;
     static constexpr int RetryDelayMs = 250;
 };

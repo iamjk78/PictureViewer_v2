@@ -31,7 +31,12 @@ QString realFileName(const QFileInfo &candidate)
     }
     return candidate.fileName();
 #else
-    return QFileInfo(candidate.canonicalFilePath()).fileName();
+    // canonicalFilePath() rozbaluje i symbolický odkaz v POSLEDNÍM segmentu: pár
+    // "IMG_1.mov" → odkaz na "IMG_2.jpg" by vrátil cizí soubor (a hromadné
+    // mazání / přesun by zasáhlo cizí fotku). Výsledek se přijme jen pokud se od
+    // kandidáta liší nanejvýš velikostí písmen, jinak platí název kandidáta.
+    const QString real = QFileInfo(candidate.canonicalFilePath()).fileName();
+    return real.compare(candidate.fileName(), Qt::CaseInsensitive) == 0 ? real : candidate.fileName();
 #endif
 }
 
