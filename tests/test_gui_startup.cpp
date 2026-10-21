@@ -1054,6 +1054,56 @@ private slots:
         QVERIFY2(bad.isEmpty(), qPrintable(bad.mid(0, 10).join("; ")));
     }
 
+    // Vlastní fondy panelu nejsou globální — zavření okna na ně musí čekat
+    // s limitem. Nečinný panel: hotovo hned; panel s bezprostředně rozjetými
+    // workery: do limitu doběhnou (obrázky v testu jsou malé).
+    void thumbnails_waitForWorkersReturnsWhenIdleAndAfterBurst()
+    {
+        QTemporaryDir dir, cache;
+        QVERIFY(dir.isValid() && cache.isValid());
+        const QStringList paths = makeImagePaths(dir.path(), 40);
+
+        ThumbnailPanel panel;
+        panel.setDiskCache(true, cache.path());
+        panel.resize(220, 480);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        QVERIFY(panel.waitForWorkers(1000));   // nic neběží
+
+        panel.loadImages(paths);
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.iconAt(0).isNull(), 5000);
+        panel.shutdown();
+        QVERIFY(panel.waitForWorkers(5000));
+    }
+
+    // Otevření souboru z JINÉ složky: do první dávky se zobrazuje soubor z nové
+    // složky, ale index patří staré. D v tu chvíli nesmí smazat soubor staré
+    // složky, který uživatel nevidí.
+    void deleteWhileAnotherFolderIsOpening_doesNotTouchTheOldFolder()
+    {
+        writeConfigForDelete();
+        QTemporaryDir oldDir, newDir;
+        QVERIFY(oldDir.isValid() && newDir.isValid());
+        makeImages(oldDir.path(), 3);
+        makeImages(newDir.path(), 3);
+
+        MainWindow window;
+        window.show();
+        window.openFile(QDir(oldDir.path()).filePath("img_1.jpg"));
+        auto *panel = window.findChild<ThumbnailPanel *>();
+        QVERIFY(panel != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(panel->count(), 3, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!statusMentions(window, QStringLiteral("Načítám složku…")), 5000);
+
+        // Hned (bez zpracování výsledku skenu) stisknout D.
+        window.openFile(QDir(newDir.path()).filePath("img_2.jpg"));
+        QTest::keyClick(&window, Qt::Key_D);
+
+        QCOMPARE(jpgNames(oldDir.path()), (QStringList{"img_1.jpg", "img_2.jpg", "img_3.jpg"}));
+        QVERIFY(!QDir(oldDir.path()).exists("Delete"));
+        window.close();
+    }
+
     void imageLoader_prefetchWaitsWhilePaused()
     {
         QTemporaryDir dir;

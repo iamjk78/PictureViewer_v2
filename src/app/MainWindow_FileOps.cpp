@@ -18,6 +18,7 @@
 #include "core/DiagLog.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
+#include "core/ImageSaveFormat.hpp"
 #include "core/ImageMetadataReader.hpp"
 #include "core/ImageFormats.hpp"
 #include "workers/FolderScanWorker.hpp"
@@ -339,6 +340,11 @@ void MainWindow::cancelScan()
         m_requestedFile.clear();
         refreshFolderNavData();
         m_statusLabel->setText(tr("Načítání složky zrušeno."));
+        // Vrátit zobrazení na soubor původní složky (po displayPathEarly je v okně
+        // soubor z té zrušené).
+        if (m_indexBeforeScan >= 0 && m_indexBeforeScan < m_imagePaths.size()) {
+            showImage(m_indexBeforeScan);
+        }
     } else {
         m_statusLabel->setText(
             tr("Načítání zrušeno — zobrazeno %1 souborů (seznam není úplný ani seřazený, F5 načte složku znovu).")
@@ -410,15 +416,18 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_videoThumbnailWorker->cancel();
     }
 
+    // Index se hledá v m_imagePaths — v seznamu, který se opravdu zobrazuje.
+    // S aktivním filtrem štítků je to jiný (užší) seznam než `paths` ze skenu;
+    // index z `paths` by ukazoval na jiný soubor, než který se měl zobrazit.
     int index = 0;
     if (!m_requestedFile.isEmpty()) {
-        int requestedIndex = paths.indexOf(m_requestedFile);
+        int requestedIndex = m_imagePaths.indexOf(m_requestedFile);
         if (requestedIndex < 0) {
             // Cesta se nemusí shodovat znak po znaku (symlink, jiná normalizace
             // unicode v názvu) — zkusit dohledat aspoň podle jména souboru.
             const QString requestedFileName = QFileInfo(m_requestedFile).fileName();
-            for (int i = 0; i < paths.count(); ++i) {
-                if (QFileInfo(paths.at(i)).fileName() == requestedFileName) {
+            for (int i = 0; i < m_imagePaths.count(); ++i) {
+                if (QFileInfo(m_imagePaths.at(i)).fileName() == requestedFileName) {
                     requestedIndex = i;
                     break;
                 }
@@ -430,7 +439,14 @@ void MainWindow::onScanComplete(int generation, const QStringList &paths)
         m_requestedFile.clear();
     }
 
-    showImage(index);
+    // Prázdný filtrovaný seznam: není co zobrazit (a showImage(0) by tiše skončil
+    // a nechal m_currentIndex ze starého seznamu).
+    if (m_imagePaths.isEmpty()) {
+        m_currentIndex = -1;
+        showEmptyContent(tr("Žádný soubor neodpovídá zvolenému filtru štítků."));
+    } else {
+        showImage(index);
+    }
 
     if (m_rememberLastFolderAction->isChecked()) {
         m_settingsManager->setLastFolder(paths.first().section('/', 0, -2));
@@ -497,8 +513,15 @@ void MainWindow::loadFolder(const QString &folderPath)
         refreshFolderNavData();
     }
 
+    m_indexBeforeScan = -1;
     if (!m_requestedFile.isEmpty()) {
         displayPathEarly(m_requestedFile);
+        // Zobrazuje se soubor z NOVÉ složky, ale m_imagePaths/m_currentIndex jsou
+        // do první dávky ještě ze staré. Index zneplatnit, jinak by D / přesun /
+        // přejmenování zasáhly soubor staré složky, který uživatel nevidí.
+        m_indexBeforeScan = m_currentIndex;
+        m_currentIndex = -1;
+        applyActionStates();
     }
 
     if (m_folderScanWorker != nullptr) {
@@ -837,6 +860,7 @@ void MainWindow::onImageDecoded(const QString &path, const QImage &image)
 
     if (image.isNull()) {
         m_statusLabel->setText(tr("Nepodařilo se načíst soubor: %1").arg(path));
+        applyActionStates();
         return;
     }
     m_imageView->setImage(image);
@@ -1563,6 +1587,8 @@ void MainWindow::applyActionStates()
     status.hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
     status.hasFiles       = !m_imagePaths.isEmpty();
     status.browsingLocked = m_browsingLocked;
+    // Dokud se čeká na dekódování, ImageView ukazuje jen náhled z panelu.
+    status.contentLoading = !m_pendingDisplayPath.isEmpty();
 
     const contentstate::ActionStates s = contentstate::deriveActionStates(status);
 
@@ -1593,16 +1619,29 @@ void MainWindow::applyActionStates()
     }
 }
 
-void MainWindow::saveImageToPath(const QString &targetPath)
+bool MainWindow::saveImageToPath(const QString &targetPath)
 {
     const QImage img = m_imageView->displayedImage();
     if (img.isNull()) {
-        return;
+        return false;
     }
-    if (!img.save(targetPath, "JPEG", 92)) {
+    // Soubor musí mít formát, který říká jeho přípona (dřív se do .png, .webp
+    // apod. zapisovala JPEG data). Formát, který Qt zapsat neumí (HEIC, GIF),
+    // originál NEPŘEPÍŠE — nabídne se uložení jako JPEG/PNG.
+    const QByteArray format = writableFormatForPath(targetPath);
+    if (format.isEmpty()) {
+        QMessageBox::warning(this, tr("Nelze uložit"),
+            tr("Formát souboru %1 aplikace zapisovat neumí, originál zůstal beze změny. "
+               "Použijte Uložit jako a zvolte JPEG nebo PNG.").arg(QFileInfo(targetPath).fileName()));
+        return false;
+    }
+    // Zápis přes dočasný soubor: při chybě (plný disk, přerušení) originál zůstane.
+    if (!saveImageAtomically(img, targetPath, format.constData(), format == "jpeg" ? 92 : -1)) {
         QMessageBox::critical(this, tr("Chyba ukládání"),
             tr("Soubor se nepodařilo uložit:\n%1").arg(targetPath));
+        return false;
     }
+    return true;
 }
 
 void MainWindow::onSaveImage()
@@ -1631,15 +1670,15 @@ void MainWindow::onSaveImage()
     msgBox.exec();
 
     if (msgBox.clickedButton() == btnYes) {
-        saveImageToPath(currentPath);
-        m_imageModified = false;
-        applyActionStates();
+        if (saveImageToPath(currentPath)) {
+            m_imageModified = false;
+            applyActionStates();
+        }
     } else if (msgBox.clickedButton() == btnRename) {
         // Sem se lze dostat jen pro statický obrázek (tlačítko Uložit je pro
         // video vždy neaktivní), výstup je tedy vždy JPEG.
         const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"));
-        if (!targetPath.isEmpty()) {
-            saveImageToPath(targetPath);
+        if (!targetPath.isEmpty() && saveImageToPath(targetPath)) {
             const QString targetDir = QFileInfo(targetPath).absolutePath();
             m_requestedFile = targetPath;
             loadFolder(targetDir);
@@ -1703,8 +1742,7 @@ void MainWindow::onSaveAsImage()
         : QString();
 
     const QString targetPath = runSaveAsDialog(currentPath, QStringLiteral("jpg"), defaultBaseName);
-    if (!targetPath.isEmpty()) {
-        saveImageToPath(targetPath);
+    if (!targetPath.isEmpty() && saveImageToPath(targetPath)) {
         const QString targetDir = QFileInfo(targetPath).absolutePath();
         m_requestedFile = targetPath;
         loadFolder(targetDir);

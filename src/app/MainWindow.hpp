@@ -347,6 +347,7 @@ private:
     QString m_scanAutoShownPath;          // soubor zobrazený automaticky z první (neseřazené) dávky
     bool m_scanRequestedLocated = false;  // požadovaný soubor už je napojený na seznam
     int m_scanStreamedCount = 0;        // kolik souborů zatím přišlo
+    int m_indexBeforeScan = -1;          // m_currentIndex před displayPathEarly (pro zrušení skenu)
     QString m_folderBeforeScan;         // pro návrat při zrušení před první dávkou
     QWidget *m_scanProgressWidget = nullptr;   // "Načítám složku… N souborů [Zrušit]"
     QLabel *m_scanProgressLabel = nullptr;
@@ -515,7 +516,7 @@ private:
     // ── Ukládání obrázku ─────────────────────────────────────────────────────
     void onSaveImage();
     void onSaveAsImage();
-    void saveImageToPath(const QString &targetPath);
+    bool saveImageToPath(const QString &targetPath);
     // Zobrazí dialog pro zadání názvu a výběr cílové složky. Kolizi jména
     // v cílové složce řeší smyčkou (Přepsat / Přejmenovat / Zrušit), takže
     // funkce vrátí buď volnou cestu, nebo prázdný řetězec při zrušení —

@@ -41,6 +41,7 @@
 #include <QCursor>
 #include "core/DiagLog.hpp"
 #include <QDesktopServices>
+#include <QElapsedTimer>
 #include <QDirIterator>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -476,7 +477,13 @@ void MainWindow::closeEvent(QCloseEvent *event)
     cancelAllWorkers();
     // Vlákno zaseknuté v čtení ze sítě nejde přerušit; déle než pár sekund se
     // na něj nečeká (viz shutdownTimedOut()).
-    m_shutdownTimedOut = !QThreadPool::globalInstance()->waitForDone(3000);
+    // Jeden společný limit pro globální fond i vlastní fondy panelu miniatur.
+    QElapsedTimer shutdownTimer;
+    shutdownTimer.start();
+    const bool globalDone = QThreadPool::globalInstance()->waitForDone(3000);
+    const bool panelDone = m_thumbnailPanel->waitForWorkers(
+        static_cast<int>(qMax<qint64>(0, 3000 - shutdownTimer.elapsed())));
+    m_shutdownTimedOut = !(globalDone && panelDone);
     diag::log(m_shutdownTimedOut
                   ? QStringLiteral("ukončení: vlákna na pozadí se do 3 s nezastavila (čtení ze sítě)")
                   : QStringLiteral("ukončení: vlákna na pozadí doběhla, zavírám čistě"));

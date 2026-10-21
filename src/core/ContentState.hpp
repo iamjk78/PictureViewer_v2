@@ -27,6 +27,10 @@ struct ContentStatus {
     bool hasCurrentFile = false;
     // Seznam souborů složky není prázdný.
     bool hasFiles = false;
+    // Obrázek se ještě dekóduje a zobrazuje se jen jeho náhled (192 px).
+    // Úpravy a uložení by pracovaly s tímto náhledem, ne s originálem — Uložit
+    // by ho přepsalo miniaturou.
+    bool contentLoading = false;
     // Procházení je zamčené (video spuštěné klávesou G — viz
     // MainWindow::disableImageBrowsing).
     bool browsingLocked = false;

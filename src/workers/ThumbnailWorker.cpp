@@ -2,6 +2,7 @@
 
 #include "core/DiagLog.hpp"
 #include "core/ExifThumbnail.hpp"
+#include "core/ImageSaveFormat.hpp"
 #include "core/ImageFormats.hpp"
 
 #include <QCryptographicHash>
@@ -174,7 +175,7 @@ QImage ThumbnailWorker::loadThumbnail(const QString &path) const
     if (!cacheFile.isEmpty() && !thumbnail.isNull()) {
         QDir().mkpath(QFileInfo(cacheFile).absolutePath());
         // JPEG pro fotky (10–20 kB), PNG jen při průhlednosti
-        thumbnail.save(cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
+        saveImageAtomically(thumbnail, cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
     }
 
     return thumbnail;
@@ -199,7 +200,7 @@ bool ThumbnailWorker::warmOne(const QString &path) const
     }
     ++diag::thumb().generated;
     QDir().mkpath(QFileInfo(cacheFile).absolutePath());
-    thumbnail.save(cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
+    saveImageAtomically(thumbnail, cacheFile, thumbnail.hasAlphaChannel() ? "PNG" : "JPG", 90);
     return true;
 }
 

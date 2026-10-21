@@ -25,6 +25,7 @@
 #include "core/ContentState.hpp"
 #include "core/DiagLog.hpp"
 #include "core/ExifThumbnail.hpp"
+#include "core/ImageSaveFormat.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FileStampIndex.hpp"
 #include "core/FolderNavigator.hpp"
@@ -1848,6 +1849,84 @@ private slots:
         const QString after = QString::fromUtf8(again.readAll());
         QVERIFY(after.contains("první zpráva"));
         QVERIFY(after.contains("druhá zpráva"));
+    }
+
+    // ── Obrázek se ještě načítá (jen náhled) ─────────────────────────────────
+    // Úpravy a uložení nad 192px náhledem by přepsaly originál miniaturou.
+    void contentState_loadingImageBlocksEditAndSave()
+    {
+        using namespace pictureviewer::contentstate;
+        ContentStatus st;
+        st.kind = ContentKind::Image;
+        st.hasCurrentFile = true;
+        st.hasFiles = true;
+        st.modified = true;
+
+        QVERIFY(deriveActionStates(st).rotate);   // bez načítání vše jako dřív
+        QVERIFY(deriveActionStates(st).crop);
+        QVERIFY(deriveActionStates(st).save);
+        QVERIFY(deriveActionStates(st).saveAs);
+
+        st.contentLoading = true;
+        const ActionStates s = deriveActionStates(st);
+        QVERIFY(!s.rotate);
+        QVERIFY(!s.crop);
+        QVERIFY(!s.save);
+        QVERIFY(!s.saveAs);
+        QVERIFY(s.deleteFile);      // akce nad souborem a procházení zůstávají
+        QVERIFY(s.next);
+
+        // PDF ořez a snímek obrazovky se načítáním obrázku netýkají.
+        st.kind = ContentKind::Pdf;
+        QVERIFY(deriveActionStates(st).crop);
+    }
+
+    // ── Formát a atomický zápis obrázku ──────────────────────────────────────
+    void imageSaveFormat_followsTheSuffix()
+    {
+        QCOMPARE(writableFormatForPath("/a/b.jpg"), QByteArray("jpeg"));
+        QCOMPARE(writableFormatForPath("/a/B.JPEG"), QByteArray("jpeg"));
+        QCOMPARE(writableFormatForPath("/a/b.png"), QByteArray("png"));
+        QCOMPARE(writableFormatForPath("/a/b.PNG"), QByteArray("png"));
+        QVERIFY(writableFormatForPath("/a/b.xyz").isEmpty());    // zapsat neumí → originál se nepřepíše
+        QVERIFY(writableFormatForPath("/a/b.gif").isEmpty());
+        QVERIFY(writableFormatForPath("/a/bez_pripony").isEmpty());
+    }
+
+    void imageSaveFormat_pngIsReallyPng()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QImage img(8, 8, QImage::Format_ARGB32);
+        img.fill(QColor(10, 20, 30, 128));   // průhlednost se v JPEG neuchová
+        const QString path = dir.filePath("a.png");
+        QVERIFY(saveImageAtomically(img, path, writableFormatForPath(path).constData()));
+
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.read(4), QByteArray("\x89PNG"));
+        f.close();
+        QCOMPARE(QImage(path).pixelColor(0, 0).alpha(), 128);
+    }
+
+    void imageSaveFormat_atomicSaveLeavesNoTempAndKeepsOriginalOnFailure()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QImage img(8, 8, QImage::Format_RGB32);
+        img.fill(Qt::red);
+        const QString path = dir.filePath("a.jpg");
+        QVERIFY(saveImageAtomically(img, path, "jpeg", 90));
+        QCOMPARE(QDir(dir.path()).entryList(QDir::Files).size(), 1);   // žádný dočasný soubor
+
+        // Neplatný formát: zápis selže a původní soubor zůstane beze změny.
+        const qint64 sizeBefore = QFileInfo(path).size();
+        QVERIFY(!saveImageAtomically(img, path, "neexistujici-format"));
+        QCOMPARE(QFileInfo(path).size(), sizeBefore);
+        QCOMPARE(QDir(dir.path()).entryList(QDir::Files).size(), 1);
+
+        // Cesta v neexistující složce.
+        QVERIFY(!saveImageAtomically(img, dir.filePath("neni/a.jpg"), "jpeg"));
     }
 
     void catalogStreaming_descendingReversesTheSortedResult()

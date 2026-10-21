@@ -74,6 +74,11 @@ public:
     // Must be called before QThreadPool::waitForDone() so the worker cannot
     // emit into a widget that is about to be destroyed.
     void shutdown();
+    // Počká (nejvýš ms) na dokončení workerů ve vlastních fondech panelu. Fondy
+    // nejsou globální, takže na ně waitForDone() globálního fondu nestačí; bez
+    // tohohle by destruktor panelu čekal bez limitu na worker zaseknutý v
+    // čtení ze sítě. Vrací false při vypršení limitu.
+    bool waitForWorkers(int ms);
 
     // Prohlížeč právě načítá obrázek (true) / nic nenačítá (false). Dokud
     // načítá, zahřívání cache na pozadí stojí — na pomalém úložišti by

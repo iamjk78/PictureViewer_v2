@@ -172,7 +172,7 @@ void ThumbnailPanel::setDisplayMode(DisplayMode mode)
 
 ThumbnailPanel::~ThumbnailPanel()
 {
-    // MainWindow::~MainWindow() calls shutdown() + waitForDone() before Qt
+    // MainWindow::closeEvent() calls shutdown() + waitForWorkers() before Qt
     // destroys child widgets, so by the time we reach here the worker is
     // guaranteed to have stopped. The call below is a defensive fallback for
     // cases where ThumbnailPanel is used outside of MainWindow.
@@ -187,6 +187,15 @@ void ThumbnailPanel::shutdown()
     m_videoIdleTimer->stop();
     m_pendingThumbs.clear();
     cancelActiveWorkers();
+}
+
+bool ThumbnailPanel::waitForWorkers(int ms)
+{
+    QElapsedTimer timer;
+    timer.start();
+    const bool thumbsDone = m_thumbPool.waitForDone(ms);
+    const bool warmDone = m_warmPool.waitForDone(static_cast<int>(qMax<qint64>(0, ms - timer.elapsed())));
+    return thumbsDone && warmDone;
 }
 
 void ThumbnailPanel::cancelActiveWorkers()

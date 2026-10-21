@@ -1,6 +1,7 @@
 #include "workers/VideoThumbnailWorker.hpp"
 
 #include "core/DiagLog.hpp"
+#include "core/ImageSaveFormat.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -187,6 +188,13 @@ void VideoThumbnailWorker::resume()
 
 void VideoThumbnailWorker::processNext()
 {
+    // Odložená volání (z cache, resume, finishCurrent) a přímé volání z
+    // retarget() se mohou potkat: kdyby se druhé spustilo, zatímco video už se
+    // načítá, přepsalo by m_currentPath a zavolalo setSource na stejném
+    // přehrávači — rozdělané video by zůstalo bez miniatury a bez videoHandled.
+    if (m_state != State::Idle) {
+        return;
+    }
     if (m_cancelled || m_queue.isEmpty()) {
         m_state = State::Idle;
         return;
@@ -284,6 +292,9 @@ void VideoThumbnailWorker::onVideoFrameChanged(const QVideoFrame &frame)
 
 void VideoThumbnailWorker::onTimeout()
 {
+    if (m_state == State::Idle) {
+        return;   // video mezitím skončilo / bylo zrušeno
+    }
     m_player->stop();
     m_state = State::Idle;
     finishCurrent(QImage{});
@@ -347,7 +358,7 @@ void VideoThumbnailWorker::saveToCache(const QString &path, const QImage &image)
     }
     const QString cf = cacheFilePath(path);
     QDir().mkpath(QFileInfo(cf).absolutePath());
-    image.save(cf, "JPG", 90);
+    saveImageAtomically(image, cf, "JPG", 90);
 }
 
 } // namespace pictureviewer

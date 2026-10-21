@@ -29,21 +29,22 @@ ActionStates deriveActionStates(const ContentStatus &status)
     // Otočení mění pixmapu napřímo — u PDF by ho zahodil re-render při zoomu,
     // takže dokument otočit nejde. Jeho VÝŘEZ ale ano: ořezem se dokument
     // uvolní a obsah se stane snímkem (Capture), kde otočení funguje.
-    s.rotate = isStaticRaster;
+    s.rotate = isStaticRaster && !status.contentLoading;
     // Ořez je povolený i pro PDF — výsledkem je samostatný obrázek (Capture),
     // který jde otočit a uložit přes Uložit jako. Viz
     // ImageView::applyCropFromViewport().
-    s.crop = isStaticRaster || kind == ContentKind::Pdf;
+    s.crop = (isStaticRaster && !status.contentLoading) || kind == ContentKind::Pdf;
 
     // Uložit = přepsat originál. Snímek žádný originál nemá (index ukazuje na
     // cizí soubor), takže jen Uložit jako.
-    s.save = kind == ContentKind::Image && status.modified && status.hasCurrentFile;
+    s.save = kind == ContentKind::Image && status.modified && status.hasCurrentFile
+             && !status.contentLoading;
 
     // Uložit jako umí: obrázek i snímek jako JPEG, video jako kopii souboru.
     // Snímek ZÁMĚRNĚ i bez otevřené složky — jinak by po startu aplikace
     // nešel uložit vůbec.
     s.saveAs = kind == ContentKind::Capture
-               || (kind == ContentKind::Image && status.hasCurrentFile)
+               || (kind == ContentKind::Image && status.hasCurrentFile && !status.contentLoading)
                || (kind == ContentKind::Video && status.hasCurrentFile);
 
     s.deleteFile   = actsOnCurrentFile;
