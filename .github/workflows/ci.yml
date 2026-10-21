@@ -6,10 +6,44 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  # macOS: sestavení + testy. Objective-C++ (Dock menu, snímek obrazovky,
+  # schránka), getattrlistbulk a symlinkové větve testů se jinak nikdy
+  # nepřeloží ani nespustí — vývoj běží na macOS, ale CI to dřív nehlídalo.
+  build-and-test-macos:
+    name: Build & test (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: '6.8.1'
+          modules: 'qtpdf qtmultimedia'
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   build-and-test:
     name: Build & test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45   # modální dialog v testu by jinak držel job až 6 hodin
     strategy:
       fail-fast: false
       matrix:
@@ -17,12 +51,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Qt 6 včetně modulu PDF (qtpdf). Concurrent/Network/Widgets/Test jsou
       # součástí základní instalace.
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           version: '6.8.1'
           modules: 'qtpdf qtmultimedia'
@@ -81,7 +117,7 @@ jobs:
           Get-ChildItem "$crtDir\*.dll" | ForEach-Object { Copy-Item $_.FullName "$deployDir\" }
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: PictureViewer-Windows
           path: dist\PictureViewer

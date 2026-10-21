@@ -24,6 +24,8 @@ OutputBaseFilename=PictureViewer-Setup
 OutputDir=output
 Compression=lzma2
 SolidCompression=yes
+; Jen 64bitový Windows na x64 (nebo ARM64 s emulací) — exe je x64 a jinde by se nespustilo.
+ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ; Výchozí instalace bez oprávnění správce (do profilu uživatele) — díky tomu

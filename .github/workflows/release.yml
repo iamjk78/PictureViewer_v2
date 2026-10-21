@@ -6,35 +6,52 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v[0-9]*']
 
+# Build běží s právy jen pro čtení; zápisový token má až samostatný job, který
+# jen publikuje hotové soubory (nepřipnuté / třetí strany v buildu ho nedostanou).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release-windows:
-    name: Build installer & create release
+  build-windows:
+    name: Build installer
     runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # Verze z tagu (v0.16 → 0.16) + kontrola shody s CMakeLists.txt.
+      # Verze z tagu (v0.16 → 0.16) + PŘESNÁ shoda s project(VERSION …) v CMakeLists.txt.
+      # (Dřív stačil podřetězec: tag v0.3 prošel proti verzi 0.34.)
       - name: Determine version
         id: version
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($env:GITHUB_REF_NAME -notmatch '^v(\d+\.\d+(\.\d+)?)$') {
+            Write-Error "Tag $env:GITHUB_REF_NAME is not in the form vX.Y[.Z]."
+            exit 1
+          }
+          $version = $Matches[1]
           $cmake = Get-Content CMakeLists.txt -Raw
-          if ($cmake -notmatch [regex]::Escape("VERSION $version")) {
-            Write-Error "Tag $env:GITHUB_REF_NAME does not match project VERSION in CMakeLists.txt. Bump the version and re-tag."
+          if ($cmake -notmatch 'project\(PictureViewer VERSION ([0-9.]+)') {
+            Write-Error "Cannot find project VERSION in CMakeLists.txt."
+            exit 1
+          }
+          $projectVersion = $Matches[1]
+          if ($projectVersion -ne $version) {
+            Write-Error "Tag $env:GITHUB_REF_NAME does not match project VERSION $projectVersion in CMakeLists.txt. Bump the version and re-tag."
             exit 1
           }
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Install Qt
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           version: '6.8.1'
           modules: 'qtpdf qtmultimedia'
@@ -68,10 +85,12 @@ jobs:
 
       - name: Build installer (Inno Setup)
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-              /DAppVersion=${{ steps.version.outputs.version }} `
+              /DAppVersion=$env:VERSION `
               /DSourceDir=..\dist\PictureViewer `
               installer\setup.iss
           Move-Item "installer\output\PictureViewer-Setup.exe" `
@@ -84,12 +103,37 @@ jobs:
           "$hash  PictureViewer-Setup.exe" | Out-File -Encoding ascii SHA256SUMS.txt
           Get-Content SHA256SUMS.txt
 
+      - name: Upload release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: |
+            PictureViewer-Setup.exe
+            SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    name: Create GitHub Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: assets
+
       - name: Create GitHub Release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-windows.outputs.version }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-              "PictureViewer-Setup.exe" "SHA256SUMS.txt" `
-              --title "PictureViewer ${{ steps.version.outputs.version }}" `
+          gh release create "$GITHUB_REF_NAME" \
+              assets/PictureViewer-Setup.exe assets/SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "PictureViewer $VERSION" \
               --generate-notes
