@@ -1,6 +1,7 @@
 // MainWindow_Toolbar.cpp — toolbars, video, PDF, favorites, sort
 // QPushButton must be included BEFORE MainWindow.hpp to resolve the
 // elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
+#include "app/ToolbarUtil.hpp"
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
@@ -521,7 +522,7 @@ void MainWindow::refreshFavoriteButtons()
     m_favoriteButtons.clear();
 
     if (oldContainerAction) {
-        m_favoritesToolbar->removeAction(oldContainerAction);
+        removeToolbarContainer(m_favoritesToolbar, oldContainerAction);
     }
 
     QWidget *newContainer = new QWidget(this);

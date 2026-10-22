@@ -1,6 +1,7 @@
 // MainWindow_Labels.cpp — category/label management (štítky)
 // QPushButton must be included BEFORE MainWindow.hpp to satisfy the
 // elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
+#include "app/ToolbarUtil.hpp"
 #include <QPushButton>
 #include "app/MainWindow.hpp"
 
@@ -131,7 +132,7 @@ void MainWindow::refreshCategoryButtons()
     m_categoryButtons.clear();
 
     if (oldContainerAction) {
-        m_categoriesToolbar->removeAction(oldContainerAction);
+        removeToolbarContainer(m_categoriesToolbar, oldContainerAction);
     }
 
     QWidget *newContainer = new QWidget(this);
@@ -283,7 +284,7 @@ void MainWindow::updateCategoryFilterButtons()
     m_categoryFilterButtons.clear();
 
     if (oldContainerAction) {
-        m_categoriesToolbar->removeAction(oldContainerAction);
+        removeToolbarContainer(m_categoriesToolbar, oldContainerAction);
     }
 
     QWidget *newContainer = new QWidget(this);

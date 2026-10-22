@@ -94,6 +94,14 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     m_playPauseBtn    = new QPushButton(QStringLiteral("⏸"), this);
     auto *seekFwdBtn  = new QPushButton(QStringLiteral("+10s ⏭"), this);
 
+    // Tlačítka ani posuvníky nesmějí brát fokus: klávesy (Mezerník, šipky, Esc)
+    // obsluhuje přehrávač a po kliknutí na tlačítko by Mezerník "stiskl" právě
+    // jemu.
+    for (QWidget *w : {static_cast<QWidget *>(stopBtn), static_cast<QWidget *>(seekBackBtn),
+                       static_cast<QWidget *>(m_playPauseBtn), static_cast<QWidget *>(seekFwdBtn)}) {
+        w->setFocusPolicy(Qt::NoFocus);
+    }
+
     stopBtn->setToolTip(tr("Zastavit (Esc)"));
     seekBackBtn->setToolTip(tr("−10 % délky (←)"));
     m_playPauseBtn->setToolTip(tr("Přehrát / Pauza (Mezerník)"));
@@ -102,6 +110,7 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     // Seek slider
     m_seekSlider = new QSlider(Qt::Horizontal, this);
     m_seekSlider->setRange(0, 0);
+    m_seekSlider->setFocusPolicy(Qt::NoFocus);
     m_seekSlider->setSingleStep(1000);
     m_seekSlider->setPageStep(10000);
 
@@ -113,6 +122,7 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
     // Hlasitost
     auto *volumeLabel = new QLabel(QStringLiteral("🔊"), this);
     m_volumeSlider    = new QSlider(Qt::Horizontal, this);
+    m_volumeSlider->setFocusPolicy(Qt::NoFocus);
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(static_cast<int>(audioOutput->volume() * 100));
     m_volumeSlider->setMaximumWidth(80);
@@ -428,8 +438,13 @@ void VideoPlayer::applyZoom()
 
     // Zoom je vždy ≥ 1.0 — video nikdy menší než okno.
     // fitInView přesně přizpůsobí video oknu, scale() ho pak zvětší.
+    // Otáčí se kolem STŘEDU videa a scéna odpovídá otočenému obdélníku — kolem
+    // počátku (0,0) by po 90° leželo video v záporných souřadnicích mimo scénu
+    // (posunuté / oříznuté).
+    const QSizeF native = m_videoItem->nativeSize();
     m_videoItem->setPos(0, 0);
-    m_scene->setSceneRect(QRectF(QPointF(0, 0), m_videoItem->nativeSize()));
+    m_videoItem->setTransformOriginPoint(native.width() / 2, native.height() / 2);
+    m_scene->setSceneRect(m_videoItem->sceneBoundingRect());
     m_view->fitInView(m_videoItem, Qt::KeepAspectRatio);
     if (m_zoomMultiplier > 1.0)
         m_view->scale(m_zoomMultiplier, m_zoomMultiplier);

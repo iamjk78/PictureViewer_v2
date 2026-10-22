@@ -2,6 +2,7 @@
 // přes vlastní tlačítka v toolbaru (viz CLAUDE.md / plán funkce "Přesun").
 // QPushButton must be included BEFORE MainWindow.hpp to satisfy the
 // elaborated-type-specifier "class QPushButton*" in the MainWindow class body.
+#include "app/ToolbarUtil.hpp"
 #include "core/DiagLog.hpp"
 #include <QPushButton>
 #include "app/MainWindow.hpp"
@@ -112,7 +113,7 @@ void MainWindow::refreshMoveButtons()
     m_moveButtons.clear();
 
     if (oldContainerAction) {
-        m_moveToolbar->removeAction(oldContainerAction);
+        removeToolbarContainer(m_moveToolbar, oldContainerAction);
     }
 
     QWidget *newContainer = new QWidget(this);

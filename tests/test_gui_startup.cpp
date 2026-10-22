@@ -198,6 +198,17 @@ int loadedThumbnails(const ThumbnailPanel &panel)
 
 } // namespace
 
+// Smaže testovací konfiguraci. Pojistka proti smazání něčeho jiného: mazat jen
+// cestu, kterou Qt v testovacím režimu skutečně označí.
+void removeTestConfig()
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (dir.contains(QLatin1String("qttest"))
+        && dir.contains(QLatin1String("PictureViewerGuiTest"))) {
+        QDir(dir).removeRecursively();
+    }
+}
+
 class TestGuiStartup : public QObject
 {
     Q_OBJECT
@@ -248,17 +259,19 @@ private slots:
         }
     }
 
+    // Každý test začíná s čistou konfigurací. Dřív sdílely jeden config.ini a
+    // writeConfigFor* přepisovaly jen část klíčů, takže výsledek závisel na pořadí
+    // testů (a test spuštěný samostatně se choval jinak než v celé sadě).
+    void init()
+    {
+        removeTestConfig();
+    }
+
     void cleanupTestCase()
     {
-        // Uklidit testovací konfiguraci. Pojistka proti smazání něčeho jiného:
-        // mazat jen cestu, kterou Qt v testovacím režimu skutečně označí.
-        const QString dir =
-            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-        if (dir.contains(QLatin1String("qttest"))
-            && dir.contains(QLatin1String("PictureViewerGuiTest"))) {
-            QDir(dir).removeRecursively();
-        }
+        removeTestConfig();
     }
+
     // ── Hromadné mazání výběru náhledů ───────────────────────────────────────
     // Skutečné MainWindow nad složkou s obrázky. Režim "přesun do složky Delete"
     // místo koše — test tak nesahá do uživatelova koše a jde přesně ověřit,
