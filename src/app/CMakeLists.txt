@@ -5,7 +5,6 @@ set(APP_SOURCES
     CategoryManager.cpp
     CategoryDialogs.hpp
     CategoryDialogs.cpp
-    ClipboardHelper.hpp
     DockMenu.hpp
     FileRetry.hpp
     FolderDeleteDialog.hpp
@@ -51,12 +50,12 @@ set(APP_SOURCES
 )
 
 if(APPLE)
-    list(APPEND APP_SOURCES ClipboardHelper_mac.mm ScreenCapture_mac.mm DockMenu_mac.mm)
-    set_source_files_properties(ClipboardHelper_mac.mm ScreenCapture_mac.mm DockMenu_mac.mm PROPERTIES
+    list(APPEND APP_SOURCES ScreenCapture_mac.mm DockMenu_mac.mm)
+    set_source_files_properties(ScreenCapture_mac.mm DockMenu_mac.mm PROPERTIES
         COMPILE_FLAGS "-x objective-c++"
     )
 else()
-    list(APPEND APP_SOURCES ClipboardHelper.cpp DockMenu.cpp)
+    list(APPEND APP_SOURCES DockMenu.cpp)
 endif()
 
 add_library(picture_viewer_app OBJECT ${APP_SOURCES})

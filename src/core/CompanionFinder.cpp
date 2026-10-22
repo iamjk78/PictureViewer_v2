@@ -72,16 +72,24 @@ QStringList CompanionFinder::findCompanions(const QString &filePath)
         if (ext.compare(sourceSuffix, Qt::CaseInsensitive) == 0) {
             continue;
         }
-        const QFileInfo candidate(dir.filePath(base + ext));
-        if (candidate.exists() && candidate.isFile()) {
-            // Skutečný NÁZEV souboru na disku — na case-insensitive systému
-            // souborů (macOS/Windows) najde exists() soubor i přes kandidátní
-            // cestu s "vymyšleným" velikostí písmen (základ zdroje + přípona ze
-            // seznamu). Složka ale zůstává v podobě, v jaké ji dostal zdroj:
-            // canonicalFilePath() by přeložil symbolické odkazy (/var →
-            // /private/var) a cesta by pak neodpovídala seznamu v aplikaci, takže
-            // by se pár nenašel přes m_imagePaths.indexOf().
-            companions.append(dir.absoluteFilePath(realFileName(candidate)));
+        // Na souborových systémech rozlišujících velikost písmen (Linux, APFS
+        // case-sensitive) leží pár i jako "IMG.MOV"; na ostatních obě varianty
+        // dají tentýž soubor a duplicitu odfiltruje contains().
+        for (const QString &variant : {ext, ext.toUpper()}) {
+            const QFileInfo candidate(dir.filePath(base + variant));
+            if (candidate.exists() && candidate.isFile()) {
+                // Skutečný NÁZEV souboru na disku — na case-insensitive systému
+                // souborů (macOS/Windows) najde exists() soubor i přes kandidátní
+                // cestu s "vymyšleným" velikostí písmen (základ zdroje + přípona ze
+                // seznamu). Složka ale zůstává v podobě, v jaké ji dostal zdroj:
+                // canonicalFilePath() by přeložil symbolické odkazy (/var →
+                // /private/var) a cesta by pak neodpovídala seznamu v aplikaci, takže
+                // by se pár nenašel přes m_imagePaths.indexOf().
+                const QString path = dir.absoluteFilePath(realFileName(candidate));
+                if (!companions.contains(path) && path != sourceInfo.absoluteFilePath()) {
+                    companions.append(path);
+                }
+            }
         }
     }
 
