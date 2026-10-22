@@ -1,12 +1,17 @@
 name: Release
 
 # Publikace nové verze: push tagu vX.Y (např. v0.16) vytvoří GitHub Release
-# s Windows instalátorem a SHA256SUMS.txt. Na tento release se odkazuje
-# funkce automatické aktualizace v aplikaci (UpdateChecker).
+# s Windows instalátorem, nepodepsaným macOS .dmg (arm64) a SHA256SUMS.txt.
+# Na tento release se odkazuje funkce automatické aktualizace v aplikaci
+# (UpdateChecker; hledá jen soubor .exe, .dmg se aktualizuje ručně).
+#
+# Ruční spuštění (workflow_dispatch) vyzkouší jen sestavení macOS .dmg a nic
+# nepublikuje — slouží k ověření balení bez nutnosti vydat tag.
 
 on:
   push:
     tags: ['v[0-9]*']
+  workflow_dispatch:
 
 # Build běží s právy jen pro čtení; zápisový token má až samostatný job, který
 # jen publikuje hotové soubory (nepřipnuté / třetí strany v buildu ho nedostanou).
@@ -16,6 +21,7 @@ permissions:
 jobs:
   build-windows:
     name: Build installer
+    if: github.ref_type == 'tag'
     runs-on: windows-latest
     timeout-minutes: 45
     outputs:
@@ -96,25 +102,94 @@ jobs:
           Move-Item "installer\output\PictureViewer-Setup.exe" `
                     "PictureViewer-Setup.exe"
 
-      - name: Generate checksums
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash -Algorithm SHA256 "PictureViewer-Setup.exe").Hash.ToLower()
-          "$hash  PictureViewer-Setup.exe" | Out-File -Encoding ascii SHA256SUMS.txt
-          Get-Content SHA256SUMS.txt
-
-      - name: Upload release assets
+      - name: Upload installer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-assets
-          path: |
-            PictureViewer-Setup.exe
-            SHA256SUMS.txt
+          name: windows-assets
+          path: PictureViewer-Setup.exe
+          if-no-files-found: error
+
+  # Nepodepsané .dmg pro Apple Silicon (runner macos-latest je arm64). Qt z
+  # Homebrew (aqt Qt 6.8.1 na nejnovějším SDK nelinkuje — viz ci.yml).
+  build-macos:
+    name: Build macOS dmg
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Determine version
+        id: version
+        run: |
+          version=$(sed -n 's/^project(PictureViewer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ -z "$version" ]; then
+            echo "Cannot find project VERSION in CMakeLists.txt." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match project VERSION $version." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install Qt
+        run: brew install qt
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # macdeployqt sám nenasadí plugin SVG (Homebrew ho má v samostatném
+      # balíčku qtsvg) — proto se vloží do bundlu předem a -libpath ukáže na
+      # frameworky, které potřebuje. Bez toho by se .svg v .dmg neotevřely.
+      - name: Package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          app=build/PictureViewer.app
+          mkdir -p "$app/Contents/PlugIns/imageformats"
+          cp "$(brew --prefix)/share/qt/plugins/imageformats/libqsvg.dylib" \
+             "$app/Contents/PlugIns/imageformats/"
+          "$(brew --prefix qt)/bin/macdeployqt" "$app" -libpath="$(brew --prefix)/lib"
+
+          # Bundle musí být soběstačný: žádná závislost na Homebrew (první řádek
+          # výpisu otool je u knihoven jejich vlastní install name, ten se přeskočí).
+          bad=0
+          while IFS= read -r f; do
+            if otool -L "$f" 2>/dev/null | tail -n +2 | grep -qE '/opt/homebrew|/usr/local'; then
+              echo "External dependency in $f"; otool -L "$f"; bad=1
+            fi
+          done < <(find "$app" -type f \( -name '*.dylib' -o -perm -111 \))
+          [ "$bad" -eq 0 ] || exit 1
+          ls "$app/Contents/Frameworks" | grep -q QtSvg
+          codesign --verify --deep --strict "$app"
+
+          mkdir dmg-root
+          cp -R "$app" dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname "PictureViewer $VERSION" -srcfolder dmg-root \
+              -ov -format UDZO "PictureViewer-$VERSION-macOS-arm64.dmg"
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-assets
+          path: PictureViewer-*-macOS-arm64.dmg
           if-no-files-found: error
 
   publish:
     name: Create GitHub Release
-    needs: build-windows
+    needs: [build-windows, build-macos]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -124,8 +199,16 @@ jobs:
       - name: Download release assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-assets
+          pattern: '*-assets'
+          merge-multiple: true
           path: assets
+
+      # Součty se počítají až tady nad přesně těmi soubory, které se publikují.
+      - name: Generate checksums
+        working-directory: assets
+        run: |
+          sha256sum PictureViewer-Setup.exe PictureViewer-*-macOS-arm64.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create GitHub Release
         env:
@@ -133,7 +216,9 @@ jobs:
           VERSION: ${{ needs.build-windows.outputs.version }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-              assets/PictureViewer-Setup.exe assets/SHA256SUMS.txt \
+              assets/PictureViewer-Setup.exe assets/PictureViewer-*-macOS-arm64.dmg \
+              assets/SHA256SUMS.txt \
               --repo "$GITHUB_REPOSITORY" \
               --title "PictureViewer $VERSION" \
+              --notes "macOS: the .dmg is for Apple Silicon and is not signed. On first launch right-click the app and choose Open, or run \`xattr -dr com.apple.quarantine /Applications/PictureViewer.app\`." \
               --generate-notes
