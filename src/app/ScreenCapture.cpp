@@ -120,6 +120,7 @@ protected:
     {
         if (e->button() == Qt::LeftButton) {
             m_selection = QRect(m_origin, e->pos()).normalized();
+            m_finished = true;
             m_loop.quit();
             close();
         }
@@ -129,9 +130,21 @@ protected:
     {
         if (e->key() == Qt::Key_Escape) {
             m_selection = QRect();
+            m_finished = true;
             m_loop.quit();
             close();
         }
+    }
+
+    // Zavření jinou cestou než myší / Esc (Alt+F4, systém) smyčku jinak nechalo
+    // běžet: hlavní okno zůstalo skryté a aplikace vypadala, že zmizela a visí.
+    void closeEvent(QCloseEvent *e) override
+    {
+        if (!m_finished) {
+            m_selection = QRect();   // zrušeno zvenčí — žádný výběr
+        }
+        m_loop.quit();
+        QWidget::closeEvent(e);
     }
 
 private:
@@ -140,6 +153,7 @@ private:
     QPoint     m_origin;
     QRect      m_selection;
     QEventLoop m_loop;
+    bool       m_finished = false;   // výběr dokončen myší / Esc (closeEvent pak výběr nemaže)
 };
 
 } // namespace

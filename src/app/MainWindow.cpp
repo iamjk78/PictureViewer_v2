@@ -1473,8 +1473,18 @@ void MainWindow::onUpdateAvailable(const QString &version, const QString &notes,
 
     // Stažení s progress dialogem. Dialog nezavírá stahování při Cancel —
     // pouze se skryje (zrušení běžícího QNetworkReply řeší destrukce checkeru).
+    // Už běžící stahování: jen ukázat jeho dialog. Dřív vznikl při každém pokusu
+    // nový dialog (nikdy se nemazal), staré dostávaly signály dál a druhý pokus
+    // se tiše vzdal, takže dialog visel bez průběhu.
+    if (m_updateProgressDialog) {
+        m_updateProgressDialog->show();
+        m_updateProgressDialog->raise();
+        return;
+    }
     auto *progress = new QProgressDialog(
         tr("Stahuji aktualizaci…"), tr("Skrýt"), 0, 100, this);
+    progress->setAttribute(Qt::WA_DeleteOnClose);
+    m_updateProgressDialog = progress;
     progress->setWindowModality(Qt::WindowModal);
     progress->setMinimumDuration(0);
     progress->setAutoClose(true);

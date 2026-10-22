@@ -1,5 +1,7 @@
 #include "app/ImageView.hpp"
 
+#include <cmath>
+
 #include "core/PdfHandler.hpp"
 
 #include <QBrush>
@@ -124,6 +126,10 @@ bool ImageView::setImage(const QImage &image)
 bool ImageView::loadAnimation(const QString &path)
 {
     stopAnimation();
+    // Stejně jako showImageReset: ořez z předchozího obrázku nesmí přežít (hasCrop()
+    // by zůstalo true a "Kopírovat obrázek" by šlo větví pro výřez).
+    if (m_cropMode) { exitCropMode(); }
+    m_hasCrop = false;
     m_pdfHandler->unload();
     m_pdfRerenderTimer->stop();
 
@@ -570,11 +576,23 @@ void ImageView::renderPdfPage(int pageIndex)
 QSize ImageView::pdfRenderSize(int pageIndex, int targetWidth) const
 {
     const QSizeF pageSize = m_pdfHandler->pageSize(pageIndex);
+    QSize size;
     if (pageSize.isValid() && pageSize.width() > 0) {
-        return QSize(targetWidth, qRound(targetWidth * pageSize.height() / pageSize.width()));
+        size = QSize(targetWidth, qRound(targetWidth * pageSize.height() / pageSize.width()));
+    } else {
+        // Fallback, když rozměr stránky není dostupný — výchozí poměr 4:3.
+        size = QSize(targetWidth, qRound(targetWidth * 4.0 / 3.0));
     }
-    // Fallback, když rozměr stránky není dostupný — výchozí poměr 4:3.
-    return QSize(targetWidth, qRound(targetWidth * 4.0 / 3.0));
+    // Strop na počet pixelů: šířka je omezená, výška ne — úzká dlouhá stránka
+    // (nebo podvržený soubor) by při šířce 8192 dala gigabajty na jednu kopii a
+    // render běží na UI vlákně (OOM / zamrznutí). Zmenšují se obě strany poměrně.
+    constexpr qint64 kMaxPixels = 64LL * 1000 * 1000;
+    const qint64 pixels = static_cast<qint64>(size.width()) * size.height();
+    if (pixels > kMaxPixels) {
+        const double factor = std::sqrt(static_cast<double>(kMaxPixels) / static_cast<double>(pixels));
+        size = QSize(qMax(1, qRound(size.width() * factor)), qMax(1, qRound(size.height() * factor)));
+    }
+    return size;
 }
 
 void ImageView::rerenderPdfForZoom()
@@ -594,6 +612,9 @@ void ImageView::rerenderPdfForZoom()
     }
 
     const QSize renderSize = pdfRenderSize(m_currentPdfPage, static_cast<int>(desiredWidth));
+    if (renderSize.width() == currentWidth) {
+        return;   // strop pixelů — větší rozlišení už nejde, zbytečně se nerenderuje znovu
+    }
     const QImage image = m_pdfHandler->renderPage(m_currentPdfPage, renderSize);
     if (image.isNull()) {
         return;

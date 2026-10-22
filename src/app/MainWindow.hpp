@@ -11,6 +11,7 @@
 
 #include "app/ThumbnailPanel.hpp"
 #include <QHash>
+#include <QPointer>
 #include <QSet>
 #include <QKeyEvent>
 #include <QMainWindow>
@@ -31,6 +32,7 @@ class QGraphicsColorizeEffect;
 class QLabel;
 class QMenu;
 class QProgressBar;
+class QProgressDialog;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -397,6 +399,7 @@ private:
     // zasáhnout jiný než vybraný soubor. Vstupy souborových akcí proto za běhu
     // dávky nic nedělají.
     bool m_batchRunning = false;
+    QPointer<QProgressDialog> m_updateProgressDialog;   // dialog běžícího stahování aktualizace
     bool m_shutdownTimedOut = false;
     int m_statusToken = 0;   // zahazuje opožděná metadata z předchozího souboru
     bool m_isFullscreen = false;

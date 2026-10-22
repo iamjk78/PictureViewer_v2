@@ -359,6 +359,10 @@ void CategoryManager::renameImagePath(const QString &oldPath, const QString &new
         return;
     }
 
+    // Dva dotazy musí proběhnout atomicky — jinak by pád mezi nimi nechal
+    // přiřazení na staré i nové cestě.
+    const bool transactionStarted = db.transaction();
+
     // OR IGNORE: pokud cílová cesta už některé přiřazení má (kolize PK),
     // řádek se přeskočí a zbytek se dočistí druhým dotazem.
     QSqlQuery query(db);
@@ -368,6 +372,9 @@ void CategoryManager::renameImagePath(const QString &oldPath, const QString &new
     query.addBindValue(oldPath);
     if (!query.exec()) {
         qWarning() << "Chyba přepsání cesty obrázku:" << query.lastError().text();
+        if (transactionStarted) {
+            db.rollback();
+        }
         return;
     }
 
@@ -375,6 +382,9 @@ void CategoryManager::renameImagePath(const QString &oldPath, const QString &new
     cleanup.prepare("DELETE FROM image_categories WHERE image_path = ?");
     cleanup.addBindValue(oldPath);
     cleanup.exec();
+    if (transactionStarted) {
+        db.commit();
+    }
 }
 
 QList<Category> CategoryManager::categoriesForImage(const QString &imagePath) const

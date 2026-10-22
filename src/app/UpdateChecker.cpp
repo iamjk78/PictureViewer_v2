@@ -1,5 +1,7 @@
 #include "app/UpdateChecker.hpp"
 
+#include <QUuid>
+
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -271,8 +273,18 @@ void UpdateChecker::onChecksumsFinished(QNetworkReply *reply)
     // blocích a SHA256 se počítá průběžně, nic se nedrží celé v paměti.
     const QString tempRoot =
         QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString dirPath = tempRoot + QStringLiteral("/PictureViewerUpdate");
+    // Dosud předvídatelná cesta (%TEMP%\PictureViewerUpdate) dovolovala procesu
+    // téhož uživatele podvrhnout soubor mezi ověřením a spuštěním. Nově náhodná
+    // složka jen pro vlastníka; zbytky po dřívějších aktualizacích se uklidí.
+    const QDir tempDir(tempRoot);
+    for (const QString &old : tempDir.entryList({QStringLiteral("PictureViewerUpdate*")},
+                                                QDir::Dirs | QDir::NoDotAndDotDot)) {
+        QDir(tempDir.filePath(old)).removeRecursively();
+    }
+    const QString dirPath = tempRoot + QStringLiteral("/PictureViewerUpdate-")
+                          + QUuid::createUuid().toString(QUuid::WithoutBraces);
     QDir().mkpath(dirPath);
+    QFile::setPermissions(dirPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 
     m_installerFile = std::make_unique<QFile>(
         dirPath + QLatin1Char('/') + m_pendingInstallerName);
@@ -375,6 +387,21 @@ void UpdateChecker::launchInstaller()
 {
     const QString exePath = m_installerFile->fileName();
     m_installerFile.reset();
+
+    // Poslední ověření PŘÍMO nad souborem na disku těsně před spuštěním —
+    // hash počítaný za stahování platí pro stažená data, ne pro to, co na disku
+    // leží v okamžiku spuštění.
+    QFile onDisk(exePath);
+    QCryptographicHash diskHash(QCryptographicHash::Sha256);
+    if (!onDisk.open(QIODevice::ReadOnly) || !diskHash.addData(&onDisk)
+        || QString::fromLatin1(diskHash.result().toHex()) != m_expectedSha256) {
+        onDisk.close();
+        QFile::remove(exePath);
+        emit installFailed(
+            tr("Ověření integrity staženého souboru selhalo — instalace zrušena."));
+        return;
+    }
+    onDisk.close();
 
     // /VERYSILENT = bez průvodce, /NORESTART = nikdy nerestartovat systém.
     // /AUTOSTART=1 = po dokončení instalace znovu spustit aplikaci; bez toho

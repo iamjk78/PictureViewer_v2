@@ -53,6 +53,13 @@ bool writeFileOfSize(const QString &path, qint64 bytes)
     return true;
 }
 
+// Jedinečné jméno aplikace → vlastní INI soubor SettingsManageru.
+void settingsManagerSetup()
+{
+    qApp->setApplicationName(QStringLiteral("PictureViewerTest"));
+    qApp->setOrganizationName(QStringLiteral("PictureViewerTestOrg"));
+}
+
 } // namespace
 
 class TestCore : public QObject
@@ -60,6 +67,13 @@ class TestCore : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase()
+    {
+        // Nastavení / cache / profily se zapisují do testovacího umístění, ne do
+        // skutečných uživatelských složek.
+        QStandardPaths::setTestModeEnabled(true);
+    }
+
     // ── ImageFormats ─────────────────────────────────────────────────────────
     void imageFormats_commonExtensionsSupported()
     {
@@ -678,11 +692,8 @@ private slots:
     }
 
     // ── CategoryManager ──────────────────────────────────────────────────────
-    // CategoryManager si od přidání profilů spravuje vlastní unikátní název
-    // spojení a uvolní ho ve svém destruktoru, takže není potřeba zde nic uklízet.
-    void categoryManager_cleanup()
-    {
-    }
+    // CategoryManager si spravuje vlastní unikátní název spojení a uvolní ho ve
+    // svém destruktoru, takže testy nemusejí nic uklízet.
 
     void categoryManager_createAndRead()
     {
@@ -702,8 +713,6 @@ private slots:
         const QList<Category> all = mgr.allCategories();
         QCOMPARE(all.size(), 1);
         QCOMPARE(all.first().name, QStringLiteral("Práce"));
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_duplicateNameFails()
@@ -717,8 +726,6 @@ private slots:
         const Category dup = mgr.addCategory(QStringLiteral("Dovolená"));
         QCOMPARE(dup.id, -1);
         QVERIFY(!mgr.lastError().isEmpty());
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_delete()
@@ -733,8 +740,6 @@ private slots:
         mgr.deleteCategory(cat.id);
         QVERIFY(mgr.lastError().isEmpty());
         QVERIFY(mgr.allCategories().isEmpty());
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_rename()
@@ -748,8 +753,6 @@ private slots:
 
         const QList<Category> all = mgr.allCategories();
         QCOMPARE(all.first().name, QStringLiteral("Nový název"));
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_renameToDuplicateFails()
@@ -762,8 +765,6 @@ private slots:
         const Category b = mgr.addCategory(QStringLiteral("B"));
         // Přejmenovat B → A musí selhat
         QVERIFY(!mgr.updateCategory(b.id, QStringLiteral("A"), QColor()));
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_assignAndRead()
@@ -781,8 +782,6 @@ private slots:
         const QList<Category> assigned = mgr.categoriesForImage(img);
         QCOMPARE(assigned.size(), 1);
         QCOMPARE(assigned.first().id, cat.id);
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_maxFiveLabels()
@@ -801,8 +800,6 @@ private slots:
 
         const QList<Category> assigned = mgr.categoriesForImage(img);
         QCOMPARE(assigned.size(), 5);   // max 5
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_unassignAll()
@@ -820,8 +817,6 @@ private slots:
 
         mgr.unassignAll(img);
         QVERIFY(mgr.categoriesForImage(img).isEmpty());
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_deleteCascadesToAssignments()
@@ -838,8 +833,6 @@ private slots:
         mgr.deleteCategory(cat.id);
         // Kaskádové smazání — přiřazení musí zmizet
         QVERIFY(mgr.categoriesForImage(img).isEmpty());
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_filterByCategory()
@@ -869,8 +862,6 @@ private slots:
         // Prázdný filtr → všechny cesty
         const QStringList all = mgr.imagePathsWithAllCategories({});
         QVERIFY(all.size() >= 2);
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_renameImagePath()
@@ -896,8 +887,6 @@ private slots:
         mgr.renameImagePath(oldPath, newPath);
         QVERIFY(mgr.categoriesForImage(oldPath).isEmpty());
         QCOMPARE(mgr.categoriesForImage(newPath).size(), 1);
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_migrationCleansOrphanedAssignments()
@@ -955,8 +944,6 @@ private slots:
             QCOMPARE(orphans, 0);
             QCOMPARE(version, 2);
         }
-
-        categoryManager_cleanup();
     }
 
     // Filtrovací lišta štítků se ptá na kategorie použité ve VŠECH souborech
@@ -990,8 +977,6 @@ private slots:
         // Výsledek musí zůstat seřazený podle názvu i po sloučení dávek.
         QCOMPARE(used.at(0).name, QStringLiteral("První"));
         QCOMPARE(used.at(1).name, QStringLiteral("Zzz"));
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_usedCategoriesDeduplicatesAcrossBatches()
@@ -1014,8 +999,6 @@ private slots:
 
         const QList<Category> used = mgr.categoriesUsedInPaths(paths);
         QCOMPARE(used.size(), 1);   // ne třikrát
-
-        categoryManager_cleanup();
     }
 
     void categoryManager_schemaVersionIsCurrent()
@@ -1047,17 +1030,11 @@ private slots:
     }
 
     // ── SettingsManager ──────────────────────────────────────────────────────
-    // Testy používají jedinečné jméno aplikace → vlastní INI soubor,
-    // který po sobě uklidí v cleanup.
-    void settingsManager_setup()
+    // Testy používají jedinečné jméno aplikace → vlastní INI soubor (v testovacím
+    // umístění, viz initTestCase), který po sobě uklidí.
+    void settingsManager_versionIsCurrent()
     {
-        qApp->setApplicationName(QStringLiteral("PictureViewerTest"));
-        qApp->setOrganizationName(QStringLiteral("PictureViewerTestOrg"));
-    }
-
-    void settingsManager_versionIsOne()
-    {
-        settingsManager_setup();
+        settingsManagerSetup();
         SettingsManager mgr;
         QCOMPARE(mgr.settingsVersion(), SettingsManager::kCurrentSettingsVersion);
         QFile::remove(SettingsManager::configFilePath());
@@ -1065,7 +1042,7 @@ private slots:
 
     void settingsManager_lastFolderRoundtrip()
     {
-        settingsManager_setup();
+        settingsManagerSetup();
         SettingsManager mgr;
         const QString folder = QStringLiteral("/Users/test/photos");
         mgr.setLastFolder(folder);
@@ -1075,7 +1052,7 @@ private slots:
 
     void settingsManager_sortKeyRoundtrip()
     {
-        settingsManager_setup();
+        settingsManagerSetup();
         SettingsManager mgr;
         mgr.setSortKey(2);
         QCOMPARE(mgr.sortKey(), 2);
@@ -1086,7 +1063,7 @@ private slots:
 
     void settingsManager_boolDefaults()
     {
-        settingsManager_setup();
+        settingsManagerSetup();
         SettingsManager mgr;
         // Výchozí hodnoty nesmí způsobit crash ani vrátit nesmyslný výsledek
         QVERIFY(mgr.sortAscending());             // výchozí: vzestupně
@@ -1096,7 +1073,7 @@ private slots:
 
     void settingsManager_windowGeometryRoundtrip()
     {
-        settingsManager_setup();
+        settingsManagerSetup();
         SettingsManager mgr;
         const QByteArray geom = QByteArray::fromHex("deadbeef");
         mgr.setWindowGeometry(geom);

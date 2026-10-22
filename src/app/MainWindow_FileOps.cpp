@@ -723,6 +723,9 @@ void MainWindow::showImage(int index)
         // Generátor náhledů musí umlknout DŘÍV, než začne hrát VideoPlayer —
         // viz suspendVideoThumbnails().
         suspendVideoThumbnails();
+        // ImageView pod videem by jinak ukazoval předchozí obrázek (po Esc se pak
+        // vrátí, zatímco index míří na video, a "Kopírovat obrázek" zkopíruje ten starý).
+        m_imageView->clearImage();
         m_currentIndex = index;
         m_thumbnailPanel->setCurrentIndex(index);
         // Auto-play videa NEZAKAZUJE procházení — šipky a tlačítka zůstávají funkční.
