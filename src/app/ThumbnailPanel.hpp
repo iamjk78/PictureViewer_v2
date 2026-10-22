@@ -114,6 +114,8 @@ public:
     void noteVideoHandled(int generation, const QString &path);
     // Jen pro testy: prodleva před zobrazením ukazatele a interval obnovy.
     void setProgressTimingForTesting(int showDelayMs, int intervalMs);
+    // Jen pro testy / diagnostiku: stav řízení zahřívání jedním řetězcem.
+    QString warmupStateForTesting() const;
 
     // Aktuální velikost miniatury v pixelech (= šířka docku − 24).
     // V Horizontal/Grid režimu vrací výchozí hodnotu.

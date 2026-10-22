@@ -295,6 +295,16 @@ void ThumbnailPanel::countItem(const QString &path, int delta)
     }
 }
 
+QString ThumbnailPanel::warmupStateForTesting() const
+{
+    return QStringLiteral("idleReady=%1 videoIdleReady=%2 warmPrepared=%3 videoTailPrepared=%4 videoWarmupActive=%5 "
+                          "active=%6 pending=%7 warmControl=%8 viewerBusy=%9 scanRunning=%10 diskCache=%11 visibleVideos=%12 tail=%13")
+        .arg(m_idleReady).arg(m_videoIdleReady).arg(m_warmPrepared).arg(m_videoTailPrepared)
+        .arg(m_videoWarmupActive).arg(m_activeCount).arg(m_pendingThumbs.size())
+        .arg(!m_warmControl.isNull()).arg(m_viewerBusy).arg(m_scanRunning)
+        .arg(m_diskCacheEnabled).arg(m_visibleVideos.size()).arg(m_warmVideoTail.size());
+}
+
 void ThumbnailPanel::setProgressTimingForTesting(int showDelayMs, int intervalMs)
 {
     m_progressShowDelayMs = showDelayMs;

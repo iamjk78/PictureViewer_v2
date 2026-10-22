@@ -997,7 +997,8 @@ private slots:
             qPrintable(QStringLiteral("visible=%1 paused=%2 images=%3 %4/%5 videos=%6 %7/%8 položek=%9")
                            .arg(last.visible).arg(last.paused).arg(last.imagesActive)
                            .arg(last.imagesDone).arg(last.imagesTotal).arg(last.videosActive)
-                           .arg(last.videosDone).arg(last.videosTotal).arg(panel.count())),
+                           .arg(last.videosDone).arg(last.videosTotal).arg(panel.count())
+                           + QLatin1Char(' ') + panel.warmupStateForTesting()),
             30000);
         QCOMPARE(last.videosTotal, 2);
         QCOMPARE(last.videosDone, 0);
