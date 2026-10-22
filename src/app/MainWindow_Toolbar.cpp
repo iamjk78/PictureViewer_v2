@@ -931,15 +931,6 @@ void MainWindow::enableImageBrowsing()
     updateConfirmationActionState();
 }
 
-void MainWindow::applyGrayscaleEffect(bool enable)
-{
-    if (enable) {
-        setWindowOpacity(0.6);
-    } else {
-        setWindowOpacity(1.0);
-    }
-}
-
 bool MainWindow::deleteFolderExists() const
 {
     if (m_currentFolder.isEmpty()) {

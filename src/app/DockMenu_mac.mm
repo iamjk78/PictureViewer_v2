@@ -64,6 +64,17 @@ NSMenu *PVApplicationDockMenu(id self, SEL _cmd, NSApplication *sender)
         menu = [[[NSMenu alloc] initWithTitle:@""] autorelease];
     }
 
+    // Menu od Qt může být trvalý objekt — položku z minulého otevření (a její
+    // oddělovač) nejdřív odebrat, jinak by se při každém otevření přidávala další.
+    for (NSInteger i = [menu numberOfItems] - 1; i >= 0; --i) {
+        NSMenuItem *existing = [menu itemAtIndex:i];
+        if (existing.target == g_dockMenuTarget) {
+            [menu removeItemAtIndex:i];
+            if (i > 0 && [[menu itemAtIndex:i - 1] isSeparatorItem]) {
+                [menu removeItemAtIndex:i - 1];
+            }
+        }
+    }
     if ([menu numberOfItems] > 0) {
         [menu addItem:[NSMenuItem separatorItem]];
     }

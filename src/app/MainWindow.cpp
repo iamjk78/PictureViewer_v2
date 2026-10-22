@@ -858,7 +858,14 @@ void MainWindow::exitFullscreen()
     menuBar()->show();
     // Viditelnost hlavního toolbaru, docků a status baru řídí aktuální rozložení —
     // bezpodmínečné show() by např. v imerzivním režimu vrátilo chrome zpět.
+    const bool videoWasShown = m_centralStack->currentWidget() == m_videoPlayer;
     applyUiLayout(m_uiLayout);
+    // Rozložení Galerie přepne střed na mřížku náhledů — hrající video by zmizelo
+    // a hrálo dál neviditelně (se zvukem) a stopVideoIfPlaying() by ho podle
+    // viditelného widgetu už nezastavilo.
+    if (videoWasShown && m_centralStack->currentWidget() != m_videoPlayer) {
+        m_centralStack->setCurrentWidget(m_videoPlayer);
+    }
 
     // applyUiLayout() neřídí sekundární toolbary — vrátit je do stavu
     // zapamatovaného před vstupem do fullscreenu.

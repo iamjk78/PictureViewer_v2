@@ -1,5 +1,10 @@
 #include <QtTest>
 
+#ifdef Q_OS_MACOS
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include <QBuffer>
 #include <QDir>
 #include <QImageReader>
@@ -1620,6 +1625,10 @@ private slots:
         QVERIFY(writeFileOfSize(dir.filePath("a.jpg"), 123));
         QVERIFY(writeFileOfSize(dir.filePath("Ž ěščř.png"), 4567));
         QVERIFY(writeFileOfSize(dir.filePath("empty.gif"), 0));
+#ifdef Q_OS_MACOS   // příznak "hidden" (chflags) skrývá soubor i bez tečky
+        QVERIFY(writeFileOfSize(dir.filePath("flagged.jpg"), 10));
+        QVERIFY(::chflags(QFile::encodeName(dir.filePath("flagged.jpg")).constData(), UF_HIDDEN) == 0);
+#endif
 #ifndef Q_OS_WIN   // na Windows tečka na začátku názvu soubor neskrývá
         QVERIFY(writeFileOfSize(dir.filePath(".hidden.jpg"), 10));   // skryté se vynechávají
 #endif
@@ -1641,6 +1650,9 @@ private slots:
         QVERIFY(!bulk.contains("subdir"));
 #ifndef Q_OS_WIN
         QVERIFY(!bulk.contains(".hidden.jpg"));
+#endif
+#ifdef Q_OS_MACOS
+        QVERIFY(!bulk.contains("flagged.jpg"));
 #endif
         QCOMPARE(bulk.value("a.jpg").first, qint64(123));
         QCOMPARE(bulk.value("Ž ěščř.png").first, qint64(4567));
@@ -1744,6 +1756,20 @@ private slots:
             QVERIFY2(!thumb.isNull(), qPrintable(QString("orientace %1").arg(orientation)));
             QCOMPARE(thumb.size() == QSize(200, 150), expected.size() == QSize(640, 480));   // stejné prohození stran
             QCOMPARE(cornerColors(thumb), cornerColors(expected));
+        }
+    }
+
+    // Řada fotoaparátů ukládá EXIF big-endian ("MM") — dřív se testovala jen "II".
+    void exifThumbnail_bigEndianMatchesLittleEndian()
+    {
+        for (int orientation : {1, 3, 6, 8}) {
+            const QImage little = extractExifThumbnail(
+                jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(200, 150), orientation, false));
+            const QImage big = extractExifThumbnail(
+                jpegWithExifThumb(quadrantImage(640, 480), quadrantImage(200, 150), orientation, true));
+            QVERIFY2(!big.isNull(), qPrintable(QString("orientace %1").arg(orientation)));
+            QCOMPARE(big.size(), little.size());
+            QCOMPARE(cornerColors(big), cornerColors(little));
         }
     }
 

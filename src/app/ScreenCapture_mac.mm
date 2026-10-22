@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -28,6 +29,14 @@ ScreenCaptureResult captureScreenRegion(QWidget *parentWindow)
     // pro PictureViewer při prvním spuštění a poté ho uloží pro bundle ID aplikace.
     // Po restartu aplikace oprávnění přetrvá.
 
+    // Pojistka proti vnoření (smyčka událostí níže zpracovává i položky menu).
+    static bool s_capturing = false;
+    if (s_capturing) {
+        return {};
+    }
+    s_capturing = true;
+    struct Reset { ~Reset() { s_capturing = false; } } resetCapturing;
+
     // ── Skrýt okno aplikace ───────────────────────────────────────────────────
     const bool wasVisible = parentWindow && parentWindow->isVisible();
     if (parentWindow) {
@@ -41,10 +50,17 @@ ScreenCaptureResult captureScreenRegion(QWidget *parentWindow)
     // -i: interaktivní výběr  -s: obdélník  -x: bez zvuku
     const QString tempPath = makeScreenshotPath();
     QProcess proc;
+    // Místní smyčka událostí místo waitForFinished(-1): to držel UI vlákno po celou
+    // dobu výběru (a navždy, kdyby screencapture visel na dialogu oprávnění).
+    QEventLoop loop;
+    QObject::connect(&proc, &QProcess::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&proc, &QProcess::errorOccurred, &loop, &QEventLoop::quit);
     proc.start(QStringLiteral("/usr/sbin/screencapture"),
                {QStringLiteral("-i"), QStringLiteral("-s"),
                 QStringLiteral("-x"), tempPath});
-    proc.waitForFinished(-1);
+    if (proc.state() != QProcess::NotRunning) {
+        loop.exec();
+    }
 
     // ── Vrátit okno aplikace ──────────────────────────────────────────────────
     if (parentWindow && wasVisible) {

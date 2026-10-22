@@ -382,13 +382,6 @@ void MainWindow::onCategoryFilterChanged()
     }
 }
 
-void MainWindow::updateStatusBarCategories()
-{
-    if (m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
-        updateStatus(m_imagePaths.at(m_currentIndex));
-    }
-}
-
 void MainWindow::onCategoryRename(int categoryId)
 {
     QList<Category> allCategories = m_categoryManager->allCategories();

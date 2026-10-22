@@ -65,7 +65,8 @@ BulkResult listWithGetattrlistbulk(const QString &directory,
 
     attrlist request{};
     request.bitmapcount = ATTR_BIT_MAP_COUNT;
-    request.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE | ATTR_CMN_MODTIME;
+    request.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE | ATTR_CMN_MODTIME
+                         | ATTR_CMN_FLAGS;
     request.fileattr = ATTR_FILE_DATALENGTH;
 
     // 256 kB ≈ stovky položek na jedno volání (na jednu síťovou odpověď).
@@ -134,13 +135,21 @@ BulkResult listWithGetattrlistbulk(const QString &directory,
                 std::memcpy(&mtime, field, sizeof(mtime));
                 field += sizeof(mtime);
             }
+            // Příznaky souboru (pořadí atributů: NAME, OBJTYPE, MODTIME, FLAGS, pak
+            // atributy souboru). QDir::Files vynechává i soubory s příznakem
+            // "hidden" (chflags hidden), nejen jména s tečkou.
+            uint32_t fileFlags = 0;
+            if (returned.commonattr & ATTR_CMN_FLAGS) {
+                std::memcpy(&fileFlags, field, sizeof(fileFlags));
+                field += sizeof(fileFlags);
+            }
             off_t size = 0;
             if (returned.fileattr & ATTR_FILE_DATALENGTH) {
                 std::memcpy(&size, field, sizeof(size));
             }
 
             entry = next;
-            if (name.isEmpty() || name.startsWith(QLatin1Char('.'))) {
+            if (name.isEmpty() || name.startsWith(QLatin1Char('.')) || (fileFlags & UF_HIDDEN)) {
                 continue;   // skryté soubory QDir::Files vynechává také
             }
 

@@ -32,20 +32,27 @@ inline QByteArray jpegBytes(const QImage &img)
 inline void put16(QByteArray &b, quint16 v) { b.append(char(v & 0xFF)); b.append(char(v >> 8)); }
 inline void put32(QByteArray &b, quint32 v) { put16(b, v & 0xFFFF); put16(b, v >> 16); }
 
-// JPEG = hlavní snímek + EXIF APP1 (little-endian) s miniaturou v IFD1.
-inline QByteArray jpegWithExifThumb(const QImage &mainImg, const QImage &thumb, int orientation)
+inline void put16be(QByteArray &b, quint16 v) { b.append(char(v >> 8)); b.append(char(v & 0xFF)); }
+inline void put32be(QByteArray &b, quint32 v) { put16be(b, v >> 16); put16be(b, v & 0xFFFF); }
+
+// JPEG = hlavní snímek + EXIF APP1 s miniaturou v IFD1. Pořadí bajtů: "II"
+// (little-endian, telefony) nebo "MM" (big-endian, řada fotoaparátů).
+inline QByteArray jpegWithExifThumb(const QImage &mainImg, const QImage &thumb, int orientation,
+                                    bool bigEndian = false)
 {
     const QByteArray thumbBytes = jpegBytes(thumb);
-    QByteArray tiff("II");
-    put16(tiff, 42);
-    put32(tiff, 8);
-    put16(tiff, 1);                                             // IFD0: 1 položka
-    put16(tiff, 0x0112); put16(tiff, 3); put32(tiff, 1); put16(tiff, quint16(orientation)); put16(tiff, 0);
-    put32(tiff, 26);                                            // odkaz na IFD1
-    put16(tiff, 2);                                             // IFD1: 2 položky
-    put16(tiff, 0x0201); put16(tiff, 4); put32(tiff, 1); put32(tiff, 56);
-    put16(tiff, 0x0202); put16(tiff, 4); put32(tiff, 1); put32(tiff, quint32(thumbBytes.size()));
-    put32(tiff, 0);
+    QByteArray tiff(bigEndian ? "MM" : "II");
+    auto p16 = [&](quint16 v) { bigEndian ? put16be(tiff, v) : put16(tiff, v); };
+    auto p32 = [&](quint32 v) { bigEndian ? put32be(tiff, v) : put32(tiff, v); };
+    p16(42);
+    p32(8);
+    p16(1);                                                     // IFD0: 1 položka
+    p16(0x0112); p16(3); p32(1); p16(quint16(orientation)); p16(0);
+    p32(26);                                                    // odkaz na IFD1
+    p16(2);                                                     // IFD1: 2 položky
+    p16(0x0201); p16(4); p32(1); p32(56);
+    p16(0x0202); p16(4); p32(1); p32(quint32(thumbBytes.size()));
+    p32(0);
     tiff.append(thumbBytes);
 
     QByteArray segment("\xFF\xE1");

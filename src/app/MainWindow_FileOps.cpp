@@ -1365,6 +1365,9 @@ void MainWindow::renameCurrentImage()
 
     // Přehrávané video drží soubor zamčený — zastavit, přejmenovat a spustit
     // znovu z nové cesty.
+    // Cesta HRAJÍCÍHO videa: u videa spuštěného klávesou G je aktuálním souborem
+    // obrázek a video je jeho pár — po přejmenování se má pustit ono, ne obrázek.
+    const QString playingPath = m_videoPlayer->currentPath();
     const bool videoWasPlaying = stopVideoIfPlaying();
     const bool documentReleased = releaseDisplayedDocument();
 
@@ -1407,7 +1410,12 @@ void MainWindow::renameCurrentImage()
     }
 
     if (videoWasPlaying) {
-        m_videoPlayer->playFile(activeRenamed ? activeNewPath : currentPath);
+        QString pathToPlay = playingPath;
+        const int playedIndex = filesToRename.indexOf(playingPath);
+        if (playedIndex >= 0 && !failed.contains(QFileInfo(playingPath).fileName())) {
+            pathToPlay = targetPaths.at(playedIndex);
+        }
+        m_videoPlayer->playFile(pathToPlay);
     } else if (documentReleased && m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size()) {
         showImage(m_currentIndex);   // znovu zobrazit PDF / GIF (už pod novým názvem)
     }

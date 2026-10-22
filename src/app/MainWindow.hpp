@@ -216,7 +216,6 @@ private:
     void updateConfirmationActionState();
     void disableImageBrowsing();
     void enableImageBrowsing();
-    void applyGrayscaleEffect(bool enable);
     bool deleteFolderExists() const;
     void updateFavoritesMenu();   // obnovit menu oblíbených složek
 
@@ -263,7 +262,6 @@ private:
     void clearFilters();                  // vyčistit filtr
     void onCategoryRemoveAll();            // smazat všechny kategorie z obrázku
     void onCategoryFilterChanged();        // filtrování podle vybraných kategorií
-    void updateStatusBarCategories();      // aktualizovat kategorie ve status baru
     void onCategoryRename(int categoryId); // přejmenovat kategorii
     void onCategoryChangeColor(int categoryId); // změnit barvu kategorie
     void onCategoryDelete(int categoryId); // smazat kategorii

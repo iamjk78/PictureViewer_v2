@@ -389,7 +389,9 @@ void ImageView::applyCropFromViewport(const QRect &viewportRect)
 
     // Přizpůsobit výřez oknu
     fitInView(m_pixmapItem, Qt::KeepAspectRatio);
-    m_zoomLevel = 1.0;
+    // Skutečné měřítko po fitInView (jinak by ukazatel hlásil 100 % a další zoom
+    // by se počítal od špatné hodnoty — stejná konvence jako applyInitialFit).
+    m_zoomLevel = transform().m11();
     m_manuallyZoomed = false;
     emitZoomChanged();
     if (wasPdf) {
