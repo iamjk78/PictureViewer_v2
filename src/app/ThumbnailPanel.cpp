@@ -526,6 +526,7 @@ void ThumbnailPanel::onForegroundWorkerFinished(int generation, quint64 workerId
         diag::log(diag::thumbSummary(m_doneCount, m_statsTimer.elapsed()));
     }
     maybeStartWarmup();   // popředí dojelo — případně navázat zahříváním
+    maybeStartVideoWarmup();   // dtto pro videa (sama si ohlídá všechny podmínky)
 }
 
 void ThumbnailPanel::onWarmWorkerFinished(int generation, const QSharedPointer<WorkerControl> &control)
@@ -594,6 +595,10 @@ void ThumbnailPanel::maybeStartWarmup()
         // Už sestaveno dřív a přerušeno aktivitou uživatele — jen navázat.
         if (m_warmControl) {
             m_warmControl->paused = false;
+        } else {
+            // Obrázky jsou hotové a nic jiného videa nespustí (jejich časovač klidu
+            // mohl vypršet, zatímco popředí ještě pracovalo) — zkusit je teď.
+            maybeStartVideoWarmup();
         }
         return;
     }
