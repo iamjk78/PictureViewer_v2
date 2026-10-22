@@ -993,7 +993,12 @@ private slots:
         panel.loadImages(paths);
 
         // Videa běží po obrázcích a mají vlastní počet (vyřízená hlásí generátor videí).
-        QTRY_VERIFY_WITH_TIMEOUT(last.visible && last.videosActive, 30000);   // pomalý runner (macOS VM v CI)
+        QTRY_VERIFY2_WITH_TIMEOUT(last.visible && last.videosActive,
+            qPrintable(QStringLiteral("visible=%1 paused=%2 images=%3 %4/%5 videos=%6 %7/%8 položek=%9")
+                           .arg(last.visible).arg(last.paused).arg(last.imagesActive)
+                           .arg(last.imagesDone).arg(last.imagesTotal).arg(last.videosActive)
+                           .arg(last.videosDone).arg(last.videosTotal).arg(panel.count())),
+            30000);
         QCOMPARE(last.videosTotal, 2);
         QCOMPARE(last.videosDone, 0);
         QVERIFY(!last.paused);
