@@ -161,11 +161,12 @@ jobs:
              "$app/Contents/PlugIns/imageformats/"
           "$(brew --prefix qt)/bin/macdeployqt" "$app" -libpath="$(brew --prefix)/lib"
 
-          # Bundle musí být soběstačný: žádná závislost na Homebrew (první řádek
-          # výpisu otool je u knihoven jejich vlastní install name, ten se přeskočí).
+          # Bundle musí být soběstačný: žádná závislost na Homebrew (řádek s vlastním
+          # install name knihovny, který otool vypisuje mezi závislostmi, se přeskočí).
           bad=0
           while IFS= read -r f; do
-            if otool -L "$f" 2>/dev/null | tail -n +2 | grep -qE '/opt/homebrew|/usr/local'; then
+            if otool -L "$f" 2>/dev/null | tail -n +2 | grep -v "/$(basename "$f") " \
+                 | grep -qE '/opt/homebrew|/usr/local'; then
               echo "External dependency in $f"; otool -L "$f"; bad=1
             fi
           done < <(find "$app" -type f \( -name '*.dylib' -o -perm -111 \))
