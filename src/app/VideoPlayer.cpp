@@ -154,6 +154,20 @@ VideoPlayer::VideoPlayer(SettingsManager *settings, QWidget *parent)
         m_player->setPosition(m_seekSlider->value());
     });
 
+    // Klik do drážky (a krokování klávesami nad posuvníkem) posune jen posuvník —
+    // přehrávání se musí přetočit taky. Hodnotu posuvník nastaví až po signálu,
+    // proto se pozice čte odloženě. Tažení (SliderMove) řeší sliderReleased výše.
+    connect(m_seekSlider, &QSlider::actionTriggered, this, [this](int action) {
+        if (action == QAbstractSlider::SliderMove || action == QAbstractSlider::SliderNoAction) {
+            return;
+        }
+        QTimer::singleShot(0, this, [this] {
+            if (!m_dragging && m_player != nullptr) {
+                m_player->setPosition(m_seekSlider->value());
+            }
+        });
+    });
+
     // Hlasitost — uložení do settings
     connect(m_volumeSlider, &QSlider::valueChanged, this, [this, audioOutput](int v) {
         audioOutput->setVolume(v / 100.0f);

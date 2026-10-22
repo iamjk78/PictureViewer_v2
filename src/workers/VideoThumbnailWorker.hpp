@@ -52,6 +52,9 @@ public:
     // miniatur). Bez toho by generátor zůstal u hodnot z konstruktoru a psal
     // do staré složky i po jejím přenastavení nebo vypnutí cache.
     void setDiskCache(bool enabled, const QString &cacheDir);
+    // Jen pro testy: zkrátí časový limit načtení videa (výchozí 15 s) — platí pro
+    // workery vytvořené PO zavolání.
+    static void setLoadTimeoutForTesting(int ms);
     // Otisky souborů z výpisu složky — klíč cache pak nepotřebuje stat().
     void setFileStamps(QSharedPointer<FileStampIndex> stamps) { m_stamps = std::move(stamps); }
 

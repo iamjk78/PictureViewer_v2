@@ -49,6 +49,7 @@
 #include "app/ThumbnailPanel.hpp"
 #include "core/FileStampIndex.hpp"
 #include "workers/FolderScanWorker.hpp"
+#include "workers/VideoThumbnailWorker.hpp"
 
 using namespace pictureviewer;
 
@@ -1162,6 +1163,43 @@ private slots:
         QCOMPARE(jpgNames(dir.path()),
                  (QStringList{"img_1.jpg", "img_4.jpg", "img_5.jpg", "img_6.jpg", "img_7.jpg", "img_8.jpg"}));
         window.close();
+    }
+
+    // Stavový automat generátoru miniatur videí: rychlé opakované retarget()
+    // (posouvání seznamu) nesmí video "ztratit" ani vyřídit dvakrát. POZOR: je to
+    // kontrola účetnictví, ne důkaz opravy souběhu odložených a přímých volání
+    // processNext() — ten vzniká až při miniaturách čtených z cache, které tu
+    // nejsou (test bez ochrany v processNext() také prochází).
+    void videoWorker_everyVideoIsHandledOnceDespiteRepeatedRetargeting()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QStringList paths;
+        for (int i = 1; i <= 4; ++i) {
+            const QString path = QDir(dir.path()).filePath(QStringLiteral("v%1.mp4").arg(i));
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));   // prázdný soubor — přehrávač ho odmítne
+            paths.append(path);
+        }
+
+        VideoThumbnailWorker::setLoadTimeoutForTesting(600);   // prázdná videa jen čekají na timeout
+        const auto restoreTimeout = qScopeGuard([] { VideoThumbnailWorker::setLoadTimeoutForTesting(15000); });
+        VideoThumbnailWorker worker(false, QString());
+        QSignalSpy handled(&worker, &VideoThumbnailWorker::videoHandled);
+        worker.retarget(paths, 1, 4);
+        worker.retarget(paths, 1, 4);
+        QTest::qWait(10);
+        worker.retarget(paths.mid(1), 1, 3);
+        worker.retarget(paths, 1, 4);
+
+        QTRY_VERIFY_WITH_TIMEOUT(handled.count() >= 4, 90000);
+        QTest::qWait(500);   // případné duplicity by dorazily
+        QSet<QString> seen;
+        for (const auto &args : handled) {
+            seen.insert(args.at(1).toString());
+        }
+        QCOMPARE(handled.count(), 4);
+        QCOMPARE(seen.size(), 4);
     }
 
     void imageLoader_prefetchWaitsWhilePaused()

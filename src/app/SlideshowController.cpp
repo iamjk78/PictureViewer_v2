@@ -1,6 +1,5 @@
 #include "app/SlideshowController.hpp"
 
-#include <QMutexLocker>
 #include <QTimer>
 
 #include <algorithm>
@@ -17,19 +16,16 @@ SlideshowController::SlideshowController(QObject *parent)
 
 bool SlideshowController::isRunning() const
 {
-    QMutexLocker locker(&m_mutex);
     return m_timer->isActive();
 }
 
 int SlideshowController::intervalMs() const
 {
-    QMutexLocker locker(&m_mutex);
     return m_intervalMs;
 }
 
 void SlideshowController::setInterval(int milliseconds)
 {
-    QMutexLocker locker(&m_mutex);
     m_intervalMs = std::max(milliseconds, MinimumIntervalMs);
     if (m_timer->isActive()) {
         m_timer->start(m_intervalMs);
@@ -38,21 +34,17 @@ void SlideshowController::setInterval(int milliseconds)
 
 void SlideshowController::start()
 {
-    QMutexLocker locker(&m_mutex);
     m_timer->start(m_intervalMs);
 }
 
 void SlideshowController::stop()
 {
-    QMutexLocker locker(&m_mutex);
     m_timer->stop();
 }
 
 void SlideshowController::toggle()
 {
-    // Celá sekvence pod jedním zámkem — jinak by dvě souběžná toggle()
-    // mohla obě vidět stejný výchozí stav a skončit v nekonzistenci.
-    QMutexLocker locker(&m_mutex);
+    // Voláno jen z UI vlákna (QTimer je s ním svázaný) — zámek by nic nechránil.
     if (m_timer->isActive()) {
         m_timer->stop();
     } else {

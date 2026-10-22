@@ -15,6 +15,15 @@
 
 namespace pictureviewer {
 
+namespace {
+int g_loadTimeoutMs = 15000;   // jak dlouho se čeká na načtení jednoho videa
+}
+
+void VideoThumbnailWorker::setLoadTimeoutForTesting(int ms)
+{
+    g_loadTimeoutMs = ms;
+}
+
 VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCacheDir,
                                            QObject *parent)
     : QObject(parent)
@@ -25,7 +34,7 @@ VideoThumbnailWorker::VideoThumbnailWorker(bool diskCacheEnabled, QString diskCa
     setupPlayer();
 
     m_timeoutTimer->setSingleShot(true);
-    m_timeoutTimer->setInterval(15000);
+    m_timeoutTimer->setInterval(g_loadTimeoutMs);
     connect(m_timeoutTimer, &QTimer::timeout, this, &VideoThumbnailWorker::onTimeout);
 
     m_tailPauseTimer = new QTimer(this);
