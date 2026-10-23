@@ -237,6 +237,12 @@ void MainWindow::setupToolbar()
 
     toolbar->addAction(m_saveAction);
     toolbar->addAction(m_saveAsAction);
+
+    m_resizeAction = new QAction(QIcon(QStringLiteral(":/icons/icon_resize.png")), QString(), this);
+    m_resizeAction->setToolTip(tr("Změnit velikost a formát obrázku"));
+    m_resizeAction->setEnabled(false);
+    connect(m_resizeAction, &QAction::triggered, this, &MainWindow::onResizeImage);
+    toolbar->addAction(m_resizeAction);
     toolbar->addSeparator();
 
     connect(m_imageView, &ImageView::imageModified, this, [this]() {

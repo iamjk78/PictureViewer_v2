@@ -29,6 +29,10 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QAbstractButton>
+#include <QComboBox>
+#include <QPushButton>
+#include <QSlider>
+#include <QSpinBox>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QLabel>
@@ -46,6 +50,7 @@
 #include "app/ImageLoader.hpp"
 #include "app/ImageView.hpp"
 #include "app/MainWindow.hpp"
+#include "app/ResizeDialog.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "core/FileStampIndex.hpp"
 #include "workers/FolderScanWorker.hpp"
@@ -1170,6 +1175,47 @@ private slots:
     // kontrola účetnictví, ne důkaz opravy souběhu odložených a přímých volání
     // processNext() — ten vzniká až při miniaturách čtených z cache, které tu
     // nejsou (test bez ochrany v processNext() také prochází).
+    void resizeDialog_fieldsSliderAndFormatStayInSync()
+    {
+        ResizeDialog dlg(QSize(4000, 3000), QStringLiteral("png"), true);
+        auto spins = dlg.findChildren<QSpinBox *>();
+        QCOMPARE(spins.size(), 2);
+        QSpinBox *width = spins.at(0);
+        QSpinBox *height = spins.at(1);
+        auto *slider = dlg.findChildren<QSlider *>().at(0);
+
+        slider->setValue(50);
+        QCOMPARE(dlg.targetSize(), QSize(2000, 1500));
+
+        width->setValue(1000);                       // poměr stran se drží
+        QCOMPARE(height->value(), 750);
+        QCOMPARE(slider->value(), 25);
+        height->setValue(300);
+        QCOMPARE(width->value(), 400);
+
+        // Stejný formát: přepsání originálu je na výběr; jiný formát: jen nový soubor.
+        auto button = [&](const QString &text) {
+            for (QPushButton *b : dlg.findChildren<QPushButton *>()) {
+                if (b->text().startsWith(text)) {
+                    return b;
+                }
+            }
+            return static_cast<QPushButton *>(nullptr);
+        };
+        dlg.show();
+        QVERIFY(dlg.keepsFormat());
+        QVERIFY(button(QStringLiteral("Přepsat"))->isVisible());
+        auto *combo = dlg.findChild<QComboBox *>();
+        combo->setCurrentIndex(1);
+        QVERIFY(!dlg.keepsFormat());
+        QVERIFY(!button(QStringLiteral("Přepsat"))->isVisible());
+
+        // Příliš velký výsledek zablokuje ukládání.
+        combo->setCurrentIndex(0);
+        width->setValue(30000);
+        QVERIFY(!button(QStringLiteral("Uložit"))->isEnabled());
+    }
+
     void videoWorker_everyVideoIsHandledOnceDespiteRepeatedRetargeting()
     {
         QTemporaryDir dir;

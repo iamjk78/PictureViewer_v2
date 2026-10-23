@@ -45,6 +45,7 @@ struct ActionStates {
     bool crop = false;
     bool save = false;
     bool saveAs = false;
+    bool resize = false;
     bool deleteFile = false;
     bool rename = false;
     bool moveToFolder = false;

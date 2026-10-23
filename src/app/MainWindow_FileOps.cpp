@@ -11,6 +11,7 @@
 #include "app/ImageLoader.hpp"
 #include "app/ImageView.hpp"
 #include "app/MetadataPanel.hpp"
+#include "app/ResizeDialog.hpp"
 #include "app/SettingsManager.hpp"
 #include "app/ThumbnailPanel.hpp"
 #include "app/VideoPlayer.hpp"
@@ -18,6 +19,7 @@
 #include "core/DiagLog.hpp"
 #include "core/FileNaming.hpp"
 #include "core/FolderNavigator.hpp"
+#include "core/ImageResize.hpp"
 #include "core/ImageSaveFormat.hpp"
 #include "core/ImageMetadataReader.hpp"
 #include "core/ImageFormats.hpp"
@@ -25,6 +27,7 @@
 #include "workers/VideoThumbnailWorker.hpp"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QAbstractButton>
 #include <QBuffer>
 #include <QDateTime>
@@ -1706,6 +1709,7 @@ void MainWindow::applyActionStates()
     if (m_cropAction)           m_cropAction->setEnabled(s.crop);
     if (m_saveAction)           m_saveAction->setEnabled(s.save);
     if (m_saveAsAction)         m_saveAsAction->setEnabled(s.saveAs);
+    if (m_resizeAction)         m_resizeAction->setEnabled(s.resize);
     if (m_deletePictureAction)  m_deletePictureAction->setEnabled(s.deleteFile);
     if (m_renameImageAction)    m_renameImageAction->setEnabled(s.rename);
 
@@ -1725,9 +1729,9 @@ void MainWindow::applyActionStates()
     }
 }
 
-bool MainWindow::saveImageToPath(const QString &targetPath)
+bool MainWindow::saveImageToPath(const QString &targetPath, const QImage &image, int quality)
 {
-    const QImage img = m_imageView->displayedImage();
+    const QImage img = image.isNull() ? m_imageView->displayedImage() : image;
     if (img.isNull()) {
         return false;
     }
@@ -1742,7 +1746,7 @@ bool MainWindow::saveImageToPath(const QString &targetPath)
         return false;
     }
     // Zápis přes dočasný soubor: při chybě (plný disk, přerušení) originál zůstane.
-    if (!saveImageAtomically(img, targetPath, format.constData(), format == "jpeg" ? 92 : -1)) {
+    if (!saveImageAtomically(img, targetPath, format.constData(), format == "jpeg" ? (quality >= 0 ? quality : 92) : quality)) {
         QMessageBox::critical(this, tr("Chyba ukládání"),
             tr("Soubor se nepodařilo uložit:\n%1").arg(targetPath));
         return false;
@@ -1853,6 +1857,69 @@ void MainWindow::onSaveAsImage()
         m_requestedFile = targetPath;
         loadFolder(targetDir);
     }
+}
+
+void MainWindow::onResizeImage()
+{
+    const QImage displayed = m_imageView->displayedImage();
+    if (displayed.isNull()) {
+        return;
+    }
+    const bool hasCurrentFile = m_currentIndex >= 0 && m_currentIndex < m_imagePaths.size();
+    const bool capture = isCapture();
+    if (!hasCurrentFile && !capture) {
+        return;
+    }
+    const QString currentPath = hasCurrentFile ? m_imagePaths.at(m_currentIndex) : QString();
+
+    // "Beze změny formátu" (a tím i přepsání originálu) je jen pro soubor, jehož
+    // formát umíme zapsat — HEIC apod. by se přepsal jiným formátem.
+    const QString sameSuffix = capture || writableFormatForPath(currentPath).isEmpty()
+        ? QString() : QFileInfo(currentPath).suffix();
+
+    ResizeDialog dlg(displayed.size(), sameSuffix, !capture, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QSize size = dlg.targetSize();
+    const QString suffix = dlg.outputSuffix();
+    QString targetPath;
+    if (dlg.overwriteRequested()) {
+        targetPath = currentPath;
+    } else {
+        const QString baseName = capture
+            ? tr("Screenshot %1").arg(
+                  QDateTime::currentDateTime().toString(QStringLiteral("HH-mm dd.MM.yyyy")))
+            : QStringLiteral("%1_%2x%3").arg(QFileInfo(currentPath).completeBaseName())
+                  .arg(size.width()).arg(size.height());
+        targetPath = runSaveAsDialog(currentPath, suffix, baseName);
+        if (targetPath.isEmpty()) {
+            return;
+        }
+    }
+
+    QImage result;
+    {
+        QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+        result = resizedImage(displayed, size);
+        if (writableFormatForPath(targetPath) == "jpeg") {
+            result = flattenedOnWhite(result);
+        }
+        QGuiApplication::restoreOverrideCursor();
+    }
+    if (result.isNull()) {
+        QMessageBox::critical(this, tr("Chyba"),
+            tr("Obrázek se nepodařilo zmenšit/zvětšit na %1 × %2 px (nedostatek paměti?).")
+                .arg(size.width()).arg(size.height()));
+        return;
+    }
+    if (!saveImageToPath(targetPath, result, dlg.quality())) {
+        return;
+    }
+    m_imageModified = false;
+    m_requestedFile = targetPath;
+    loadFolder(QFileInfo(targetPath).absolutePath());
 }
 
 } // namespace pictureviewer

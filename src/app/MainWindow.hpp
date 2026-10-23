@@ -511,6 +511,7 @@ private:
     QAction *m_rotateLeftAction = nullptr;
     QAction *m_rotateRightAction = nullptr;
     QAction *m_cropAction = nullptr;
+    QAction *m_resizeAction = nullptr;
     QAction *m_saveAction = nullptr;
     QAction *m_saveAsAction = nullptr;
     bool m_imageModified = false;
@@ -541,7 +542,11 @@ private:
     // ── Ukládání obrázku ─────────────────────────────────────────────────────
     void onSaveImage();
     void onSaveAsImage();
-    bool saveImageToPath(const QString &targetPath);
+    void onResizeImage();
+    // image: co zapsat (prázdný = to, co je zobrazené); quality: -1 = výchozí
+    // kvalita formátu (JPEG 92).
+    bool saveImageToPath(const QString &targetPath, const QImage &image = QImage(),
+                         int quality = -1);
     // Zobrazí dialog pro zadání názvu a výběr cílové složky. Kolizi jména
     // v cílové složce řeší smyčkou (Přepsat / Přejmenovat / Zrušit), takže
     // funkce vrátí buď volnou cestu, nebo prázdný řetězec při zrušení —

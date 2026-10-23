@@ -47,6 +47,11 @@ ActionStates deriveActionStates(const ContentStatus &status)
                || (kind == ContentKind::Image && status.hasCurrentFile && !status.contentLoading)
                || (kind == ContentKind::Video && status.hasCurrentFile);
 
+    // Změna velikosti/formátu pracuje s tím, co je zobrazené: obrázek i snímek
+    // (výstup vždy nový soubor, u obrázku volitelně i přepsání originálu).
+    s.resize = kind == ContentKind::Capture
+               || (kind == ContentKind::Image && status.hasCurrentFile && !status.contentLoading);
+
     s.deleteFile   = actsOnCurrentFile;
     s.rename       = actsOnCurrentFile;
     s.moveToFolder = actsOnCurrentFile;

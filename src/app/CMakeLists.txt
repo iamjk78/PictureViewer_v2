@@ -13,6 +13,8 @@ set(APP_SOURCES
     HelpDialog.cpp
     ImageLoader.hpp
     ImageLoader.cpp
+    ResizeDialog.hpp
+    ResizeDialog.cpp
     MainWindow.hpp
     MainWindow.cpp
     MainWindow_FileOps.cpp

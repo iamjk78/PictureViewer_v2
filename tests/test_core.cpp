@@ -28,6 +28,7 @@
 #include "core/BulkDirectoryLister.hpp"
 #include "core/CompanionFinder.hpp"
 #include "core/ContentState.hpp"
+#include "core/ImageResize.hpp"
 #include "core/DiagLog.hpp"
 #include "core/ExifThumbnail.hpp"
 #include "core/ImageMetadataReader.hpp"
@@ -1886,6 +1887,41 @@ private slots:
     }
 
     // ── Formát a atomický zápis obrázku ──────────────────────────────────────
+    void imageResize_sizeMath()
+    {
+        QCOMPARE(sizeForPercent(QSize(4000, 3000), 50), QSize(2000, 1500));
+        QCOMPARE(sizeForPercent(QSize(10, 10), 1), QSize(1, 1));   // nikdy 0
+        QCOMPARE(proportionalSide(4000, 3000, 2000), 1500);
+        QCOMPARE(proportionalSide(3000, 4000, 1500), 2000);
+        QVERIFY(isResizeTargetAllowed(QSize(12000, 12000)));
+        QVERIFY(!isResizeTargetAllowed(QSize(13000, 13000)));      // přes 150 Mpx
+        QVERIFY(!isResizeTargetAllowed(QSize(32001, 1)));
+        QVERIFY(!isResizeTargetAllowed(QSize(0, 10)));
+    }
+
+    void imageResize_resizesAndFlattensAlpha()
+    {
+        QImage src(40, 20, QImage::Format_ARGB32);
+        src.fill(Qt::transparent);
+        QCOMPARE(resizedImage(src, QSize(20, 10)).size(), QSize(20, 10));
+        const QImage flat = flattenedOnWhite(src);
+        QVERIFY(!flat.hasAlphaChannel());
+        QCOMPARE(flat.pixelColor(5, 5), QColor(Qt::white));
+        QVERIFY(!flattenedOnWhite(QImage(4, 4, QImage::Format_RGB32)).hasAlphaChannel());
+    }
+
+    void imageResize_outputFormatsAreWritable()
+    {
+        const QList<OutputFormat> formats = writableOutputFormats();
+        QVERIFY(!formats.isEmpty());
+        QCOMPARE(formats.first().suffix, QStringLiteral("jpg"));
+        QCOMPARE(canonicalSuffix(QStringLiteral("JPEG")), QStringLiteral("jpg"));
+        QCOMPARE(canonicalSuffix(QStringLiteral("tiff")), QStringLiteral("tif"));
+        QVERIFY(contentstate::deriveActionStates({contentstate::ContentKind::Image, false, true, true}).resize);
+        QVERIFY(!contentstate::deriveActionStates({contentstate::ContentKind::Video, false, true, true}).resize);
+        QVERIFY(!contentstate::deriveActionStates({contentstate::ContentKind::Pdf, false, true, true}).resize);
+    }
+
     void imageSaveFormat_followsTheSuffix()
     {
         QCOMPARE(writableFormatForPath("/a/b.jpg"), QByteArray("jpeg"));
